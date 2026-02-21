@@ -95,10 +95,16 @@ func (s *AuthService) LoginWithApple(ctx context.Context, req AppleAuthRequest) 
 	return s.issueTokenPair(user)
 }
 
-func (s *AuthService) DevLogin(ctx context.Context) (*AuthResponse, error) {
+func (s *AuthService) DevLogin(ctx context.Context, alias string) (*AuthResponse, error) {
 	devAppleID := "dev-user-local"
 	devEmail := "dev@folio.local"
 	devNickname := "Dev User"
+
+	if alias != "" {
+		devAppleID = "dev-user-" + alias
+		devEmail = "dev-" + alias + "@folio.local"
+		devNickname = "Dev " + alias
+	}
 
 	user, err := s.userRepo.GetByAppleID(ctx, devAppleID)
 	if err != nil {

@@ -1,0 +1,35 @@
+## Isolated E2E test data stores — ports 1xxxx to avoid conflicts with dev
+## API, reader, and AI services run locally (not in Docker).
+##
+## Usage:
+##   docker compose -f docker-compose.test.yml up -d
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_DB: folio_test
+      POSTGRES_USER: folio
+      POSTGRES_PASSWORD: folio_test
+    volumes:
+      - ./migrations/001_init.up.sql:/docker-entrypoint-initdb.d/init.sql
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U folio -d folio_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  redis-test:
+    image: redis:7-alpine
+    ports:
+      - "16379:6379"
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 10

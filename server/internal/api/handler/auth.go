@@ -37,7 +37,18 @@ func (h *AuthHandler) HandleAppleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) HandleDevLogin(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.authService.DevLogin(r.Context())
+	// Support optional alias for multi-user testing.
+	var alias string
+	if r.Body != nil && r.ContentLength > 0 {
+		var req struct {
+			Alias string `json:"alias"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err == nil {
+			alias = req.Alias
+		}
+	}
+
+	resp, err := h.authService.DevLogin(r.Context(), alias)
 	if err != nil {
 		handleServiceError(w, err)
 		return
