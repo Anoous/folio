@@ -372,6 +372,11 @@ struct HomeView: View {
                 Text(group.0)
                     .font(Typography.caption)
                     .foregroundStyle(Color.folio.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Spacing.screenPadding)
+                    .padding(.vertical, 8)
+                    .background(Color.folio.background)
+                    .listRowInsets(EdgeInsets())
             }
         }
         .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
