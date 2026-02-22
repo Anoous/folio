@@ -90,12 +90,10 @@ final class DTOMappingExtractionTests: XCTestCase {
         let dto = makeArticleDTO(markdownContent: "")
         article.updateFromDTO(dto)
 
-        // `if let content = dto.markdownContent` will bind "" since it's not nil.
-        // So extractionSource becomes .server and markdownContent becomes "".
-        // This documents current behavior: empty string IS treated as valid server content.
-        XCTAssertEqual(article.markdownContent, "")
-        XCTAssertEqual(article.extractionSource, .server,
-                       "Empty string content still sets extractionSource to .server because if-let binds non-nil")
+        // Empty string is treated as no content — client extraction is preserved.
+        XCTAssertEqual(article.markdownContent, "# Client Content")
+        XCTAssertEqual(article.extractionSource, .client,
+                       "Empty string content should NOT overwrite client extraction")
     }
 
     // MARK: - SubmitArticleRequest Encoding

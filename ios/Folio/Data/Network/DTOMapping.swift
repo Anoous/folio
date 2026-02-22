@@ -13,7 +13,7 @@ extension Article {
         siteName = dto.siteName
         faviconURL = dto.faviconUrl
         coverImageURL = dto.coverImageUrl
-        if let content = dto.markdownContent {
+        if let content = dto.markdownContent, !content.isEmpty {
             markdownContent = content
             extractionSource = .server
         }

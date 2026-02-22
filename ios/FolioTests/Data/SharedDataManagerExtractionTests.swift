@@ -222,10 +222,9 @@ final class SharedDataManagerExtractionTests: XCTestCase {
 
         try manager.updateWithExtraction(result, for: article)
 
-        // Current code checks `!title.isEmpty` — "   " is NOT empty, so it WILL overwrite.
-        // This documents the current behavior: whitespace-only titles pass the isEmpty check.
-        XCTAssertEqual(article.title, "   ",
-                       "Whitespace-only title passes !isEmpty check and overwrites original (documents current behavior)")
+        // Whitespace-only title is trimmed and treated as empty — original preserved.
+        XCTAssertEqual(article.title, "Original Title",
+                       "Whitespace-only title should be trimmed and not overwrite original")
     }
 
     // MARK: - updatedAt

@@ -72,16 +72,16 @@ final class SharedDataManager {
         article.extractionSource = .client
         article.clientExtractedAt = result.extractedAt
 
-        if let title = result.title, !title.isEmpty {
+        if let title = result.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
             article.title = title
         }
-        if let author = result.author, !author.isEmpty {
+        if let author = result.author?.trimmingCharacters(in: .whitespacesAndNewlines), !author.isEmpty {
             article.author = author
         }
-        if let siteName = result.siteName, !siteName.isEmpty {
+        if let siteName = result.siteName?.trimmingCharacters(in: .whitespacesAndNewlines), !siteName.isEmpty {
             article.siteName = siteName
         }
-        if let excerpt = result.excerpt, !excerpt.isEmpty {
+        if let excerpt = result.excerpt?.trimmingCharacters(in: .whitespacesAndNewlines), !excerpt.isEmpty {
             article.summary = excerpt
         }
 
