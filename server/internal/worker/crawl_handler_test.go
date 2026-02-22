@@ -575,6 +575,131 @@ func TestProcessTask_ScrapeFail_GetByIDError_Fails(t *testing.T) {
 	}
 }
 
+func TestProcessTask_ScrapeFail_ArticleNotFound_Fails(t *testing.T) {
+	// When scrape fails and GetByID returns (nil, nil) — article not found —
+	// the code should fall through to the failure path since the fallback
+	// condition (article != nil && article.MarkdownContent != nil && ...) is false.
+	mockReader := &mockScraper{
+		scrapeFn: func(ctx context.Context, url string) (*client.ScrapeResponse, error) {
+			return nil, errors.New("scrape connection refused")
+		},
+	}
+	mockArtRepo := &mockCrawlArticleRepo{
+		getByIDFn: func(ctx context.Context, id string) (*domain.Article, error) {
+			// Article not found: returns (nil, nil)
+			return nil, nil
+		},
+	}
+	mockTaskRepo := &mockCrawlTaskRepo{}
+	mockEnq := &mockCrawlEnqueuer{}
+
+	h := newTestCrawlHandler(mockReader, mockArtRepo, mockTaskRepo, mockEnq, false)
+
+	task := newCrawlAsynqTask("art-gone", "task-1", "https://example.com/deleted", "user-1")
+	err := h.ProcessTask(context.Background(), task)
+	if err == nil {
+		t.Fatal("ProcessTask should return error when scrape fails and article not found (nil, nil)")
+	}
+
+	// Verify task was marked failed
+	if len(mockTaskRepo.setFailedCalls) != 1 {
+		t.Fatalf("SetFailed calls = %d, want 1", len(mockTaskRepo.setFailedCalls))
+	}
+	if mockTaskRepo.setFailedCalls[0].ID != "task-1" {
+		t.Errorf("SetFailed task ID = %q, want %q", mockTaskRepo.setFailedCalls[0].ID, "task-1")
+	}
+
+	// Verify article error was set
+	if len(mockArtRepo.setErrorCalls) != 1 {
+		t.Fatalf("SetError calls = %d, want 1", len(mockArtRepo.setErrorCalls))
+	}
+	if mockArtRepo.setErrorCalls[0].ID != "art-gone" {
+		t.Errorf("SetError article ID = %q, want %q", mockArtRepo.setErrorCalls[0].ID, "art-gone")
+	}
+
+	// No AI task should have been enqueued
+	if len(mockEnq.enqueuedTasks) != 0 {
+		t.Errorf("no tasks should have been enqueued, got %d", len(mockEnq.enqueuedTasks))
+	}
+
+	// Crawl should NOT be marked finished
+	if len(mockTaskRepo.setCrawlFinishedCalls) != 0 {
+		t.Errorf("SetCrawlFinished should not have been called, got %d calls", len(mockTaskRepo.setCrawlFinishedCalls))
+	}
+}
+
+func TestProcessTask_ClientFallback_NoImageTask(t *testing.T) {
+	// When using client content fallback (scrape fails, article has client content),
+	// images are NOT extracted/rehosted. Even with enableImage=true, only the AI task
+	// should be enqueued — no image upload task.
+	// This documents intentional behavior: the client fallback path skips image processing.
+	mockReader := &mockScraper{
+		scrapeFn: func(ctx context.Context, url string) (*client.ScrapeResponse, error) {
+			return nil, errors.New("scrape timeout")
+		},
+	}
+	// Client content includes markdown with image references
+	markdownWithImages := "# Article\n\n![photo](https://img.example.com/photo.jpg)\n\nText here.\n\n![diagram](https://img.example.com/diagram.png)"
+	mockArtRepo := &mockCrawlArticleRepo{
+		getByIDFn: func(ctx context.Context, id string) (*domain.Article, error) {
+			return &domain.Article{
+				ID:              "art-1",
+				Title:           strPtr("Client Title"),
+				Author:          strPtr("Client Author"),
+				SiteName:        strPtr("Client Site"),
+				MarkdownContent: strPtr(markdownWithImages),
+			}, nil
+		},
+	}
+	mockTaskRepo := &mockCrawlTaskRepo{}
+	mockEnq := &mockCrawlEnqueuer{}
+
+	// enableImage = true — normally would trigger image task on the scrape-success path
+	h := newTestCrawlHandler(mockReader, mockArtRepo, mockTaskRepo, mockEnq, true)
+
+	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/article", "user-1")
+	err := h.ProcessTask(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ProcessTask should succeed with client fallback, got: %v", err)
+	}
+
+	// Verify exactly 1 task was enqueued (AI only, no image task)
+	if len(mockEnq.enqueuedTasks) != 1 {
+		t.Fatalf("enqueued tasks = %d, want 1 (AI only, no image task)", len(mockEnq.enqueuedTasks))
+	}
+
+	// The single enqueued task must be the AI task
+	aiTask := mockEnq.enqueuedTasks[0]
+	if aiTask.Type() != TypeAIProcess {
+		t.Errorf("enqueued task type = %q, want %q (should be AI, not image)", aiTask.Type(), TypeAIProcess)
+	}
+
+	// Verify AI payload contains client content
+	var aiPayload AIProcessPayload
+	if err := json.Unmarshal(aiTask.Payload(), &aiPayload); err != nil {
+		t.Fatalf("failed to unmarshal AI payload: %v", err)
+	}
+	if aiPayload.Title != "Client Title" {
+		t.Errorf("AI payload Title = %q, want %q", aiPayload.Title, "Client Title")
+	}
+	if aiPayload.Markdown != markdownWithImages {
+		t.Errorf("AI payload Markdown does not match client content")
+	}
+
+	// Verify crawl was marked finished (not failed)
+	if len(mockTaskRepo.setCrawlFinishedCalls) != 1 {
+		t.Errorf("SetCrawlFinished calls = %d, want 1", len(mockTaskRepo.setCrawlFinishedCalls))
+	}
+
+	// Verify no failure markers
+	if len(mockTaskRepo.setFailedCalls) != 0 {
+		t.Errorf("SetFailed should not have been called, got %d calls", len(mockTaskRepo.setFailedCalls))
+	}
+	if len(mockArtRepo.setErrorCalls) != 0 {
+		t.Errorf("SetError should not have been called, got %d calls", len(mockArtRepo.setErrorCalls))
+	}
+}
+
 func TestProcessTask_ScrapeSuccess_EmptySiteName_DefaultsToWeb(t *testing.T) {
 	// Scrape succeeds but SiteName is empty — source should default to "web"
 	scrapeResp := &client.ScrapeResponse{

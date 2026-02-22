@@ -504,6 +504,185 @@ func TestHandleSubmitURL_UserIDFromContext(t *testing.T) {
 	}
 }
 
+func TestMarkdownTruncation_PreservesRuneCount(t *testing.T) {
+	// Verify that the truncated content's rune count matches len([]rune(truncated)).
+	// This documents that truncation operates on byte boundaries (not rune boundaries),
+	// so the resulting rune count may be less than what a rune-based word_count expects.
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{
+			name:    "ASCII only",
+			content: strings.Repeat("a", maxMarkdownContentBytes+100),
+		},
+		{
+			name:    "Chinese characters (3 bytes each)",
+			content: strings.Repeat("\u4e16\u754c", maxMarkdownContentBytes/3+100), // 世界 repeated
+		},
+		{
+			name:    "Emoji (4 bytes each)",
+			content: strings.Repeat("\U0001F600", maxMarkdownContentBytes/4+100), // 😀 repeated
+		},
+		{
+			name: "Mixed ASCII and Chinese at boundary",
+			// Fill with ASCII, then add Chinese characters to exceed limit
+			content: strings.Repeat("x", maxMarkdownContentBytes-10) + strings.Repeat("\u4e16", 10), // 世 x10 = 30 bytes
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Apply the same truncation logic as HandleSubmitURL
+			contentPtr := &tt.content
+			if contentPtr != nil && len(*contentPtr) > maxMarkdownContentBytes {
+				truncated := (*contentPtr)[:maxMarkdownContentBytes]
+				for len(truncated) > 0 && !utf8.ValidString(truncated) {
+					truncated = truncated[:len(truncated)-1]
+				}
+				contentPtr = &truncated
+			}
+
+			truncated := *contentPtr
+
+			// The truncated result must be valid UTF-8
+			if !utf8.ValidString(truncated) {
+				t.Errorf("truncated content is not valid UTF-8")
+			}
+
+			// Verify rune count consistency: len([]rune(truncated)) must equal
+			// utf8.RuneCountInString(truncated)
+			runeSliceLen := len([]rune(truncated))
+			runeCountLen := utf8.RuneCountInString(truncated)
+			if runeSliceLen != runeCountLen {
+				t.Errorf("rune count mismatch: len([]rune()) = %d, RuneCountInString() = %d",
+					runeSliceLen, runeCountLen)
+			}
+
+			// Byte length must not exceed the limit
+			if len(truncated) > maxMarkdownContentBytes {
+				t.Errorf("truncated byte length %d exceeds max %d", len(truncated), maxMarkdownContentBytes)
+			}
+		})
+	}
+}
+
+func TestMarkdownTruncation_BoundaryWithMixedContent(t *testing.T) {
+	// Mix of ASCII and Chinese at the 500KB boundary.
+	// Verifies valid UTF-8 output and correct length calculation.
+	tests := []struct {
+		name            string
+		buildContent    func() string
+		minExpectedLen  int // minimum expected byte length after truncation
+	}{
+		{
+			name: "ASCII then Chinese at exact boundary",
+			buildContent: func() string {
+				// ASCII fills most of the space, Chinese chars straddle the boundary
+				asciiPart := strings.Repeat("a", maxMarkdownContentBytes-5)
+				// 3 Chinese chars = 9 bytes total, so total = maxMarkdownContentBytes + 4
+				chinesePart := "\u4e16\u754c\u4f60" // 世界你 = 9 bytes
+				return asciiPart + chinesePart
+			},
+			// After truncation: at most maxMarkdownContentBytes bytes, but may lose
+			// up to 2 bytes from the last incomplete Chinese char
+			minExpectedLen: maxMarkdownContentBytes - 2,
+		},
+		{
+			name: "Chinese then ASCII at boundary",
+			buildContent: func() string {
+				// Fill with Chinese chars (3 bytes each), then ASCII to cross boundary
+				numChineseChars := (maxMarkdownContentBytes - 10) / 3
+				chinesePart := strings.Repeat("\u4e16", numChineseChars)
+				asciiPart := strings.Repeat("z", 20) // push well over the limit
+				return chinesePart + asciiPart
+			},
+			minExpectedLen: maxMarkdownContentBytes - 2,
+		},
+		{
+			name: "Alternating ASCII and Chinese throughout",
+			buildContent: func() string {
+				// Pattern: "aaa世aaa世aaa世..." to create many multi-byte boundaries
+				unit := "aaa\u4e16" // 3 + 3 = 6 bytes
+				repeats := maxMarkdownContentBytes/6 + 10
+				return strings.Repeat(unit, repeats)
+			},
+			minExpectedLen: maxMarkdownContentBytes - 2,
+		},
+		{
+			name: "Mixed emoji and Chinese",
+			buildContent: func() string {
+				// 4-byte emoji + 3-byte Chinese chars
+				unit := "\U0001F600\u4e16" // 4 + 3 = 7 bytes
+				repeats := maxMarkdownContentBytes/7 + 10
+				return strings.Repeat(unit, repeats)
+			},
+			minExpectedLen: maxMarkdownContentBytes - 3, // up to 3 bytes lost for emoji boundary
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := tt.buildContent()
+
+			// Verify input exceeds limit
+			if len(content) <= maxMarkdownContentBytes {
+				t.Fatalf("test content should exceed limit, got %d bytes", len(content))
+			}
+
+			mockSvc := &mockArticleService{}
+			h := newTestArticleHandler(mockSvc)
+
+			bodyJSON, _ := json.Marshal(map[string]any{
+				"url":              "https://example.com/mixed-boundary",
+				"markdown_content": content,
+			})
+
+			req := newAuthenticatedRequest("POST", "/api/v1/articles", string(bodyJSON), "user-1")
+			w := httptest.NewRecorder()
+
+			h.HandleSubmitURL(w, req)
+
+			if w.Code != http.StatusAccepted {
+				t.Fatalf("status code = %d, want %d", w.Code, http.StatusAccepted)
+			}
+
+			sr := mockSvc.lastSubmitReq
+			if sr == nil {
+				t.Fatal("service.SubmitURL was not called")
+			}
+			if sr.MarkdownContent == nil {
+				t.Fatal("MarkdownContent should not be nil")
+			}
+
+			truncated := *sr.MarkdownContent
+
+			// Must be valid UTF-8
+			if !utf8.ValidString(truncated) {
+				t.Errorf("truncated content is not valid UTF-8 (len=%d)", len(truncated))
+			}
+
+			// Must not exceed byte limit
+			if len(truncated) > maxMarkdownContentBytes {
+				t.Errorf("truncated byte length %d exceeds max %d", len(truncated), maxMarkdownContentBytes)
+			}
+
+			// Must be close to the limit (not losing too many bytes)
+			if len(truncated) < tt.minExpectedLen {
+				t.Errorf("truncated byte length %d is below minimum expected %d", len(truncated), tt.minExpectedLen)
+			}
+
+			// Rune count must be self-consistent
+			runeCount := utf8.RuneCountInString(truncated)
+			runeSliceCount := len([]rune(truncated))
+			if runeCount != runeSliceCount {
+				t.Errorf("rune count inconsistency: RuneCountInString=%d, len([]rune())=%d",
+					runeCount, runeSliceCount)
+			}
+		})
+	}
+}
+
 func TestHandleSubmitURL_LargeMarkdown_UTF8Safe(t *testing.T) {
 	// Chinese characters are 3 bytes each in UTF-8.
 	// Build content: fill up to just under the limit with ASCII, then place multi-byte

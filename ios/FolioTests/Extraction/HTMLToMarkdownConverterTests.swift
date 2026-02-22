@@ -184,6 +184,56 @@ final class HTMLToMarkdownConverterTests: XCTestCase {
         XCTAssertFalse(md.contains("\n\n\n"))
     }
 
+    // MARK: - Strikethrough Variants
+
+    func testStrikethroughWithSTag() throws {
+        let html = "<p>This is <s>deleted</s> text</p>"
+        let md = try converter.convert(html: html)
+        XCTAssertTrue(md.contains("~~deleted~~"))
+    }
+
+    func testStrikethroughWithStrikeTag() throws {
+        let html = "<p>This is <strike>deleted</strike> text</p>"
+        let md = try converter.convert(html: html)
+        XCTAssertTrue(md.contains("~~deleted~~"))
+    }
+
+    // MARK: - Table Without Thead
+
+    func testTableWithoutThead() throws {
+        let html = """
+        <table><tbody><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></tbody></table>
+        """
+        let md = try converter.convert(html: html)
+
+        // Without thead, the first tbody row becomes the header row
+        XCTAssertTrue(md.contains("| A | B |"), "First row should become header")
+        XCTAssertTrue(md.contains("| --- | --- |"), "Separator row should be present")
+        XCTAssertTrue(md.contains("| 1 | 2 |"), "Second row should be a body row")
+    }
+
+    // MARK: - Code Block Language Prefix Variants
+
+    func testCodeBlockWithLangPrefix() throws {
+        let html = "<pre><code class=\"lang-swift\">let x = 1</code></pre>"
+        let md = try converter.convert(html: html)
+
+        // The converter checks for "lang-" prefix pattern
+        XCTAssertTrue(md.contains("```swift"), "lang- prefix should be detected and stripped")
+        XCTAssertTrue(md.contains("let x = 1"))
+    }
+
+    // MARK: - Link Without Href
+
+    func testLinkWithoutHref() throws {
+        let html = "<p><a>just text</a></p>"
+        let md = try converter.convert(html: html)
+
+        // When href is empty, convertLink returns just the text without markdown link syntax
+        XCTAssertTrue(md.contains("just text"), "Text content should be preserved")
+        XCTAssertFalse(md.contains("[just text]"), "Should not have markdown link syntax when no href")
+    }
+
     // MARK: - Fixture Files
 
     func testSimpleBlogFixture() throws {

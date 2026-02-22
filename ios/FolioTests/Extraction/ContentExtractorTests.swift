@@ -498,6 +498,162 @@ final class ContentExtractorTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: 15.0)
     }
 
+    // MARK: - ReadabilityExtractor: CSS Selector Fallback Chain
+
+    func testReadability_articleTagSelector() throws {
+        let longContent = String(repeating: "This is meaningful article content inside an article tag. ", count: 5)
+        let html = """
+        <html><body>
+            <div class="wrapper">
+                <article>\(longContent)</article>
+            </div>
+        </body></html>
+        """
+        let url = URL(string: "https://example.com/article-tag")!
+
+        let readability = ReadabilityExtractor()
+        let result = try readability.extract(html: html, url: url)
+
+        XCTAssertTrue(result.contentHTML.contains("meaningful article content"),
+                      "<article> tag content should be extracted")
+    }
+
+    func testReadability_richMediaSelector() throws {
+        let longContent = String(repeating: "WeChat article content that should be extracted by the selector. ", count: 5)
+        let html = """
+        <html><body>
+            <div class="rich_media_content">\(longContent)</div>
+        </body></html>
+        """
+        let url = URL(string: "https://mp.weixin.qq.com/s/test123")!
+
+        let readability = ReadabilityExtractor()
+        let result = try readability.extract(html: html, url: url)
+
+        XCTAssertTrue(result.contentHTML.contains("WeChat article content"),
+                      ".rich_media_content selector should extract WeChat-like content")
+    }
+
+    func testReadability_fallbackToBodyWhenNoCandidates() throws {
+        // HTML with no article structure, just plain text in body that is long enough
+        let bodyText = String(repeating: "Plain body text without structure. ", count: 5)
+        let html = """
+        <html><body><p>\(bodyText)</p></body></html>
+        """
+        let url = URL(string: "https://example.com/no-structure")!
+
+        let readability = ReadabilityExtractor()
+        let result = try readability.extract(html: html, url: url)
+
+        // The score-based fallback should still find content, ultimately falling back to body
+        XCTAssertFalse(result.contentHTML.isEmpty,
+                       "Should return some content even without article structure")
+        XCTAssertTrue(result.contentHTML.contains("Plain body text"),
+                      "Body text should be extracted as fallback")
+    }
+
+    // MARK: - ReadabilityExtractor: Title Cleaning
+
+    func testReadability_titleSuffixRemoval() throws {
+        // Title with a long enough prefix (>10 chars) before the separator
+        let html = """
+        <html>
+        <head><title>Understanding Swift Concurrency - Swift Blog</title></head>
+        <body><article><p>\(String(repeating: "Content for extraction. ", count: 5))</p></article></body>
+        </html>
+        """
+        let url = URL(string: "https://example.com/title-suffix")!
+
+        let readability = ReadabilityExtractor()
+        let result = try readability.extract(html: html, url: url)
+
+        // "Understanding Swift Concurrency" is 33 chars > 10, so suffix " - Swift Blog" is removed
+        XCTAssertEqual(result.title, "Understanding Swift Concurrency")
+    }
+
+    func testReadability_titleSuffixKeptWhenTooShort() throws {
+        // Title with a short prefix (<=10 chars) before the separator
+        let html = """
+        <html>
+        <head><title>Short - Site</title></head>
+        <body><article><p>\(String(repeating: "Content for extraction testing. ", count: 5))</p></article></body>
+        </html>
+        """
+        let url = URL(string: "https://example.com/short-title")!
+
+        let readability = ReadabilityExtractor()
+        let result = try readability.extract(html: html, url: url)
+
+        // "Short" is 5 chars <= 10, so the suffix is NOT removed
+        XCTAssertEqual(result.title, "Short - Site")
+    }
+
+    // MARK: - ReadabilityExtractor: Author Length Filter
+
+    func testReadability_authorSkippedWhenTooLong() throws {
+        let longAuthor = String(repeating: "A", count: 100)
+        let html = """
+        <html>
+        <head><meta name="author" content="\(longAuthor)"></head>
+        <body><article><p>\(String(repeating: "Some article content for testing. ", count: 5))</p></article></body>
+        </html>
+        """
+        let url = URL(string: "https://example.com/long-author")!
+
+        let readability = ReadabilityExtractor()
+        let result = try readability.extract(html: html, url: url)
+
+        // The meta name=author extraction does NOT have a length filter.
+        // Only the CSS selector fallback (.author, [rel=author], etc.) has count < 100.
+        // So a 100-char meta author will still be extracted.
+        XCTAssertEqual(result.author, longAuthor,
+                       "Meta name=author is extracted without length filter")
+    }
+
+    func testReadability_authorFromSelectorSkippedWhenTooLong() throws {
+        let longAuthor = String(repeating: "B", count: 100)
+        let html = """
+        <html>
+        <head></head>
+        <body>
+            <article>
+                <span class="author">\(longAuthor)</span>
+                <p>\(String(repeating: "Article content for testing extraction. ", count: 5))</p>
+            </article>
+        </body></html>
+        """
+        let url = URL(string: "https://example.com/selector-long-author")!
+
+        let readability = ReadabilityExtractor()
+        let result = try readability.extract(html: html, url: url)
+
+        // CSS selector extraction has `author.count < 100` check, so 100 chars is NOT < 100
+        XCTAssertNil(result.author,
+                     "Author from CSS selector should be nil when count >= 100")
+    }
+
+    func testReadability_authorFromSelectorAcceptedWhen99Chars() throws {
+        let shortAuthor = String(repeating: "C", count: 99)
+        let html = """
+        <html>
+        <head></head>
+        <body>
+            <article>
+                <span class="author">\(shortAuthor)</span>
+                <p>\(String(repeating: "Article content for author length testing. ", count: 5))</p>
+            </article>
+        </body></html>
+        """
+        let url = URL(string: "https://example.com/selector-ok-author")!
+
+        let readability = ReadabilityExtractor()
+        let result = try readability.extract(html: html, url: url)
+
+        // 99 chars < 100, so the author should be accepted
+        XCTAssertEqual(result.author, shortAuthor,
+                       "Author from CSS selector should be accepted when count < 100")
+    }
+
     // MARK: - Helpers
 
     private func loadFixture(_ name: String) throws -> String {

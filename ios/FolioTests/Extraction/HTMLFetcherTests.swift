@@ -401,6 +401,37 @@ final class HTMLFetcherTests: XCTestCase {
 
     // MARK: - Exact Size Boundary
 
+    // MARK: - Header Charset vs Meta Charset Precedence
+
+    func testFetch_headerCharsetTakesPrecedence() async throws {
+        let testURL = URL(string: "https://example.com/charset-conflict")!
+        // Content is valid UTF-8 with a meta tag claiming charset=gbk.
+        // The header says charset=utf-8, so the fetcher should decode using UTF-8 (header wins).
+        let htmlString = """
+        <html><head><meta charset="gbk"></head><body><p>Hello UTF-8 World</p></body></html>
+        """
+        let utf8Data = htmlString.data(using: .utf8)!
+
+        MockFetcherURLProtocol.requestHandler = { request in
+            let response = self.makeHTTPResponse(
+                url: request.url!,
+                headers: ["Content-Type": "text/html; charset=utf-8"]
+            )
+            return (utf8Data, response)
+        }
+
+        let fetcher = makeFetcher()
+        let result = try await fetcher.fetch(url: testURL)
+
+        // Header charset (UTF-8) is tried first, so content decodes correctly
+        XCTAssertTrue(result.contains("Hello UTF-8 World"),
+                      "Header charset should take precedence over meta charset")
+        XCTAssertTrue(result.contains("<meta charset=\"gbk\">"),
+                      "Original HTML including meta tag should be preserved")
+    }
+
+    // MARK: - Exact Size Boundary
+
     func testFetch_exactlyMaxSize_succeeds() async throws {
         let testURL = URL(string: "https://example.com/big")!
         let exactData = Data(repeating: 0x41, count: HTMLFetcher.maxResponseSize)

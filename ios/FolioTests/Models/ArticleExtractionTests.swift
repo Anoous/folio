@@ -120,6 +120,59 @@ final class ArticleExtractionTests: XCTestCase {
         XCTAssertFalse(SourceType.youtube.supportsClientExtraction)
     }
 
+    // MARK: - SourceType.supportsClientExtraction Exhaustive Guard
+
+    func testSupportsClientExtraction_allCasesExplicitlyTested() {
+        // Exhaustive check: verify only .youtube returns false, all others return true.
+        // This guards against new SourceType cases being added without updating supportsClientExtraction.
+        let allCases: [SourceType] = [.web, .wechat, .twitter, .weibo, .zhihu, .newsletter, .youtube]
+        let expectedFalse: Set<SourceType> = [.youtube]
+
+        for sourceType in allCases {
+            if expectedFalse.contains(sourceType) {
+                XCTAssertFalse(sourceType.supportsClientExtraction,
+                               "\(sourceType.rawValue) should NOT support client extraction")
+            } else {
+                XCTAssertTrue(sourceType.supportsClientExtraction,
+                              "\(sourceType.rawValue) should support client extraction")
+            }
+        }
+
+        // Verify we tested all known cases by checking count matches
+        // If a new case is added to SourceType, this test will need updating
+        XCTAssertEqual(allCases.count, 7,
+                       "Expected 7 SourceType cases — update this test if new cases are added")
+    }
+
+    // MARK: - ExtractionSource Codable Round-Trip
+
+    func testExtractionSource_codableRoundTrip_client() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        let data = try encoder.encode(ExtractionSource.client)
+        let decoded = try decoder.decode(ExtractionSource.self, from: data)
+        XCTAssertEqual(decoded, .client)
+    }
+
+    func testExtractionSource_codableRoundTrip_server() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        let data = try encoder.encode(ExtractionSource.server)
+        let decoded = try decoder.decode(ExtractionSource.self, from: data)
+        XCTAssertEqual(decoded, .server)
+    }
+
+    func testExtractionSource_codableRoundTrip_none() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        let data = try encoder.encode(ExtractionSource.none)
+        let decoded = try decoder.decode(ExtractionSource.self, from: data)
+        XCTAssertEqual(decoded, .none)
+    }
+
     // MARK: - ArticleStatus Codable round-trip with clientReady
 
     func testArticleStatus_codableRoundTrip_clientReady() throws {

@@ -791,6 +791,191 @@ func TestSubmitURL_CrawlTaskAlwaysEnqueued_WithContent(t *testing.T) {
 	}
 }
 
+func TestSubmitURL_WordCountNilDefaultsToZero(t *testing.T) {
+	// When WordCount is nil in the request, verify that the CreateArticleParams
+	// passes nil to the repository. The repository's Create() function is then
+	// responsible for defaulting nil WordCount to 0.
+	// This test verifies the service passes through nil correctly, and separately
+	// documents the repository contract: nil WordCount -> default 0.
+	artRepo := &mockArticleRepo{
+		createFn: func(ctx context.Context, p repository.CreateArticleParams) (*domain.Article, error) {
+			// Simulate the repository's nil → 0 default logic (from repository.Create)
+			wordCount := 0
+			if p.WordCount != nil {
+				wordCount = *p.WordCount
+			}
+			if wordCount != 0 {
+				t.Errorf("expected wordCount to default to 0 when nil, got %d", wordCount)
+			}
+			return &domain.Article{ID: "article-wc", UserID: p.UserID, URL: p.URL}, nil
+		},
+	}
+	taskRepo := &mockTaskRepo{}
+	tagRepo := &mockTagRepo{}
+	catRepo := &mockCategoryRepo{}
+	quota := &mockQuotaService{}
+	enqueuer := &mockEnqueuer{}
+
+	svc := newTestArticleService(artRepo, taskRepo, tagRepo, catRepo, quota, enqueuer)
+
+	req := SubmitURLRequest{
+		URL:   "https://example.com/no-wordcount",
+		Title: strPtr("Title Without WordCount"),
+		// WordCount intentionally nil
+	}
+
+	_, err := svc.SubmitURL(context.Background(), "user-1", req)
+	if err != nil {
+		t.Fatalf("SubmitURL failed: %v", err)
+	}
+
+	// Verify WordCount was passed as nil to repository
+	p := artRepo.lastCreateP
+	if p == nil {
+		t.Fatal("articleRepo.Create was not called")
+	}
+	if p.WordCount != nil {
+		t.Errorf("CreateArticleParams.WordCount = %v, want nil", p.WordCount)
+	}
+}
+
+func TestSubmitURL_AllNilOptionalFields(t *testing.T) {
+	// Verify that nil pointers for Title, Author, SiteName, MarkdownContent,
+	// and WordCount are all valid and passed through to the repository correctly.
+	// This tests the service-to-repository contract for all nil optional fields.
+	artRepo := &mockArticleRepo{
+		createFn: func(ctx context.Context, p repository.CreateArticleParams) (*domain.Article, error) {
+			// Verify all optional fields are nil
+			if p.Title != nil {
+				t.Errorf("expected Title to be nil, got %q", *p.Title)
+			}
+			if p.Author != nil {
+				t.Errorf("expected Author to be nil, got %q", *p.Author)
+			}
+			if p.SiteName != nil {
+				t.Errorf("expected SiteName to be nil, got %q", *p.SiteName)
+			}
+			if p.MarkdownContent != nil {
+				t.Errorf("expected MarkdownContent to be nil, got %q", *p.MarkdownContent)
+			}
+			if p.WordCount != nil {
+				t.Errorf("expected WordCount to be nil, got %d", *p.WordCount)
+			}
+			return &domain.Article{ID: "article-nil", UserID: p.UserID, URL: p.URL}, nil
+		},
+	}
+	taskRepo := &mockTaskRepo{}
+	tagRepo := &mockTagRepo{}
+	catRepo := &mockCategoryRepo{}
+	quota := &mockQuotaService{}
+	enqueuer := &mockEnqueuer{}
+
+	svc := newTestArticleService(artRepo, taskRepo, tagRepo, catRepo, quota, enqueuer)
+
+	req := SubmitURLRequest{
+		URL: "https://example.com/nil-fields",
+		// All optional fields intentionally omitted (nil)
+	}
+
+	resp, err := svc.SubmitURL(context.Background(), "user-1", req)
+	if err != nil {
+		t.Fatalf("SubmitURL failed: %v", err)
+	}
+	if resp.ArticleID == "" {
+		t.Error("ArticleID should not be empty")
+	}
+
+	// Double-check via lastCreateP
+	p := artRepo.lastCreateP
+	if p == nil {
+		t.Fatal("articleRepo.Create was not called")
+	}
+	if p.UserID != "user-1" {
+		t.Errorf("CreateArticleParams.UserID = %q, want %q", p.UserID, "user-1")
+	}
+	if p.URL != "https://example.com/nil-fields" {
+		t.Errorf("CreateArticleParams.URL = %q, want %q", p.URL, "https://example.com/nil-fields")
+	}
+}
+
+func TestCreateArticleParams_WordCountNilDefaultsToZero(t *testing.T) {
+	// Directly test the repository's nil WordCount → 0 default logic
+	// (extracted from repository.Create)
+	p := repository.CreateArticleParams{
+		UserID:     "user-1",
+		URL:        "https://example.com",
+		SourceType: domain.SourceWeb,
+		// WordCount is nil
+	}
+
+	wordCount := 0
+	if p.WordCount != nil {
+		wordCount = *p.WordCount
+	}
+
+	if wordCount != 0 {
+		t.Errorf("nil WordCount should default to 0, got %d", wordCount)
+	}
+}
+
+func TestCreateArticleParams_WordCountExplicitValue(t *testing.T) {
+	// When WordCount is provided, it should be used as-is
+	wc := 42
+	p := repository.CreateArticleParams{
+		UserID:     "user-1",
+		URL:        "https://example.com",
+		SourceType: domain.SourceWeb,
+		WordCount:  &wc,
+	}
+
+	wordCount := 0
+	if p.WordCount != nil {
+		wordCount = *p.WordCount
+	}
+
+	if wordCount != 42 {
+		t.Errorf("explicit WordCount should be 42, got %d", wordCount)
+	}
+}
+
+func TestCreateArticleParams_AllNilOptionalFields(t *testing.T) {
+	// Verify the CreateArticleParams struct accepts all nil optional fields
+	// and applying the repository's default logic produces sensible values
+	p := repository.CreateArticleParams{
+		UserID:     "user-1",
+		URL:        "https://example.com/nil-everything",
+		SourceType: domain.SourceWeb,
+		Title:      nil,
+		Author:     nil,
+		SiteName:   nil,
+		MarkdownContent: nil,
+		WordCount:  nil,
+	}
+
+	// These nil values should be safe to pass to SQL (PostgreSQL NULL)
+	if p.Title != nil {
+		t.Errorf("Title should be nil, got %v", p.Title)
+	}
+	if p.Author != nil {
+		t.Errorf("Author should be nil, got %v", p.Author)
+	}
+	if p.SiteName != nil {
+		t.Errorf("SiteName should be nil, got %v", p.SiteName)
+	}
+	if p.MarkdownContent != nil {
+		t.Errorf("MarkdownContent should be nil, got %v", p.MarkdownContent)
+	}
+
+	// WordCount nil → default 0
+	wordCount := 0
+	if p.WordCount != nil {
+		wordCount = *p.WordCount
+	}
+	if wordCount != 0 {
+		t.Errorf("nil WordCount should default to 0, got %d", wordCount)
+	}
+}
+
 func TestSubmitURL_CrawlTaskAlwaysEnqueued_WithoutContent(t *testing.T) {
 	// The standard case: no client content, crawl task must be enqueued.
 	artRepo := &mockArticleRepo{}

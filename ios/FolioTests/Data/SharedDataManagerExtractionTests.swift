@@ -202,6 +202,32 @@ final class SharedDataManagerExtractionTests: XCTestCase {
         XCTAssertEqual(article.summary, "Existing summary")
     }
 
+    // MARK: - Whitespace-Only Fields
+
+    @MainActor
+    func testUpdateWithExtraction_whitespaceOnlyTitleOverwritesOriginal() throws {
+        let article = Article(url: "https://example.com/whitespace-title", title: "Original Title")
+        context.insert(article)
+        try context.save()
+
+        let result = ExtractionResult(
+            title: "   ",
+            author: nil,
+            siteName: nil,
+            excerpt: nil,
+            markdownContent: "Content for testing whitespace title behavior in extraction.",
+            wordCount: 8,
+            extractedAt: Date()
+        )
+
+        try manager.updateWithExtraction(result, for: article)
+
+        // Current code checks `!title.isEmpty` — "   " is NOT empty, so it WILL overwrite.
+        // This documents the current behavior: whitespace-only titles pass the isEmpty check.
+        XCTAssertEqual(article.title, "   ",
+                       "Whitespace-only title passes !isEmpty check and overwrites original (documents current behavior)")
+    }
+
     // MARK: - updatedAt
 
     @MainActor
