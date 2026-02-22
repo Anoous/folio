@@ -15,7 +15,7 @@ struct SettingsView: View {
             devToolsSection
             #endif
         }
-        .navigationTitle(String(localized: "tab.settings"))
+        .navigationTitle(String(localized: "settings.title", defaultValue: "Settings"))
     }
 
     // MARK: - User Profile

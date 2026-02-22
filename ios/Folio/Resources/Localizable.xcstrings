@@ -271,6 +271,17 @@
         }
       }
     },
+    "search.placeholder" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索收藏内容..."
+          }
+        }
+      }
+    },
     "share.saved" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -305,41 +316,7 @@
         }
       }
     },
-    "tab.library" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Library"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "收藏"
-          }
-        }
-      }
-    },
-    "tab.search" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Search"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "搜索"
-          }
-        }
-      }
-    },
-    "tab.settings" : {
+    "settings.title" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
@@ -355,9 +332,6 @@
           }
         }
       }
-    },
-    "The quick brown fox jumps over the lazy dog. Swift is a powerful and intuitive programming language." : {
-
     }
   },
   "version" : "1.0"

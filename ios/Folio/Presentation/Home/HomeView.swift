@@ -6,7 +6,10 @@ struct HomeView: View {
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
     @Environment(OfflineQueueManager.self) private var offlineQueueManager: OfflineQueueManager?
     @Query(sort: \Article.createdAt, order: .reverse) private var articles: [Article]
+    @Query(sort: \Category.sortOrder) private var categories: [Category]
     @State private var viewModel: HomeViewModel?
+    @State private var searchViewModel: SearchViewModel?
+    @State private var searchText = ""
     @State private var showAddURL = false
     @State private var urlInput = ""
     @State private var articleToDelete: Article?
@@ -14,9 +17,15 @@ struct HomeView: View {
     @State private var showShareSheet = false
     @State private var shareItems: [Any]? = nil
 
+    private var isSearchActive: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     var body: some View {
         Group {
-            if articles.isEmpty {
+            if isSearchActive {
+                searchResultsContent
+            } else if articles.isEmpty {
                 EmptyStateView(onPasteURL: { url in
                     saveURL(url.absoluteString)
                 })
@@ -26,9 +35,62 @@ struct HomeView: View {
         }
         .navigationTitle("Folio")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                NavigationLink(value: "settings") {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel(String(localized: "tab.settings", defaultValue: "Settings"))
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 addButton
             }
+        }
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: String(localized: "search.placeholder", defaultValue: "Search saved articles...")
+        )
+        .searchSuggestions {
+            if !isSearchActive, let svm = searchViewModel {
+                // Recent searches
+                if !svm.searchHistory.isEmpty {
+                    Section {
+                        ForEach(svm.searchHistory, id: \.self) { query in
+                            Label(query, systemImage: "clock.arrow.circlepath")
+                                .searchCompletion(query)
+                        }
+                    } header: {
+                        HStack {
+                            Text(String(localized: "search.recent", defaultValue: "Recent Searches"))
+                            Spacer()
+                            Button(String(localized: "search.clearAll", defaultValue: "Clear")) {
+                                svm.clearHistory()
+                            }
+                            .font(Typography.caption)
+                            .foregroundStyle(Color.folio.accent)
+                        }
+                    }
+                }
+
+                // Popular tags
+                if !svm.popularTags.isEmpty {
+                    Section(String(localized: "search.popularTags", defaultValue: "Popular Tags")) {
+                        ForEach(svm.popularTags) { tag in
+                            Label(tag.name, systemImage: "tag")
+                                .searchCompletion(tag.name)
+                        }
+                    }
+                }
+            }
+        }
+        .onSubmit(of: .search) {
+            let query = searchText.trimmingCharacters(in: .whitespaces)
+            if !query.isEmpty {
+                searchViewModel?.saveToHistory(query)
+            }
+        }
+        .onChange(of: searchText) { _, newValue in
+            searchViewModel?.searchText = newValue
         }
         .alert(String(localized: "home.addURL.title", defaultValue: "Add Link"), isPresented: $showAddURL) {
             TextField(String(localized: "home.addURL.placeholder", defaultValue: "https://"), text: $urlInput)
@@ -46,6 +108,11 @@ struct HomeView: View {
         .navigationDestination(for: UUID.self) { articleID in
             if let article = articles.first(where: { $0.id == articleID }) {
                 ReaderView(article: article)
+            }
+        }
+        .navigationDestination(for: String.self) { destination in
+            if destination == "settings" {
+                SettingsView()
             }
         }
         .toast(isPresented: Binding(
@@ -74,6 +141,12 @@ struct HomeView: View {
                 )
                 viewModel?.fetchArticles()
             }
+            if searchViewModel == nil {
+                guard let manager = try? FTS5SearchManager(inMemory: true) else { return }
+                let svm = SearchViewModel(searchManager: manager, context: modelContext)
+                searchViewModel = svm
+                svm.loadPopularTags()
+            }
         }
         .onChange(of: authViewModel?.isAuthenticated) { _, newValue in
             viewModel?.isAuthenticated = newValue ?? false
@@ -100,19 +173,119 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Article List
+    // MARK: - Search Results
 
-    private var articleList: some View {
+    @ViewBuilder
+    private var searchResultsContent: some View {
+        if let svm = searchViewModel {
+            if svm.isSearching {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let error = svm.searchError {
+                searchErrorState(error: error)
+            } else if svm.showsEmptyState {
+                searchEmptyState
+            } else {
+                searchResultsList(svm: svm)
+            }
+        }
+    }
+
+    private func searchResultsList(svm: SearchViewModel) -> some View {
         List {
-            statusBanners
-
-            if let vm = viewModel {
-                articleSections(vm: vm)
+            Section {
+                ForEach(svm.results) { item in
+                    NavigationLink(value: item.article.id) {
+                        SearchResultRow(
+                            item: item,
+                            searchQuery: svm.searchText
+                        )
+                    }
+                    .listRowInsets(EdgeInsets())
+                }
+            } header: {
+                Text("\(svm.resultCount) " + String(localized: "search.results", defaultValue: "results"))
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.folio.textTertiary)
             }
         }
         .listStyle(.plain)
-        .refreshable {
-            await viewModel?.refreshFromServer()
+    }
+
+    private func searchErrorState(error: String) -> some View {
+        VStack(spacing: Spacing.md) {
+            Image(systemName: "exclamationmark.magnifyingglass")
+                .font(.system(size: 48))
+                .foregroundStyle(Color.folio.error)
+
+            Text(String(localized: "search.error", defaultValue: "Search failed"))
+                .font(Typography.listTitle)
+                .foregroundStyle(Color.folio.textPrimary)
+
+            Text(error)
+                .font(Typography.caption)
+                .foregroundStyle(Color.folio.textTertiary)
+                .multilineTextAlignment(.center)
+
+            FolioButton(
+                title: String(localized: "search.retry", defaultValue: "Retry"),
+                style: .secondary
+            ) {
+                searchViewModel?.performSearch()
+            }
+            .frame(width: 160)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(Spacing.screenPadding)
+    }
+
+    private var searchEmptyState: some View {
+        VStack(spacing: Spacing.md) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 48))
+                .foregroundStyle(Color.folio.textTertiary)
+
+            Text(String(localized: "search.noResults", defaultValue: "No results found"))
+                .font(Typography.listTitle)
+                .foregroundStyle(Color.folio.textPrimary)
+
+            Text(String(localized: "search.noResultsHint", defaultValue: "Try different keywords or check spelling"))
+                .font(Typography.body)
+                .foregroundStyle(Color.folio.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(Spacing.screenPadding)
+    }
+
+    // MARK: - Article List
+
+    private var articleList: some View {
+        VStack(spacing: 0) {
+            if !categories.isEmpty {
+                CategoryFilterBar(
+                    selectedCategory: Binding(
+                        get: { viewModel?.selectedCategory },
+                        set: { newValue in
+                            viewModel?.selectedCategory = newValue
+                            viewModel?.fetchArticles()
+                        }
+                    ),
+                    categories: categories
+                )
+            }
+
+            List {
+                statusBanners
+
+                if let vm = viewModel {
+                    articleSections(vm: vm)
+                }
+            }
+            .listStyle(.plain)
+            .refreshable {
+                await viewModel?.refreshFromServer()
+            }
         }
         .background(Color.folio.background)
         .sheet(isPresented: $showShareSheet) {
