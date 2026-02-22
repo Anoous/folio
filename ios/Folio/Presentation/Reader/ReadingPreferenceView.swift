@@ -235,32 +235,31 @@ enum ReadingTheme: String, CaseIterable {
         case .sepia: return Color(red: 0.96, green: 0.93, blue: 0.87)
         }
     }
-}
 
-// MARK: - Reading Font Family
-
-enum ReadingFontFamily: String, CaseIterable {
-    case notoSerif = "noto_serif"
-    case system = "system"
-    case serif = "serif"
-
-    var displayName: String {
+    var backgroundColor: Color {
         switch self {
-        case .notoSerif: return "Noto Serif SC"
-        case .system: return "System (SF Pro)"
-        case .serif: return "Georgia"
+        case .system: return Color.folio.background
+        case .light: return .white
+        case .dark: return Color(white: 0.12)
+        case .sepia: return Color(red: 0.96, green: 0.93, blue: 0.87)
         }
     }
 
-    var previewFont: Font {
-        font(size: 16)
+    var textColor: Color {
+        switch self {
+        case .system: return Color.folio.textPrimary
+        case .light: return Color(white: 0.1)
+        case .dark: return Color(white: 0.88)
+        case .sepia: return Color(red: 0.23, green: 0.20, blue: 0.16)
+        }
     }
 
-    func font(size: CGFloat) -> Font {
+    var secondaryTextColor: Color {
         switch self {
-        case .notoSerif: return Font.custom("Noto Serif SC", size: size)
-        case .system: return Font.system(size: size)
-        case .serif: return Font.custom("Georgia", size: size)
+        case .system: return Color.folio.textSecondary
+        case .light: return Color(white: 0.4)
+        case .dark: return Color(white: 0.6)
+        case .sepia: return Color(red: 0.45, green: 0.40, blue: 0.33)
         }
     }
 }

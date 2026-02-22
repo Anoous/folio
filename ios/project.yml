@@ -70,6 +70,14 @@ targets:
       - path: Folio/Domain/Models
       - path: Folio/Data/SwiftData/DataManager.swift
       - path: Folio/Data/SwiftData/SharedDataManager.swift
+      - path: Folio/Presentation/Components/Spacing.swift
+      - path: Folio/Presentation/Components/Typography.swift
+      - path: Folio/Presentation/Components/CornerRadius.swift
+      - path: Folio/Presentation/Components/FolioButton.swift
+      - path: Folio/Presentation/Components/ReadingFontFamily.swift
+      - path: Folio/Utils/Extensions/Color+Folio.swift
+    resources:
+      - path: Folio/Resources/Assets.xcassets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.folio.app.share-extension

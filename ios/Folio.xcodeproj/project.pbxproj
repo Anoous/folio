@@ -29,6 +29,7 @@
 		2B2FC8B74FA4FC831AFABE56 /* SearchResultRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1CF36A18455EBEE914D8516 /* SearchResultRow.swift */; };
 		321AC41EC14FAE3B6A15F031 /* ReadingPreferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC23CD3192062DC98AC6E3A /* ReadingPreferenceTests.swift */; };
 		394C04342086169BE5F88C2F /* TypographyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DAF903DE4A88322BFC3BF05 /* TypographyTests.swift */; };
+		39DA0FA67B570EAE11E96675 /* ReadingFontFamily.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F1CE534E4841B018C1B9B69 /* ReadingFontFamily.swift */; };
 		3C72E5A510580466DA7D6701 /* SharedDataManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 753C7145168AAEC4143FA1C0 /* SharedDataManagerTests.swift */; };
 		3E810F0AAB4788861CBE1DCA /* CategoryRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117C69065C4BFC1C68EB1C00 /* CategoryRepositoryTests.swift */; };
 		40BB68E32A494A4587A3EA30 /* WebViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9296E1AEFF3D3F283AECE651 /* WebViewContainer.swift */; };
@@ -72,6 +73,7 @@
 		B298BE141564E450A16CB5FD /* MockDataFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 349AB0BC3C6766D21B01FF09 /* MockDataFactory.swift */; };
 		B5735DBA3B37611ADABC06A2 /* HomeViewModelTagFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5290C3ADECCDDBC753EB1F59 /* HomeViewModelTagFilterTests.swift */; };
 		B589D7C031675E6E6AAF8D65 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = FD87CB5271A7E5119E665A37 /* NukeUI */; };
+		B5B5BB7C1E320260DD4A3823 /* ReadingFontFamily.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F1CE534E4841B018C1B9B69 /* ReadingFontFamily.swift */; };
 		B6277342ECA7718F9BF64446 /* PermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B003CD5B3B9D3B96662F2542 /* PermissionView.swift */; };
 		B6ADB5796E64EF2F629B917F /* FolioApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED4556A712E7A2B56DE80CBD /* FolioApp.swift */; };
 		B78BB948FAE128379413D974 /* OfflineQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D5FD400A66F26A1CB323587 /* OfflineQueueManager.swift */; };
@@ -180,6 +182,7 @@
 		535A40C8A5E5036399F1E139 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
 		5635A7731AD578E00D68E228 /* CategoryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryRepository.swift; sourceTree = "<group>"; };
 		5B8BAAD0990BFEBF5AC22207 /* Folio.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Folio.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5F1CE534E4841B018C1B9B69 /* ReadingFontFamily.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingFontFamily.swift; sourceTree = "<group>"; };
 		64E1773C35E610BA822C8E22 /* HomeViewModelFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModelFilterTests.swift; sourceTree = "<group>"; };
 		6924E3CEAAFA4D0C34D4AE5A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6B85A3C41CFF1949BDF0F023 /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
@@ -431,6 +434,7 @@
 				4D21B5897AD7898900B99FAA /* CornerRadius.swift */,
 				7861C8ADE901E7621567A32A /* FlowLayout.swift */,
 				BD0B7D8133F4B50289FEFB75 /* FolioButton.swift */,
+				5F1CE534E4841B018C1B9B69 /* ReadingFontFamily.swift */,
 				AA1FAF40CAE7C1C5DE1346CF /* Spacing.swift */,
 				B69A9BD46B89BDE970E0AC6E /* StatusBadge.swift */,
 				0C717CA8AAEB7479E6E52A73 /* TagChip.swift */,
@@ -867,6 +871,7 @@
 				B6277342ECA7718F9BF64446 /* PermissionView.swift in Sources */,
 				F711DBC96F752E6A7156934B /* ReaderView.swift in Sources */,
 				9FAA5E0EC9B2C935FBDEE951 /* ReaderViewModel.swift in Sources */,
+				39DA0FA67B570EAE11E96675 /* ReadingFontFamily.swift in Sources */,
 				BD3996738CC24C99C3B94BA0 /* ReadingPreferenceView.swift in Sources */,
 				648FBAD05847A2B4EECD732F /* Repository.swift in Sources */,
 				B9D385671912D45458154F8B /* SearchIndex.swift in Sources */,
@@ -903,6 +908,7 @@
 				B21C3B1391C44DA3DAD5C600 /* DataManager.swift in Sources */,
 				C6FDC12B2471ECF8CEA42F8D /* FolioButton.swift in Sources */,
 				CF6F826A3CBA993B2DBA6DED /* Models.swift in Sources */,
+				B5B5BB7C1E320260DD4A3823 /* ReadingFontFamily.swift in Sources */,
 				507FD0D0AACFBAF5160E8DA0 /* ShareViewController.swift in Sources */,
 				C4A02918A0333DF425D313D2 /* SharedDataManager.swift in Sources */,
 				1397296F66027078195997BA /* Spacing.swift in Sources */,

@@ -9,23 +9,38 @@ struct MarkdownRenderer: View {
     let markdownText: String
     let fontSize: CGFloat
     let lineSpacing: CGFloat
+    let fontFamily: ReadingFontFamily
+    let textColor: Color
+    let secondaryTextColor: Color
 
     init(
         markdownText: String,
         fontSize: CGFloat = 17,
-        lineSpacing: CGFloat = Typography.articleBodyLineSpacing
+        lineSpacing: CGFloat = Typography.articleBodyLineSpacing,
+        fontFamily: ReadingFontFamily = .notoSerif,
+        textColor: Color = Color.folio.textPrimary,
+        secondaryTextColor: Color = Color.folio.textSecondary
     ) {
         self.markdownText = markdownText
         self.fontSize = fontSize
         self.lineSpacing = lineSpacing
+        self.fontFamily = fontFamily
+        self.textColor = textColor
+        self.secondaryTextColor = secondaryTextColor
     }
 
     var body: some View {
         let document = Document(parsing: markdownText)
-        var visitor = MarkdownSwiftUIVisitor(fontSize: fontSize, lineSpacing: lineSpacing)
+        var visitor = MarkdownSwiftUIVisitor(
+            fontSize: fontSize,
+            lineSpacing: lineSpacing,
+            fontFamily: fontFamily,
+            textColor: textColor,
+            secondaryTextColor: secondaryTextColor
+        )
         let views = visitor.visitDocument(document)
 
-        VStack(alignment: .leading, spacing: Spacing.md) {
+        VStack(alignment: .leading, spacing: Spacing.lg) {
             ForEach(Array(views.enumerated()), id: \.offset) { _, view in
                 view
             }
@@ -42,6 +57,9 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
 
     let fontSize: CGFloat
     let lineSpacing: CGFloat
+    let fontFamily: ReadingFontFamily
+    let textColor: Color
+    let secondaryTextColor: Color
 
     // MARK: - Document
 
@@ -65,11 +83,12 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
 
     mutating func visitHeading(_ heading: Heading) -> [AnyView] {
         let text = collectInlineText(heading)
-        let font = headingFont(level: heading.level)
+        let font = Typography.readerHeadingFont(level: heading.level, family: fontFamily)
         let view = text
             .font(font)
-            .foregroundStyle(Color.folio.textPrimary)
+            .foregroundStyle(textColor)
             .padding(.top, heading.level <= 2 ? Spacing.md : Spacing.sm)
+            .padding(.bottom, Spacing.xxs)
 
         return [AnyView(view)]
     }
@@ -85,8 +104,8 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
             // Fast path: no images or links, render as a single Text
             let text = collectInlineText(paragraph)
             let view = text
-                .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
-                .foregroundStyle(Color.folio.textPrimary)
+                .font(fontFamily.font(size: fontSize))
+                .foregroundStyle(textColor)
                 .lineSpacing(lineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
             return [AnyView(view)]
@@ -111,7 +130,7 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
                 let linkText = collectInlineText(link)
                 let linkView = SwiftUI.Link(destination: url) {
                     linkText
-                        .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
+                        .font(fontFamily.font(size: fontSize))
                         .foregroundStyle(Color.folio.link)
                         .underline()
                 }
@@ -133,8 +152,8 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
             acc + inlineText(node)
         }
         let view = text
-            .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
-            .foregroundStyle(Color.folio.textPrimary)
+            .font(fontFamily.font(size: fontSize))
+            .foregroundStyle(textColor)
             .lineSpacing(lineSpacing)
             .fixedSize(horizontal: false, vertical: true)
         result.append(AnyView(view))
@@ -185,8 +204,8 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
 
             let view = HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
                 Text("\(index + 1).")
-                    .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
-                    .foregroundStyle(Color.folio.textSecondary)
+                    .font(fontFamily.font(size: fontSize))
+                    .foregroundStyle(secondaryTextColor)
                     .frame(width: 24, alignment: .trailing)
 
                 VStack(alignment: .leading, spacing: Spacing.xxs) {
@@ -210,8 +229,8 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
 
             let view = HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
                 Text("\u{2022}")
-                    .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
-                    .foregroundStyle(Color.folio.textSecondary)
+                    .font(fontFamily.font(size: fontSize))
+                    .foregroundStyle(secondaryTextColor)
                     .frame(width: 24, alignment: .trailing)
 
                 VStack(alignment: .leading, spacing: Spacing.xxs) {
@@ -290,7 +309,7 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
     mutating func visitHTMLBlock(_ html: HTMLBlock) -> [AnyView] {
         let view = Text(html.rawHTML)
             .font(Typography.articleCode)
-            .foregroundStyle(Color.folio.textSecondary)
+            .foregroundStyle(secondaryTextColor)
         return [AnyView(view)]
     }
 
@@ -315,12 +334,12 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
         } else if let code = markup as? InlineCode {
             return Text(code.code)
                 .font(Typography.articleCode)
-                .foregroundColor(Color.folio.accent)
+                .foregroundStyle(Color.folio.accent)
         } else if let link = markup as? Markdown.Link {
             // SwiftUI Text doesn't support tappable links directly,
             // so we style link text distinctly.
             return collectInlineText(link)
-                .foregroundColor(Color.folio.link)
+                .foregroundStyle(Color.folio.link)
                 .underline()
         } else if markup is SoftBreak {
             return Text(" ")
@@ -329,7 +348,7 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
         } else if let image = markup as? Markdown.Image {
             // Inline image reference — display alt text
             return Text("[\(image.plainText)]")
-                .foregroundColor(Color.folio.link)
+                .foregroundStyle(Color.folio.link)
         } else if let strikethrough = markup as? Strikethrough {
             return collectInlineText(strikethrough).strikethrough()
         } else {
@@ -343,18 +362,6 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
     }
 
     // MARK: - Helpers
-
-    private func headingFont(level: Int) -> Font {
-        switch level {
-        case 1: return Font.custom("NotoSerifSC-Bold", size: 28)
-        case 2: return Font.custom("NotoSerifSC-Bold", size: 24)
-        case 3: return Font.custom("NotoSerifSC-SemiBold", size: 20)
-        case 4: return Font.custom("NotoSerifSC-SemiBold", size: 18)
-        case 5: return Font.custom("NotoSerifSC-Medium", size: 16)
-        case 6: return Font.custom("NotoSerifSC-Medium", size: 15)
-        default: return Font.custom("NotoSerifSC-Medium", size: 15)
-        }
-    }
 
     private func plainText(_ markup: any Markup) -> String {
         if let text = markup as? Markdown.Text {

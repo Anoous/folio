@@ -136,7 +136,13 @@ final class MarkdownRendererTests: XCTestCase {
 
     private func visitMarkdown(_ md: String) -> [AnyView] {
         let doc = Document(parsing: md)
-        var visitor = MarkdownSwiftUIVisitor(fontSize: 17, lineSpacing: 11.9)
+        var visitor = MarkdownSwiftUIVisitor(
+            fontSize: 17,
+            lineSpacing: 11.9,
+            fontFamily: .notoSerif,
+            textColor: .primary,
+            secondaryTextColor: .secondary
+        )
         return visitor.visitDocument(doc)
     }
 

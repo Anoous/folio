@@ -17,6 +17,16 @@ struct ReaderView: View {
     // Reading preferences
     @AppStorage("reader_fontSize") private var fontSize: Double = 17
     @AppStorage("reader_lineSpacing") private var lineSpacing: Double = 11.9
+    @AppStorage("reader_theme") private var themeRawValue: String = ReadingTheme.system.rawValue
+    @AppStorage("reader_fontFamily") private var fontFamilyRawValue: String = ReadingFontFamily.notoSerif.rawValue
+
+    private var readingTheme: ReadingTheme {
+        ReadingTheme(rawValue: themeRawValue) ?? .system
+    }
+
+    private var readingFontFamily: ReadingFontFamily {
+        ReadingFontFamily(rawValue: fontFamilyRawValue) ?? .notoSerif
+    }
 
     var body: some View {
         Group {
@@ -88,37 +98,43 @@ struct ReaderView: View {
     private func readerContent(viewModel: ReaderViewModel) -> some View {
         GeometryReader { outerProxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.md) {
+                VStack(alignment: .leading, spacing: 0) {
                     // Article title
                     Text(article.displayTitle)
                         .font(Typography.articleTitle)
-                        .foregroundStyle(Color.folio.textPrimary)
+                        .foregroundStyle(readingTheme.textColor)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 40)
 
-                    // Meta info card
+                    // Inline meta info
                     ArticleMetaInfoView(
                         article: article,
-                        wordCount: viewModel.wordCount,
-                        readingTimeMinutes: viewModel.estimatedReadTimeMinutes
+                        readingTimeMinutes: viewModel.estimatedReadTimeMinutes,
+                        textColor: readingTheme.secondaryTextColor
                     )
+                    .padding(.top, Spacing.xs)
 
                     // AI Summary
                     if let summary = article.summary {
                         aiSummarySection(summary: summary)
+                            .padding(.top, Spacing.lg)
                     }
 
-                    // Key Points
-                    if !article.keyPoints.isEmpty {
-                        keyPointsSection(keyPoints: article.keyPoints)
-                    }
+                    // Divider before body
+                    Divider()
+                        .padding(.top, 20)
 
                     // Markdown body
                     if let content = article.markdownContent {
                         MarkdownRenderer(
                             markdownText: content,
                             fontSize: CGFloat(fontSize),
-                            lineSpacing: CGFloat(lineSpacing)
+                            lineSpacing: CGFloat(lineSpacing),
+                            fontFamily: readingFontFamily,
+                            textColor: readingTheme.textColor,
+                            secondaryTextColor: readingTheme.secondaryTextColor
                         )
+                        .padding(.top, Spacing.lg)
                     } else if viewModel.isLoadingContent {
                         VStack(spacing: Spacing.md) {
                             ProgressView()
@@ -134,8 +150,9 @@ struct ReaderView: View {
 
                     Spacer(minLength: Spacing.xl)
                 }
-                .padding(.horizontal, Spacing.screenPadding)
-                .padding(.top, Spacing.md)
+                .frame(maxWidth: 600)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 20)
                 .background(
                     GeometryReader { innerProxy in
                         Color.clear.preference(
@@ -148,6 +165,7 @@ struct ReaderView: View {
                     }
                 )
             }
+            .background(readingTheme.backgroundColor)
             .coordinateSpace(name: "scroll")
             .onPreferenceChange(ScrollMetricsPreferenceKey.self) { metrics in
                 let viewportHeight = outerProxy.size.height
@@ -168,53 +186,20 @@ struct ReaderView: View {
     private func aiSummarySection(summary: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             HStack(spacing: Spacing.xxs) {
-                Image(systemName: "sparkles")
+                Text("\u{2726}")
                     .font(.caption)
                     .foregroundStyle(Color.folio.accent)
-                Text(String(localized: "reader.aiSummary", defaultValue: "AI Summary"))
+                Text("AI")
                     .font(Typography.tag)
                     .foregroundStyle(Color.folio.accent)
             }
 
             Text(summary)
-                .font(Typography.body)
-                .foregroundStyle(Color.folio.textSecondary)
-                .lineSpacing(6)
+                .font(.system(size: CGFloat(fontSize) - 1))
+                .foregroundStyle(readingTheme.secondaryTextColor)
+                .lineSpacing(Typography.articleBodyLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.folio.accent.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
-    }
-
-    // MARK: - Key Points Section
-
-    private func keyPointsSection(keyPoints: [String]) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text(String(localized: "reader.keyPoints", defaultValue: "Key Points"))
-                .font(Typography.tag)
-                .foregroundStyle(Color.folio.textSecondary)
-
-            ForEach(Array(keyPoints.enumerated()), id: \.offset) { _, point in
-                HStack(alignment: .top, spacing: Spacing.xs) {
-                    Text("\u{2022}")
-                        .foregroundStyle(Color.folio.accent)
-                    Text(point)
-                        .font(Typography.body)
-                        .foregroundStyle(Color.folio.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .padding(Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.folio.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
-        .overlay(
-            RoundedRectangle(cornerRadius: CornerRadius.medium)
-                .stroke(Color.folio.separator, lineWidth: 0.5)
-        )
     }
 
     // MARK: - Content Unavailable
@@ -369,7 +354,7 @@ struct ReaderView: View {
 
             Spacer()
 
-            Text("\(Int((viewModel?.readingProgress ?? 0) * 100))%")
+            Text("\(Int(round((viewModel?.readingProgress ?? 0) * 100)))%")
                 .font(Typography.caption)
                 .foregroundStyle(Color.folio.textTertiary)
 
@@ -391,7 +376,7 @@ struct ReaderView: View {
                 }
             }
         }
-        .padding(.horizontal, Spacing.screenPadding)
+        .padding(.horizontal, 20)
         .padding(.vertical, Spacing.sm)
         .background(.ultraThinMaterial)
     }
