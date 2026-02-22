@@ -55,4 +55,26 @@ final class QuotaCheckTests: XCTestCase {
         let expected = "quota_\(formatter.string(from: Date()))"
         XCTAssertEqual(key, expected)
     }
+
+    // MARK: - incrementQuota Tests
+
+    func testIncrementQuota_incrementsCount() {
+        XCTAssertEqual(SharedDataManager.currentMonthCount(userDefaults: testDefaults), 0)
+        SharedDataManager.incrementQuota(userDefaults: testDefaults)
+        XCTAssertEqual(SharedDataManager.currentMonthCount(userDefaults: testDefaults), 1)
+    }
+
+    func testIncrementQuota_multipleCalls() {
+        for _ in 0..<5 {
+            SharedDataManager.incrementQuota(userDefaults: testDefaults)
+        }
+        XCTAssertEqual(SharedDataManager.currentMonthCount(userDefaults: testDefaults), 5)
+    }
+
+    func testIncrementQuota_thenCanSave_fails() {
+        for _ in 0..<30 {
+            SharedDataManager.incrementQuota(userDefaults: testDefaults)
+        }
+        XCTAssertFalse(SharedDataManager.canSave(isPro: false, userDefaults: testDefaults))
+    }
 }

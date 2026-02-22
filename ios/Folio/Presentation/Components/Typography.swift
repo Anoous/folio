@@ -24,7 +24,7 @@ enum Typography {
     // MARK: - Article Fonts (Chinese)
 
     /// Noto Serif SC, 24pt, Bold
-    static let articleTitle = Font.custom("Noto Serif SC", size: 24).weight(.bold)
+    static let articleTitle = Font.custom("NotoSerifSC-Bold", size: 24)
 
     /// Noto Serif SC, 17pt, Regular, line height 1.7
     static let articleBody = Font.custom("Noto Serif SC", size: 17)
@@ -32,8 +32,8 @@ enum Typography {
     /// SF Mono, 14pt, Regular
     static let articleCode = Font.system(size: 14, weight: .regular, design: .monospaced)
 
-    /// Noto Serif SC, 16pt, Italic
-    static let articleQuote = Font.custom("Noto Serif SC", size: 16).italic()
+    /// Noto Serif SC, 16pt, Regular (used for quotes)
+    static let articleQuote = Font.custom("NotoSerifSC-Regular", size: 16)
 
     /// Line spacing for articleBody (line height 1.7 → 17 * 0.7 = 11.9)
     static let articleBodyLineSpacing: CGFloat = 11.9

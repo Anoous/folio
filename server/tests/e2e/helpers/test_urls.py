@@ -13,6 +13,9 @@ TECH_BLOG = "https://go.dev/blog/go1.22"
 # Non-English page
 CHINESE_PAGE = "https://cn.bing.com/"
 
+# WeChat public account article (for scrape quality tests)
+WECHAT_ARTICLE = "https://mp.weixin.qq.com/s/dLNfvdobYRPLziWqwYXI8Q"
+
 # ---- dynamic URLs (unique per test run to avoid duplicate collisions) ----
 
 def unique_url(prefix: str = "test") -> str:

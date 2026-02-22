@@ -15,6 +15,9 @@ final class HomeViewModel {
     var isLoading = false
     var isAuthenticated = false
     var syncError: String?
+    var showToast = false
+    var toastMessage = ""
+    var toastIcon: String? = nil
 
     private var currentPage = 0
     private let pageSize = 20
@@ -59,7 +62,8 @@ final class HomeViewModel {
 
         do {
             let response = try await apiClient.listArticles(page: 1, perPage: 20, status: "ready")
-            mergeServerArticles(response.data)
+            let needsDetail = mergeServerArticles(response.data)
+            await fetchMissingContent(needsDetail)
         } catch {
             syncError = error.localizedDescription
         }
@@ -70,10 +74,14 @@ final class HomeViewModel {
 
     // MARK: - Merge Server Articles
 
-    private func mergeServerArticles(_ dtos: [ArticleDTO]) {
+    /// Merges server DTOs into local store. Returns server IDs of articles
+    /// that are ready on the server but missing local markdown content.
+    @discardableResult
+    private func mergeServerArticles(_ dtos: [ArticleDTO]) -> [String] {
         let articleRepo = ArticleRepository(context: context)
         let tagRepo = TagRepository(context: context)
         let categoryRepo = CategoryRepository(context: context)
+        var needsDetail: [String] = []
 
         for dto in dtos {
             let article: Article
@@ -119,9 +127,141 @@ final class HomeViewModel {
                 }
                 article.tags = resolvedTags
             }
+
+            // Article is ready on server but local content is missing
+            if dto.status == "ready" && article.markdownContent == nil {
+                needsDetail.append(dto.id)
+            }
         }
 
         try? context.save()
+        return needsDetail
+    }
+
+    // MARK: - Fetch Missing Content
+
+    /// Fetches full article details for articles missing markdown content.
+    private func fetchMissingContent(_ serverIDs: [String]) async {
+        guard !serverIDs.isEmpty else { return }
+
+        let articleRepo = ArticleRepository(context: context)
+        let tagRepo = TagRepository(context: context)
+        let categoryRepo = CategoryRepository(context: context)
+
+        for serverID in serverIDs {
+            do {
+                let dto = try await apiClient.getArticle(id: serverID)
+                guard let article = try? articleRepo.fetchByServerID(serverID) else { continue }
+
+                article.updateFromDTO(dto)
+
+                if let categoryDTO = dto.category {
+                    if let localCategory = try? categoryRepo.fetchBySlug(categoryDTO.slug) {
+                        localCategory.updateFromDTO(categoryDTO)
+                        article.category = localCategory
+                    }
+                }
+
+                if let tagDTOs = dto.tags {
+                    var resolvedTags: [Tag] = []
+                    for tagDTO in tagDTOs {
+                        if let existing = try? tagRepo.fetchByServerID(tagDTO.id) {
+                            existing.updateFromDTO(tagDTO)
+                            resolvedTags.append(existing)
+                        } else if let byName = try? tagRepo.fetchByName(tagDTO.name) {
+                            byName.updateFromDTO(tagDTO)
+                            resolvedTags.append(byName)
+                        } else {
+                            let newTag = Tag.fromDTO(tagDTO)
+                            context.insert(newTag)
+                            resolvedTags.append(newTag)
+                        }
+                    }
+                    article.tags = resolvedTags
+                }
+            } catch {
+                // Failed to fetch detail — will retry on next refresh
+                continue
+            }
+        }
+
+        try? context.save()
+    }
+
+    // MARK: - Article Actions
+
+    func toggleFavorite(_ article: Article) {
+        article.isFavorite.toggle()
+        article.updatedAt = Date()
+        try? context.save()
+
+        if article.isFavorite {
+            showToastMessage(String(localized: "home.article.favorited", defaultValue: "Added to favorites"), icon: "heart.fill")
+        } else {
+            showToastMessage(String(localized: "home.article.unfavorited", defaultValue: "Removed from favorites"), icon: "heart")
+        }
+
+        if isAuthenticated, let serverID = article.serverID {
+            Task {
+                do {
+                    try await apiClient.updateArticle(
+                        id: serverID,
+                        request: UpdateArticleRequest(isFavorite: article.isFavorite)
+                    )
+                    article.syncState = .synced
+                } catch {
+                    article.syncState = .pendingUpdate
+                }
+            }
+        }
+    }
+
+    func archiveArticle(_ article: Article) {
+        article.isArchived.toggle()
+        article.updatedAt = Date()
+        try? context.save()
+
+        if article.isArchived {
+            showToastMessage(String(localized: "home.article.archived", defaultValue: "Archived"), icon: "archivebox.fill")
+        } else {
+            showToastMessage(String(localized: "home.article.unarchived", defaultValue: "Unarchived"), icon: "archivebox")
+        }
+
+        if isAuthenticated, let serverID = article.serverID {
+            Task {
+                do {
+                    try await apiClient.updateArticle(
+                        id: serverID,
+                        request: UpdateArticleRequest(isArchived: article.isArchived)
+                    )
+                    article.syncState = .synced
+                } catch {
+                    article.syncState = .pendingUpdate
+                }
+            }
+        }
+    }
+
+    func deleteArticle(_ article: Article) {
+        let serverID = article.serverID
+
+        context.delete(article)
+        try? context.save()
+        fetchArticles()
+
+        showToastMessage(String(localized: "home.article.deleted", defaultValue: "Article deleted"), icon: "trash")
+
+        if isAuthenticated, let serverID {
+            Task { try? await apiClient.deleteArticle(id: serverID) }
+        }
+    }
+
+    // MARK: - Toast
+
+    private func showToastMessage(_ message: String, icon: String? = nil) {
+        toastMessage = message
+        toastIcon = icon
+        showToast = true
     }
 
     // MARK: - Private

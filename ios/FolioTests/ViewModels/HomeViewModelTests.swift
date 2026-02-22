@@ -113,4 +113,126 @@ final class HomeViewModelTests: XCTestCase {
         XCTAssertGreaterThan(a.readProgress, 0)
         XCTAssertNotNil(a.lastReadAt)
     }
+
+    // MARK: - Action Method Tests
+
+    @MainActor
+    func testToggleFavorite_togglesIsFavorite() throws {
+        let a = Article(url: "https://example.com/fav", title: "Fav")
+        context.insert(a)
+        try context.save()
+        XCTAssertFalse(a.isFavorite)
+
+        let vm = HomeViewModel(context: context)
+        vm.toggleFavorite(a)
+        XCTAssertTrue(a.isFavorite)
+
+        vm.toggleFavorite(a)
+        XCTAssertFalse(a.isFavorite)
+    }
+
+    @MainActor
+    func testToggleFavorite_setsToast() throws {
+        let a = Article(url: "https://example.com/fav-toast", title: "Fav Toast")
+        context.insert(a)
+        try context.save()
+
+        let vm = HomeViewModel(context: context)
+        vm.toggleFavorite(a)
+        XCTAssertTrue(vm.showToast)
+        XCTAssertFalse(vm.toastMessage.isEmpty)
+    }
+
+    @MainActor
+    func testArchiveArticle_togglesIsArchived() throws {
+        let a = Article(url: "https://example.com/archive", title: "Archive")
+        context.insert(a)
+        try context.save()
+        XCTAssertFalse(a.isArchived)
+
+        let vm = HomeViewModel(context: context)
+        vm.archiveArticle(a)
+        XCTAssertTrue(a.isArchived)
+
+        vm.archiveArticle(a)
+        XCTAssertFalse(a.isArchived)
+    }
+
+    @MainActor
+    func testArchiveArticle_setsToast() throws {
+        let a = Article(url: "https://example.com/archive-toast", title: "Archive Toast")
+        context.insert(a)
+        try context.save()
+
+        let vm = HomeViewModel(context: context)
+        vm.archiveArticle(a)
+        XCTAssertTrue(vm.showToast)
+        XCTAssertFalse(vm.toastMessage.isEmpty)
+    }
+
+    @MainActor
+    func testDeleteArticle_removesFromContext() throws {
+        let a = Article(url: "https://example.com/delete", title: "Delete me")
+        context.insert(a)
+        try context.save()
+        let id = a.id
+
+        let vm = HomeViewModel(context: context)
+        vm.deleteArticle(a)
+
+        let descriptor = FetchDescriptor<Article>(predicate: #Predicate { $0.id == id })
+        let found = try context.fetch(descriptor)
+        XCTAssertTrue(found.isEmpty)
+    }
+
+    @MainActor
+    func testDeleteArticle_setsToast() throws {
+        let a = Article(url: "https://example.com/delete-toast", title: "Delete Toast")
+        context.insert(a)
+        try context.save()
+
+        let vm = HomeViewModel(context: context)
+        vm.deleteArticle(a)
+        XCTAssertTrue(vm.showToast)
+        XCTAssertFalse(vm.toastMessage.isEmpty)
+    }
+
+    @MainActor
+    func testFetchArticles_emptyDatabase() throws {
+        let vm = HomeViewModel(context: context)
+        vm.fetchArticles()
+        XCTAssertTrue(vm.articles.isEmpty)
+    }
+
+    @MainActor
+    func testLoadNextPage_noMorePages() throws {
+        // Create fewer than page size (20) articles
+        for i in 0..<5 {
+            let a = Article(url: "https://example.com/small-\(i)", title: "Small \(i)")
+            a.createdAt = Date(timeIntervalSinceNow: Double(-i) * 3600)
+            context.insert(a)
+        }
+        try context.save()
+
+        let vm = HomeViewModel(context: context)
+        vm.fetchArticles()
+        XCTAssertEqual(vm.articles.count, 5)
+
+        // loadNextPage should be a no-op since hasMorePages is false
+        vm.loadNextPage()
+        XCTAssertEqual(vm.articles.count, 5)
+    }
+
+    @MainActor
+    func testMarkAsRead_alreadyRead() throws {
+        let a = Article(url: "https://example.com/already-read", title: "Already Read")
+        a.readProgress = 0.5
+        context.insert(a)
+        try context.save()
+
+        let vm = HomeViewModel(context: context)
+        vm.markAsRead(a)
+        // Should NOT reset readProgress to 0.01 since it's already > 0
+        XCTAssertEqual(a.readProgress, 0.5)
+    }
 }

@@ -18,7 +18,7 @@ struct ImageView: View {
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: .infinity)
+                            .frame(maxWidth: .infinity, minHeight: 1)
                             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
                             .onTapGesture {
                                 showsFullScreen = true

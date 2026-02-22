@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 import Markdown
 @testable import Folio
 
@@ -129,5 +130,86 @@ final class MarkdownRendererTests: XCTestCase {
                 }
             }
         }
+    }
+
+    // MARK: - Visitor Tests
+
+    private func visitMarkdown(_ md: String) -> [AnyView] {
+        let doc = Document(parsing: md)
+        var visitor = MarkdownSwiftUIVisitor(fontSize: 17, lineSpacing: 11.9)
+        return visitor.visitDocument(doc)
+    }
+
+    func testVisitParagraph_returnsOneView() {
+        let views = visitMarkdown("Hello world")
+        XCTAssertEqual(views.count, 1)
+    }
+
+    func testVisitParagraph_mixedTextAndImage() {
+        let views = visitMarkdown("Before ![alt](https://example.com/img.png) After")
+        // Should produce: text("Before "), image, text(" After")
+        XCTAssertEqual(views.count, 3)
+    }
+
+    func testVisitHeading_allLevels() {
+        for level in 1...6 {
+            let hashes = String(repeating: "#", count: level)
+            let views = visitMarkdown("\(hashes) Heading \(level)")
+            XCTAssertEqual(views.count, 1, "H\(level) should produce 1 view")
+        }
+    }
+
+    func testVisitCodeBlock_returnsView() {
+        let views = visitMarkdown("```swift\nlet x = 1\n```")
+        XCTAssertEqual(views.count, 1)
+    }
+
+    func testVisitBlockQuote_returnsView() {
+        let views = visitMarkdown("> This is a quote")
+        XCTAssertEqual(views.count, 1)
+    }
+
+    func testVisitOrderedList_itemCount() {
+        let views = visitMarkdown("1. A\n2. B\n3. C")
+        XCTAssertEqual(views.count, 3)
+    }
+
+    func testVisitUnorderedList_itemCount() {
+        let views = visitMarkdown("- A\n- B")
+        XCTAssertEqual(views.count, 2)
+    }
+
+    func testVisitThematicBreak_returnsView() {
+        let views = visitMarkdown("---")
+        XCTAssertEqual(views.count, 1)
+    }
+
+    func testEmptyMarkdown_returnsEmpty() {
+        let views = visitMarkdown("")
+        XCTAssertEqual(views.count, 0)
+    }
+
+    func testInlineFormatting_singleTextView() {
+        // No images = fast path: single Text view
+        let views = visitMarkdown("**bold** *italic* `code`")
+        XCTAssertEqual(views.count, 1)
+    }
+
+    func testVisitDocument_complexDoc() {
+        let md = """
+        # Title
+
+        A paragraph.
+
+        ```swift
+        code
+        ```
+
+        - item1
+        - item2
+        """
+        let views = visitMarkdown(md)
+        // heading(1) + paragraph(1) + code block(1) + 2 list items(2) = 5
+        XCTAssertEqual(views.count, 5)
     }
 }

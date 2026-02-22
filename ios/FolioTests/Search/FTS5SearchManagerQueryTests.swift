@@ -104,4 +104,44 @@ final class FTS5SearchManagerQueryTests: XCTestCase {
         let results = try manager.search(query: "swift")
         XCTAssertEqual(results.count, 1)
     }
+
+    // MARK: - Edge Cases
+
+    func testSearch_whitespaceOnlyQuery() throws {
+        let article = Article(url: "https://example.com", title: "Swift")
+        try manager.indexArticle(article)
+
+        let results = try manager.search(query: "   ")
+        XCTAssertEqual(results.count, 0)
+    }
+
+    func testSearch_specialCharacters() throws {
+        let article = Article(url: "https://example.com", title: "Swift Guide")
+        try manager.indexArticle(article)
+
+        // Special characters should not crash — they may throw FTS5 errors which is fine
+        do {
+            _ = try manager.search(query: "\"")
+        } catch {
+            // FTS5 error is acceptable for malformed query
+        }
+        do {
+            _ = try manager.search(query: "(")
+        } catch {
+            // FTS5 error is acceptable for malformed query
+        }
+    }
+
+    func testSearch_limitZero() throws {
+        let article = Article(url: "https://example.com", title: "Swift")
+        try manager.indexArticle(article)
+
+        let results = try manager.search(query: "Swift", limit: 0)
+        XCTAssertEqual(results.count, 0)
+    }
+
+    func testSearchWithSnippet_noResults() throws {
+        let results = try manager.searchWithSnippet(query: "nonexistent")
+        XCTAssertEqual(results.count, 0)
+    }
 }

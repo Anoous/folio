@@ -139,4 +139,38 @@ final class SearchViewModelTests: XCTestCase {
         vm.performSearch()
         XCTAssertTrue(vm.showsEmptyState)
     }
+
+    // MARK: - History Edge Cases
+
+    @MainActor
+    func testSaveToHistory_deduplicates() throws {
+        let fts = try FTS5SearchManager(inMemory: true)
+        let vm = SearchViewModel(searchManager: fts, context: context)
+        vm.saveToHistory("swift")
+        vm.saveToHistory("swift")
+        let count = vm.searchHistory.filter { $0 == "swift" }.count
+        XCTAssertEqual(count, 1)
+    }
+
+    @MainActor
+    func testSaveToHistory_emptyString() throws {
+        let fts = try FTS5SearchManager(inMemory: true)
+        let vm = SearchViewModel(searchManager: fts, context: context)
+        let before = vm.searchHistory.count
+        vm.saveToHistory("")
+        XCTAssertEqual(vm.searchHistory.count, before)
+    }
+
+    @MainActor
+    func testFTS5_specialCharacters() throws {
+        let fts = try FTS5SearchManager(inMemory: true)
+        let vm = SearchViewModel(searchManager: fts, context: context)
+        // These special characters should not crash
+        vm.searchText = "\"test\""
+        vm.performSearch()
+        // No crash = success; results may be empty or error-state
+        vm.searchText = "test("
+        vm.performSearch()
+        // No crash = success
+    }
 }

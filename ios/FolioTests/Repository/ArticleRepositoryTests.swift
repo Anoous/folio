@@ -157,4 +157,64 @@ final class ArticleRepositoryTests: XCTestCase {
         let count = try repo.countForCurrentMonth()
         XCTAssertEqual(count, 1)
     }
+
+    // MARK: - fetchAll Multi-Tag Filter (OR Semantics)
+
+    @MainActor
+    func testFetchAll_multipleTagFilter_orSemantics() throws {
+        let tagRepo = TagRepository(context: context)
+        let swiftTag = try tagRepo.findOrCreate(name: "Swift")
+        let iosTag = try tagRepo.findOrCreate(name: "iOS")
+
+        let a1 = try repo.save(url: "https://example.com/swift-only")
+        a1.tags.append(swiftTag)
+        let a2 = try repo.save(url: "https://example.com/ios-only")
+        a2.tags.append(iosTag)
+        _ = try repo.save(url: "https://example.com/no-tags")
+        try context.save()
+
+        // OR semantics: any article with Swift or iOS tag
+        let results = try repo.fetchAll(tags: [swiftTag, iosTag], limit: 100)
+        XCTAssertEqual(results.count, 2)
+    }
+
+    // MARK: - fetchByURL
+
+    @MainActor
+    func testFetchByURL_found() throws {
+        _ = try repo.save(url: "https://example.com/findme")
+        let found = try repo.fetchByURL("https://example.com/findme")
+        XCTAssertNotNil(found)
+        XCTAssertEqual(found?.url, "https://example.com/findme")
+    }
+
+    @MainActor
+    func testFetchByURL_notFound() throws {
+        let found = try repo.fetchByURL("https://example.com/nonexistent")
+        XCTAssertNil(found)
+    }
+
+    // MARK: - Save with Tags
+
+    @MainActor
+    func testSave_withTags() throws {
+        let article = try repo.save(url: "https://example.com/tagged", tags: ["Swift", "iOS"])
+        XCTAssertEqual(article.tags.count, 2)
+        XCTAssertTrue(article.tags.contains(where: { $0.name == "Swift" }))
+        XCTAssertTrue(article.tags.contains(where: { $0.name == "iOS" }))
+    }
+
+    // MARK: - Update Sets Timestamp
+
+    @MainActor
+    func testUpdate_setsTimestamp() throws {
+        let article = try repo.save(url: "https://example.com/update-ts")
+        let originalUpdatedAt = article.updatedAt
+
+        // Small delay to ensure timestamp changes
+        Thread.sleep(forTimeInterval: 0.01)
+
+        try repo.update(article)
+        XCTAssertGreaterThan(article.updatedAt, originalUpdatedAt)
+    }
 }

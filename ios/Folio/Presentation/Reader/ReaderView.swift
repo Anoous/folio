@@ -4,13 +4,11 @@ import SwiftData
 struct ReaderView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
 
     let article: Article
 
     @State private var viewModel: ReaderViewModel?
-    @State private var showsMoreMenu = false
     @State private var showsShareSheet = false
     @State private var showsReadingPreferences = false
     @State private var showsWebView = false
@@ -59,6 +57,9 @@ struct ReaderView: View {
                 vm.markAsRead()
                 viewModel = vm
             }
+        }
+        .task {
+            await viewModel?.fetchContentIfNeeded()
         }
         .sheet(isPresented: $showsReadingPreferences) {
             ReadingPreferenceView()

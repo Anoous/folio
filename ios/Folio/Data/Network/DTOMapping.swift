@@ -13,7 +13,9 @@ extension Article {
         siteName = dto.siteName
         faviconURL = dto.faviconUrl
         coverImageURL = dto.coverImageUrl
-        markdownContent = dto.markdownContent
+        if let content = dto.markdownContent {
+            markdownContent = content
+        }
         summary = dto.summary
         keyPoints = dto.keyPoints ?? []
         aiConfidence = dto.aiConfidence ?? 0
@@ -23,8 +25,14 @@ extension Article {
         retryCount = dto.retryCount
         isFavorite = dto.isFavorite
         isArchived = dto.isArchived
-        readProgress = dto.readProgress
-        lastReadAt = dto.lastReadAt
+        readProgress = max(readProgress, dto.readProgress)
+        if let serverDate = dto.lastReadAt {
+            if let localDate = lastReadAt {
+                lastReadAt = max(localDate, serverDate)
+            } else {
+                lastReadAt = serverDate
+            }
+        }
         publishedAt = dto.publishedAt
         wordCount = dto.wordCount
         language = dto.language

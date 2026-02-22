@@ -195,7 +195,182 @@ final class DTOMappingTests: XCTestCase {
         XCTAssertEqual(found?.slug, "tech")
     }
 
+    // MARK: - updateFromDTO Edge Cases
+
+    @MainActor
+    func testUpdateFromDTO_nilMarkdownPreservesLocal() {
+        let article = Article(url: "https://example.com/article")
+        article.markdownContent = "# Local Content"
+        context.insert(article)
+
+        let dto = makeArticleDTO(markdownContent: nil)
+        article.updateFromDTO(dto)
+
+        XCTAssertEqual(article.markdownContent, "# Local Content")
+    }
+
+    @MainActor
+    func testUpdateFromDTO_nonNilMarkdownUpdates() {
+        let article = Article(url: "https://example.com/article")
+        article.markdownContent = "# Old Content"
+        context.insert(article)
+
+        let dto = makeArticleDTO(markdownContent: "# New Content")
+        article.updateFromDTO(dto)
+
+        XCTAssertEqual(article.markdownContent, "# New Content")
+    }
+
+    @MainActor
+    func testUpdateFromDTO_preservesHigherLocalReadProgress() {
+        let article = Article(url: "https://example.com/article")
+        article.readProgress = 0.8
+        context.insert(article)
+
+        let dto = makeArticleDTO(readProgress: 0.3)
+        article.updateFromDTO(dto)
+
+        XCTAssertEqual(article.readProgress, 0.8)
+    }
+
+    @MainActor
+    func testUpdateFromDTO_takesHigherServerReadProgress() {
+        let article = Article(url: "https://example.com/article")
+        article.readProgress = 0.3
+        context.insert(article)
+
+        let dto = makeArticleDTO(readProgress: 0.8)
+        article.updateFromDTO(dto)
+
+        XCTAssertEqual(article.readProgress, 0.8)
+    }
+
+    @MainActor
+    func testUpdateFromDTO_preservesNewerLocalLastReadAt() {
+        let article = Article(url: "https://example.com/article")
+        let localDate = Date(timeIntervalSince1970: 2000)
+        let serverDate = Date(timeIntervalSince1970: 1000)
+        article.lastReadAt = localDate
+        context.insert(article)
+
+        let dto = makeArticleDTO(lastReadAt: serverDate)
+        article.updateFromDTO(dto)
+
+        XCTAssertEqual(article.lastReadAt, localDate)
+    }
+
+    @MainActor
+    func testUpdateFromDTO_takesNewerServerLastReadAt() {
+        let article = Article(url: "https://example.com/article")
+        let localDate = Date(timeIntervalSince1970: 1000)
+        let serverDate = Date(timeIntervalSince1970: 2000)
+        article.lastReadAt = localDate
+        context.insert(article)
+
+        let dto = makeArticleDTO(lastReadAt: serverDate)
+        article.updateFromDTO(dto)
+
+        XCTAssertEqual(article.lastReadAt, serverDate)
+    }
+
+    @MainActor
+    func testUpdateFromDTO_nilLastReadAtPreservesLocal() {
+        let article = Article(url: "https://example.com/article")
+        let localDate = Date(timeIntervalSince1970: 1000)
+        article.lastReadAt = localDate
+        context.insert(article)
+
+        let dto = makeArticleDTO(lastReadAt: nil)
+        article.updateFromDTO(dto)
+
+        XCTAssertEqual(article.lastReadAt, localDate)
+    }
+
+    @MainActor
+    func testUpdateFromDTO_nilFieldsDefaultCorrectly() {
+        let article = Article(url: "https://example.com/article")
+        context.insert(article)
+
+        let dto = makeArticleDTO(keyPoints: nil, aiConfidence: nil)
+        article.updateFromDTO(dto)
+
+        XCTAssertEqual(article.keyPoints, [])
+        XCTAssertEqual(article.aiConfidence, 0)
+    }
+
+    @MainActor
+    func testCategoryUpdateFromDTO_nilIconPreservesExisting() {
+        let categoryRepo = CategoryRepository(context: context)
+        guard let techCategory = try? categoryRepo.fetchBySlug("tech") else {
+            XCTFail("Preloaded tech category not found")
+            return
+        }
+
+        XCTAssertEqual(techCategory.icon, "cpu")
+
+        let dto = CategoryDTO(
+            id: "cat-server-1",
+            slug: "tech",
+            nameZh: "科技",
+            nameEn: "Tech",
+            icon: nil,
+            sortOrder: 0,
+            createdAt: Date()
+        )
+
+        techCategory.updateFromDTO(dto)
+        XCTAssertEqual(techCategory.icon, "cpu")
+    }
+
     // MARK: - Helpers
+
+    private func makeArticleDTO(
+        markdownContent: String? = "# Hello World",
+        readProgress: Double = 0.5,
+        lastReadAt: Date? = nil,
+        keyPoints: [String]? = ["point1", "point2"],
+        aiConfidence: Double? = 0.85
+    ) -> ArticleDTO {
+        ArticleDTO(
+            id: "server-123",
+            url: "https://example.com/article",
+            title: "Test Article",
+            author: "Author",
+            siteName: "Example",
+            faviconUrl: "https://example.com/favicon.ico",
+            coverImageUrl: nil,
+            markdownContent: markdownContent,
+            wordCount: 500,
+            language: "en",
+            categoryId: "cat-1",
+            summary: "A summary",
+            keyPoints: keyPoints,
+            aiConfidence: aiConfidence,
+            status: "ready",
+            sourceType: "web",
+            fetchError: nil,
+            retryCount: 0,
+            isFavorite: true,
+            isArchived: false,
+            readProgress: readProgress,
+            lastReadAt: lastReadAt,
+            publishedAt: nil,
+            createdAt: Date(),
+            updatedAt: Date(),
+            category: CategoryDTO(
+                id: "cat-1",
+                slug: "tech",
+                nameZh: "技术",
+                nameEn: "Technology",
+                icon: "cpu",
+                sortOrder: 0,
+                createdAt: Date()
+            ),
+            tags: [
+                TagDTO(id: "tag-1", name: "Swift", isAiGenerated: true, articleCount: 3, createdAt: Date())
+            ]
+        )
+    }
 
     private func makeArticleDTO() -> ArticleDTO {
         ArticleDTO(

@@ -77,14 +77,62 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
     // MARK: - Paragraph
 
     mutating func visitParagraph(_ paragraph: Paragraph) -> [AnyView] {
-        let text = collectInlineText(paragraph)
-        let view = text
-            .font(Font.custom("Noto Serif SC", size: fontSize))
-            .foregroundStyle(Color.folio.textPrimary)
-            .lineSpacing(lineSpacing)
-            .fixedSize(horizontal: false, vertical: true)
+        // Check if paragraph contains any images
+        let hasImages = paragraph.children.contains { $0 is Markdown.Image }
 
-        return [AnyView(view)]
+        if !hasImages {
+            // Fast path: no images, render as a single Text
+            let text = collectInlineText(paragraph)
+            let view = text
+                .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
+                .foregroundStyle(Color.folio.textPrimary)
+                .lineSpacing(lineSpacing)
+                .fixedSize(horizontal: false, vertical: true)
+            return [AnyView(view)]
+        }
+
+        // Split paragraph children into text runs and image blocks
+        var result: [AnyView] = []
+        var pendingInline: [any Markup] = []
+
+        for child in paragraph.children {
+            if let image = child as? Markdown.Image {
+                // Flush accumulated inline content as Text
+                if !pendingInline.isEmpty {
+                    let text = pendingInline.reduce(SwiftUI.Text("")) { acc, node in
+                        acc + inlineText(node)
+                    }
+                    let view = text
+                        .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
+                        .foregroundStyle(Color.folio.textPrimary)
+                        .lineSpacing(lineSpacing)
+                        .fixedSize(horizontal: false, vertical: true)
+                    result.append(AnyView(view))
+                    pendingInline.removeAll()
+                }
+                // Render image as ImageView
+                let urlString = image.source ?? ""
+                let altText = image.plainText
+                result.append(AnyView(ImageView(urlString: urlString, altText: altText)))
+            } else {
+                pendingInline.append(child)
+            }
+        }
+
+        // Flush any remaining inline content
+        if !pendingInline.isEmpty {
+            let text = pendingInline.reduce(SwiftUI.Text("")) { acc, node in
+                acc + inlineText(node)
+            }
+            let view = text
+                .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
+                .foregroundStyle(Color.folio.textPrimary)
+                .lineSpacing(lineSpacing)
+                .fixedSize(horizontal: false, vertical: true)
+            result.append(AnyView(view))
+        }
+
+        return result
     }
 
     // MARK: - Code Block
@@ -131,7 +179,7 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
 
             let view = HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
                 Text("\(index + 1).")
-                    .font(Font.custom("Noto Serif SC", size: fontSize))
+                    .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
                     .foregroundStyle(Color.folio.textSecondary)
                     .frame(width: 24, alignment: .trailing)
 
@@ -156,7 +204,7 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
 
             let view = HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
                 Text("\u{2022}")
-                    .font(Font.custom("Noto Serif SC", size: fontSize))
+                    .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
                     .foregroundStyle(Color.folio.textSecondary)
                     .frame(width: 24, alignment: .trailing)
 
@@ -268,11 +316,9 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
             return collectInlineText(link)
                 .foregroundColor(Color.folio.link)
                 .underline()
-        } else if let softBreak = markup as? SoftBreak {
-            _ = softBreak
+        } else if markup is SoftBreak {
             return Text(" ")
-        } else if let lineBreak = markup as? LineBreak {
-            _ = lineBreak
+        } else if markup is LineBreak {
             return Text("\n")
         } else if let image = markup as? Markdown.Image {
             // Inline image reference — display alt text
@@ -294,13 +340,13 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
 
     private func headingFont(level: Int) -> Font {
         switch level {
-        case 1: return Font.custom("Noto Serif SC", size: 28).weight(.bold)
-        case 2: return Font.custom("Noto Serif SC", size: 24).weight(.bold)
-        case 3: return Font.custom("Noto Serif SC", size: 20).weight(.semibold)
-        case 4: return Font.custom("Noto Serif SC", size: 18).weight(.semibold)
-        case 5: return Font.custom("Noto Serif SC", size: 16).weight(.medium)
-        case 6: return Font.custom("Noto Serif SC", size: 15).weight(.medium)
-        default: return Font.custom("Noto Serif SC", size: 15).weight(.medium)
+        case 1: return Font.custom("NotoSerifSC-Bold", size: 28)
+        case 2: return Font.custom("NotoSerifSC-Bold", size: 24)
+        case 3: return Font.custom("NotoSerifSC-SemiBold", size: 20)
+        case 4: return Font.custom("NotoSerifSC-SemiBold", size: 18)
+        case 5: return Font.custom("NotoSerifSC-Medium", size: 16)
+        case 6: return Font.custom("NotoSerifSC-Medium", size: 15)
+        default: return Font.custom("NotoSerifSC-Medium", size: 15)
         }
     }
 

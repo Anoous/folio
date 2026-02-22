@@ -57,4 +57,27 @@ final class SharedDataManagerTests: XCTestCase {
         XCTAssertTrue(exists)
         XCTAssertNotNil(article.id)
     }
+
+    // MARK: - Edge Cases
+
+    @MainActor
+    func testSaveArticleFromText_noURL() throws {
+        // Plain text without URL — falls back to raw text as URL
+        let article = try manager.saveArticleFromText("just plain text no link")
+        XCTAssertEqual(article.url, "just plain text no link")
+    }
+
+    @MainActor
+    func testSaveArticleFromText_multipleURLs() throws {
+        // Should pick the first URL found
+        let article = try manager.saveArticleFromText("first https://example.com/first then https://example.com/second")
+        XCTAssertEqual(article.url, "https://example.com/first")
+    }
+
+    @MainActor
+    func testSaveArticle_emptyURL() throws {
+        // Empty string is technically accepted (no crash)
+        let article = try manager.saveArticle(url: "")
+        XCTAssertEqual(article.url, "")
+    }
 }

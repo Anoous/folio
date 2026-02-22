@@ -385,8 +385,8 @@ HTML → 正文提取（去广告、去导航、去侧边栏）
 
 | 用途 | 模型 | 理由 |
 |------|------|------|
-| 分类 + 标签 + 摘要（单次调用） | Claude 3.5 Haiku / GPT-4o-mini | 性价比最优，速度快，质量足够 |
-| 知识问答（Pro+） | Claude 3.5 Sonnet / GPT-4o | 需要更强的理解和推理能力 |
+| 分类 + 标签 + 摘要（单次调用） | DeepSeek Chat (deepseek-chat) | 性价比最优，速度快，质量足够 |
+| 知识问答（Pro+） | DeepSeek Chat (deepseek-chat) | 需要更强的理解和推理能力 |
 | 备选方案 | 端侧 Apple Intelligence | 无 API 成本，但分类/摘要质量待验证 |
 
 #### 3.5 AI 调用 Prompt 规格
@@ -924,10 +924,10 @@ App 沙箱
 
 | 场景 | 调用量 | 模型 | 单次成本 | 月成本 |
 |------|--------|------|---------|--------|
-| Pro 用户分类+标签+摘要 | 约 50 篇/月 | Claude 3.5 Haiku | ~$0.001/篇 | ~$0.05 |
-| Pro+ 用户分类+标签+摘要 | 约 100 篇/月 | Claude 3.5 Haiku | ~$0.001/篇 | ~$0.10 |
-| Pro+ 知识问答 | 约 30 次/月 | Claude 3.5 Sonnet | ~$0.01/次 | ~$0.30 |
-| Pro+ 知识周报 | 4 次/月 | Claude 3.5 Sonnet | ~$0.02/次 | ~$0.08 |
+| Pro 用户分类+标签+摘要 | 约 50 篇/月 | DeepSeek Chat | ~$0.001/篇 | ~$0.05 |
+| Pro+ 用户分类+标签+摘要 | 约 100 篇/月 | DeepSeek Chat | ~$0.001/篇 | ~$0.10 |
+| Pro+ 知识问答 | 约 30 次/月 | DeepSeek Chat | ~$0.01/次 | ~$0.30 |
+| Pro+ 知识周报 | 4 次/月 | DeepSeek Chat | ~$0.02/次 | ~$0.08 |
 
 **Pro 用户月 AI 成本**：约 $0.05（¥0.35）
 **Pro+ 用户月 AI 成本**：约 $0.48（¥3.5）
@@ -1125,7 +1125,7 @@ App 沙箱
 | Markdown 渲染 | swift-markdown + 自定义渲染 | Apple 官方 Markdown 库 |
 | 后端 API | Go + chi + asynq | 高性能，goroutine 并发，编译型单二进制部署 |
 | 抓取引擎 | @vakra-dev/reader | 多引擎级联抓取，反爬突破，Markdown 转换 |
-| AI 服务 | Python + FastAPI + Claude API | 分类/标签/摘要/问答 |
+| AI 服务 | Python + FastAPI + DeepSeek API | 分类/标签/摘要/问答 |
 | 用户认证 | Sign in with Apple + JWT | Go 服务自行实现认证 |
 | 数据分析 | Mixpanel | 事件追踪 |
 | 崩溃监控 | Firebase Crashlytics | 稳定性 |

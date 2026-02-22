@@ -4,6 +4,7 @@ import SwiftData
 @main
 struct FolioApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
 
     let container: ModelContainer
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -61,6 +62,16 @@ struct FolioApp: App {
                 } else if newValue == .signedOut {
                     offlineQueueManager?.onProcessPending = nil
                     syncService = nil
+                }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active, let manager = offlineQueueManager {
+                    manager.refreshPendingCount()
+                    if manager.pendingCount > 0 {
+                        Task {
+                            await manager.processPendingArticles()
+                        }
+                    }
                 }
             }
         }

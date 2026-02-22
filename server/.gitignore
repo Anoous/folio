@@ -1,10 +1,14 @@
 # Binaries
 server
+folio-server
 *.exe
 
 # IDE
 .idea/
 .vscode/
+
+# Build output
+reader-service/dist/
 
 # OS
 .DS_Store

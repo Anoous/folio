@@ -3,15 +3,35 @@ import SwiftData
 
 struct SearchView: View {
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var viewModel: SearchViewModel
+    @State private var viewModel: SearchViewModel?
+
+    var body: some View {
+        Group {
+            if let viewModel {
+                SearchContentView(viewModel: viewModel)
+            } else {
+                Color.clear
+            }
+        }
+        .navigationTitle(String(localized: "tab.search"))
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if viewModel == nil {
+                let manager = try! FTS5SearchManager(inMemory: true)
+                let vm = SearchViewModel(searchManager: manager, context: modelContext)
+                viewModel = vm
+                vm.loadPopularTags()
+            }
+        }
+    }
+}
+
+// MARK: - Search Content
+
+private struct SearchContentView: View {
+    @ObservedObject var viewModel: SearchViewModel
 
     @FocusState private var isSearchFieldFocused: Bool
-
-    init(searchManager: FTS5SearchManager? = nil) {
-        // A temporary placeholder init; the real searchManager is injected via
-        // the .onAppear / environment approach below.
-        _viewModel = StateObject(wrappedValue: SearchViewModel._placeholder)
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,11 +74,6 @@ struct SearchView: View {
                     searchResultsList
                 }
             }
-        }
-        .navigationTitle(String(localized: "tab.search"))
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            viewModel.loadPopularTags()
         }
     }
 
@@ -152,23 +167,12 @@ struct SearchView: View {
     }
 }
 
-// MARK: - Placeholder for Preview/Init
-
-extension SearchViewModel {
-    /// A placeholder instance used when the real dependencies are not yet
-    /// available. The view should replace this once the environment provides
-    /// the necessary context.
-    @MainActor
-    static var _placeholder: SearchViewModel {
-        let manager = try! FTS5SearchManager(inMemory: true)
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try! ModelContainer(for: Article.self, Tag.self, Category.self, configurations: config)
-        return SearchViewModel(searchManager: manager, context: container.mainContext)
-    }
-}
-
 #Preview {
     NavigationStack {
         SearchView()
+            .modelContainer(try! ModelContainer(
+                for: Article.self, Tag.self, Category.self,
+                configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+            ))
     }
 }

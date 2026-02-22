@@ -107,4 +107,91 @@ final class ReaderViewModelTests: XCTestCase {
         vm.copyMarkdown()
         XCTAssertEqual(UIPasteboard.general.string, "# Hello World")
     }
+
+    // MARK: - Archive Tests
+
+    @MainActor
+    func testArchiveArticle_togglesIsArchived() throws {
+        let article = Article(url: "https://example.com/archive", title: "Archive")
+        context.insert(article)
+        try context.save()
+        XCTAssertFalse(article.isArchived)
+
+        let vm = ReaderViewModel(article: article, context: context)
+        vm.archiveArticle()
+        XCTAssertTrue(article.isArchived)
+
+        vm.archiveArticle()
+        XCTAssertFalse(article.isArchived)
+    }
+
+    @MainActor
+    func testArchiveArticle_setsToast() throws {
+        let article = Article(url: "https://example.com/archive-toast", title: "Archive Toast")
+        context.insert(article)
+        try context.save()
+
+        let vm = ReaderViewModel(article: article, context: context)
+        vm.archiveArticle()
+        XCTAssertTrue(vm.showToast)
+        XCTAssertFalse(vm.toastMessage.isEmpty)
+    }
+
+    // MARK: - Copy & Share Edge Cases
+
+    @MainActor
+    func testCopyMarkdown_nilContent_showsErrorToast() throws {
+        let article = Article(url: "https://example.com/no-content", title: "No Content")
+        // markdownContent is nil by default
+        context.insert(article)
+
+        let vm = ReaderViewModel(article: article, context: context)
+        vm.copyMarkdown()
+        XCTAssertTrue(vm.showToast)
+        XCTAssertTrue(vm.toastMessage.contains("No content"))
+    }
+
+    @MainActor
+    func testShareURL_returnsValidURL() throws {
+        let article = Article(url: "https://example.com/valid", title: "Valid")
+        context.insert(article)
+
+        let vm = ReaderViewModel(article: article, context: context)
+        let url = vm.shareURL()
+        XCTAssertNotNil(url)
+        XCTAssertEqual(url?.absoluteString, "https://example.com/valid")
+    }
+
+    @MainActor
+    func testShareURL_invalidURL_returnsNil() throws {
+        let article = Article(url: "", title: "Invalid")
+        context.insert(article)
+
+        let vm = ReaderViewModel(article: article, context: context)
+        let url = vm.shareURL()
+        XCTAssertNil(url)
+    }
+
+    // MARK: - Word Count Edge Cases
+
+    @MainActor
+    func testWordCount_nilContent() throws {
+        let article = Article(url: "https://example.com/nil-content", title: "Nil")
+        // markdownContent is nil
+        context.insert(article)
+
+        let vm = ReaderViewModel(article: article, context: context)
+        XCTAssertEqual(vm.wordCount, 0)
+        XCTAssertEqual(vm.estimatedReadTimeMinutes, 1)
+    }
+
+    @MainActor
+    func testEstimatedReadTime_shortContent() throws {
+        let article = Article(url: "https://example.com/short", title: "Short")
+        article.markdownContent = "Hello" // < 400 chars
+        context.insert(article)
+
+        let vm = ReaderViewModel(article: article, context: context)
+        XCTAssertEqual(vm.estimatedReadTimeMinutes, 1)
+    }
 }

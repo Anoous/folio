@@ -18,11 +18,9 @@ final class TagRepository {
 
     /// Fetch popular tags ordered by article count
     func fetchPopular(limit: Int = 10) throws -> [Tag] {
-        var descriptor = FetchDescriptor<Tag>(
-            sortBy: [SortDescriptor(\.articleCount, order: .reverse)]
-        )
-        descriptor.fetchLimit = limit
-        return try context.fetch(descriptor)
+        let descriptor = FetchDescriptor<Tag>()
+        let allTags = try context.fetch(descriptor)
+        return Array(allTags.sorted { $0.articleCount > $1.articleCount }.prefix(limit))
     }
 
     /// Find existing tag by name or create a new one

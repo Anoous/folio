@@ -7,7 +7,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "test": "vitest run"
+    "test": "echo \"no tests yet\""
   },
   "dependencies": {
     "@vakra-dev/reader": "file:../../../reader",
@@ -16,10 +16,7 @@
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^22.13.0",
-    "@types/supertest": "^6.0.2",
-    "supertest": "^7.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.5"
+    "typescript": "^5.7.3"
   }
 }

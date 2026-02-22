@@ -52,6 +52,10 @@ struct EmptyStateView: View {
                     onPasteURL?(url)
                 }
                 .padding(.horizontal, Spacing.xl)
+            } else {
+                Text(String(localized: "empty.addHint", defaultValue: "Tap + to add a link manually"))
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.folio.textTertiary)
             }
         }
         .padding(Spacing.screenPadding)

@@ -203,12 +203,21 @@ func (r *ArticleRepo) UpdateCrawlResult(ctx context.Context, id string, cr Crawl
 			title = $1, author = $2, site_name = $3, markdown_content = $4,
 			cover_image_url = $5, language = $6, favicon_url = $7, word_count = $8
 		WHERE id = $9`,
-		cr.Title, cr.Author, cr.SiteName, cr.Markdown,
-		cr.CoverImage, cr.Language, cr.FaviconURL, wordCount, id)
+		truncateUTF8(cr.Title, 500), truncateUTF8(cr.Author, 200), truncateUTF8(cr.SiteName, 200), cr.Markdown,
+		truncateUTF8(cr.CoverImage, 500), truncateUTF8(cr.Language, 10), truncateUTF8(cr.FaviconURL, 500), wordCount, id)
 	if err != nil {
 		return fmt.Errorf("update crawl result: %w", err)
 	}
 	return nil
+}
+
+// truncateUTF8 truncates s to at most maxLen runes.
+func truncateUTF8(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen])
 }
 
 type AIResult struct {

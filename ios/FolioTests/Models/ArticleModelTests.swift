@@ -103,4 +103,33 @@ final class ArticleModelTests: XCTestCase {
             XCTAssertEqual(status, decoded)
         }
     }
+
+    // MARK: - SourceType.detect Gaps
+
+    func testSourceType_youtube() {
+        XCTAssertEqual(SourceType.detect(from: "https://www.youtube.com/watch?v=abc"), .youtube)
+    }
+
+    func testSourceType_youtubeShort() {
+        XCTAssertEqual(SourceType.detect(from: "https://youtu.be/abc"), .youtube)
+    }
+
+    func testSourceType_weiboCN() {
+        XCTAssertEqual(SourceType.detect(from: "https://m.weibo.cn/detail/123"), .weibo)
+    }
+
+    func testSourceType_invalidURL() {
+        XCTAssertEqual(SourceType.detect(from: "not a url"), .web)
+    }
+
+    func testSourceType_emptyString() {
+        XCTAssertEqual(SourceType.detect(from: ""), .web)
+    }
+
+    func testSyncState_allCases() {
+        XCTAssertEqual(SyncState.pendingUpload.rawValue, "pendingUpload")
+        XCTAssertEqual(SyncState.synced.rawValue, "synced")
+        XCTAssertEqual(SyncState.pendingUpdate.rawValue, "pendingUpdate")
+        XCTAssertEqual(SyncState.conflict.rawValue, "conflict")
+    }
 }

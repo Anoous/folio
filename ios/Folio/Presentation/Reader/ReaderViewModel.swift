@@ -43,6 +43,24 @@ final class ReaderViewModel {
         estimatedReadTimeMinutes = max(1, Int(ceil(Double(wordCount) / Self.charsPerMinute)))
     }
 
+    // MARK: - Fetch Content from Server
+
+    /// If the article has a serverID but no local content, fetch the full detail.
+    func fetchContentIfNeeded() async {
+        guard article.markdownContent == nil,
+              isAuthenticated,
+              let serverID = article.serverID else { return }
+
+        do {
+            let dto = try await apiClient.getArticle(id: serverID)
+            article.updateFromDTO(dto)
+            try? context.save()
+            calculateWordCount()
+        } catch {
+            // Will retry on next open
+        }
+    }
+
     // MARK: - Mark as Read
 
     func markAsRead() {

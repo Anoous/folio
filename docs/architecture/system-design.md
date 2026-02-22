@@ -68,7 +68,7 @@
 │  ·HTML→Markdown      │  │  ·要点提取            │
 │  ·元数据提取          │  │  ·Prompt管理          │
 │  ·Cloudflare绕过     │  │                      │
-│  ·浏览器池管理        │  │  Claude API           │
+│  ·浏览器池管理        │  │  DeepSeek API          │
 └──────────────────────┘  └──────────────────────┘
                 │                       │
                 ▼                       ▼
@@ -98,8 +98,8 @@
 | 后端 API | Go + chi | Go 1.22+ | 高性能，goroutine 并发模型天然适合异步任务编排，编译型语言部署简单 |
 | 任务队列 | asynq (Redis) | 0.24+ | Go 原生异步任务框架，基于 Redis，API 类似 BullMQ |
 | 抓取引擎 | @vakra-dev/reader | 0.1.2 | 多引擎级联抓取（HTTP→TLS→Browser），内置反爬突破、正文提取、Markdown 转换 |
-| AI 服务 | Python + FastAPI | Python 3.12+ | AI 生态成熟，Claude SDK 支持好 |
-| AI 模型 | Claude API | claude-sonnet-4-5 | 中文理解能力强，分类/摘要质量高，性价比优 |
+| AI 服务 | Python + FastAPI | Python 3.12+ | AI 生态成熟，OpenAI SDK 兼容 DeepSeek |
+| AI 模型 | DeepSeek API | deepseek-chat | 中文理解能力强，分类/摘要质量高，性价比优 |
 | 数据库 | PostgreSQL + pgx | 16+ | 关系型数据，JSONB 支持好；pgx 是 Go 最高性能的 PG 驱动 |
 | 缓存 | Redis + go-redis | 7+ | 限流计数、AI 结果缓存、任务队列后端 |
 | 对象存储 | Cloudflare R2 | - | S3 兼容，免出站流量费，全球 CDN |
@@ -1372,7 +1372,7 @@ func (c *AIClient) Analyze(ctx context.Context, req AnalyzeRequest) (*AnalyzeRes
 
 #### 3.5.1 Pipeline 架构
 
-Go Worker 通过 HTTP 调用 Python AI 服务，AI 服务内部完成预处理、调用 Claude API、验证和缓存。
+Go Worker 通过 HTTP 调用 Python AI 服务，AI 服务内部完成预处理、调用 DeepSeek API、验证和缓存。
 
 ```
 Go Worker（asynq 任务）
@@ -1598,7 +1598,7 @@ class AIPipeline:
         # Step 2: 预处理内容
         processed_content = self._preprocess(article["content"])
 
-        # Step 3: 调用 Claude API（单次调用完成所有任务）
+        # Step 3: 调用 DeepSeek API（单次调用完成所有任务）
         user_message = COMBINED_ANALYSIS_USER_PROMPT.format(
             title=article.get("title", "无标题"),
             source=article.get("source", "未知来源"),
@@ -1732,11 +1732,11 @@ class BatchProcessor:
 │     ·对于重复收藏的热门文章效果显著                         │
 │                                                          │
 │  4. 模型选择策略                                          │
-│     ·Free 用户：使用 Haiku 模型（成本最低）               │
-│     ·Pro 用户：使用 Sonnet 模型（质量与成本平衡）          │
-│     ·Pro+ 用户：AI 问答使用 Sonnet 模型                   │
+│     ·所有用户统一使用 DeepSeek Chat 模型                   │
+│     ·DeepSeek 性价比极高，无需按用户等级区分模型            │
 │                                                          │
-│  5. 成本估算（基于 Claude Sonnet）                         │
+│                                                          │
+│  5. 成本估算（基于 DeepSeek Chat）                         │
 │     ·每篇文章平均 token 消耗：                             │
 │       - Input: ~2000 tokens（系统提示+文章内容）           │
 │       - Output: ~300 tokens（JSON 结果）                  │
@@ -2455,13 +2455,13 @@ CMD ["/folio-server"]
 | Cloudflare R2 | 10GB 存储（免费额度内） | $0 (¥0) |
 | Cloudflare CDN | 免费计划 | $0 (¥0) |
 | 域名 | .app 域名 | ~$14/年 (¥8/月) |
-| Claude API | 约 30000 篇/月 | ~¥600 |
+| DeepSeek API | 约 30000 篇/月 | ~¥600 |
 | Apple Developer | 年费 | $99/年 (¥58/月) |
 | **合计** | | **约 ¥750/月** |
 
 **成本说明**：
-- MVP 阶段最大开支是 Claude API 调用费用
-- Free 用户可使用 Haiku 模型进一步降低成本
+- MVP 阶段最大开支是 DeepSeek API 调用费用
+- DeepSeek Chat 模型性价比极高，成本远低于同类模型
 - VPS 选择海外机房（如法兰克福），性价比极高
 - Cloudflare R2 10GB 免费存储额度对 MVP 阶段绰绰有余
 - Go 编译为单二进制，内存占用远低于 Node.js，2核4G 足以运行全部服务
@@ -2539,8 +2539,8 @@ CMD ["/folio-server"]
 │  ·删除操作不可逆，包括 R2 中的图片资源                     │
 │                                                          │
 │  AI 处理隐私：                                            │
-│  ·仅将文章正文发送给 Claude API（不含用户个人信息）         │
-│  ·不将用户内容用于模型训练（Anthropic API 使用条款保障）    │
+│  ·仅将文章正文发送给 DeepSeek API（不含用户个人信息）       │
+│  ·不将用户内容用于模型训练（DeepSeek API 使用条款保障）     │
 │  ·AI 处理结果仅用于本用户的分类和摘要                      │
 │                                                          │
 │  合规要求：                                                │
@@ -2567,7 +2567,7 @@ CMD ["/folio-server"]
 | Newsletter 订阅 | Reader 可扩展邮件 HTML 解析能力 | Phase 2 |
 | YouTube 字幕 | Reader 抓取页面 + Go 层提取字幕文本 | Phase 2 |
 | 批量导入 | API 支持批量提交 URL，asynq 队列已有批处理能力 | Phase 2 |
-| 多模型支持 | AI Pipeline 的模型配置可切换，支持 Haiku/Sonnet/Opus | 持续优化 |
+| 多模型支持 | AI Pipeline 的模型配置可切换，当前使用 DeepSeek Chat | 持续优化 |
 
 ### 8.2 架构演进路径
 
