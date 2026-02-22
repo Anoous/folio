@@ -7,6 +7,8 @@ enum ShareState {
     case offline
     case quotaExceeded
     case quotaWarning(remaining: Int)
+    case extracting
+    case extracted
 }
 
 struct CompactShareView: View {
@@ -82,6 +84,31 @@ struct CompactShareView: View {
                     Text("\(remaining) " + String(localized: "share.quotaWarning", defaultValue: "saves remaining this month"))
                         .font(Typography.caption)
                         .foregroundStyle(Color.folio.warning)
+                }
+
+            case .extracting:
+                ProgressView()
+                Text(String(localized: "share.extracting", defaultValue: "Extracting article..."))
+                    .font(Typography.listTitle)
+                Text(String(localized: "share.extractingSubtitle", defaultValue: "Getting content ready for reading"))
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.folio.textSecondary)
+
+            case .extracted:
+                Image(systemName: "doc.richtext")
+                    .font(.system(size: 44))
+                    .foregroundStyle(Color.folio.success)
+                Text(String(localized: "share.extracted", defaultValue: "Article ready"))
+                    .font(Typography.listTitle)
+                Button {
+                    if let url = URL(string: "folio://library") {
+                        openURL(url)
+                    }
+                    onDismiss()
+                } label: {
+                    Text(String(localized: "share.openApp", defaultValue: "Open Folio"))
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.folio.accent)
                 }
             }
         }

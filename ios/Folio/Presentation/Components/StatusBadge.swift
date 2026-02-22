@@ -6,6 +6,7 @@ enum ContentStatus {
     case failed
     case offline
     case pendingSync
+    case clientReady
 }
 
 struct StatusBadge: View {
@@ -39,6 +40,11 @@ struct StatusBadge: View {
                 .font(.caption2)
                 .foregroundStyle(Color.folio.textTertiary)
                 .accessibilityLabel(Text(String(localized: "status.pendingSync", defaultValue: "Pending sync")))
+        case .clientReady:
+            Image(systemName: "doc.richtext")
+                .font(.caption2)
+                .foregroundStyle(Color.folio.success)
+                .accessibilityLabel(Text(String(localized: "status.clientReady", defaultValue: "Content ready")))
         }
     }
 
@@ -50,6 +56,7 @@ struct StatusBadge: View {
         case .failed: return String(localized: "status.failedText", defaultValue: "Processing failed")
         case .offline: return String(localized: "status.offlineText", defaultValue: "Saved offline")
         case .pendingSync: return String(localized: "status.pendingSyncText", defaultValue: "Waiting to sync")
+        case .clientReady: return String(localized: "status.clientReadyText", defaultValue: "Content ready, AI analyzing...")
         }
     }
 }
@@ -60,6 +67,7 @@ struct StatusBadge: View {
         StatusBadge(status: .processing)
         StatusBadge(status: .failed)
         StatusBadge(status: .offline)
+        StatusBadge(status: .clientReady)
     }
     .padding()
 }

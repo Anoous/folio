@@ -9,14 +9,39 @@ import (
 	"github.com/hibiken/asynq"
 
 	"folio-server/internal/client"
+	"folio-server/internal/domain"
 	"folio-server/internal/repository"
 )
 
+// scraper abstracts the reader client for testing.
+type scraper interface {
+	Scrape(ctx context.Context, url string) (*client.ScrapeResponse, error)
+}
+
+// crawlArticleRepo abstracts the article repository methods used by CrawlHandler.
+type crawlArticleRepo interface {
+	GetByID(ctx context.Context, id string) (*domain.Article, error)
+	UpdateCrawlResult(ctx context.Context, id string, cr repository.CrawlResult) error
+	SetError(ctx context.Context, id string, errMsg string) error
+}
+
+// crawlTaskRepo abstracts the task repository methods used by CrawlHandler.
+type crawlTaskRepo interface {
+	SetCrawlStarted(ctx context.Context, id string) error
+	SetCrawlFinished(ctx context.Context, id string) error
+	SetFailed(ctx context.Context, id string, errMsg string) error
+}
+
+// crawlEnqueuer abstracts the asynq client for enqueueing tasks.
+type crawlEnqueuer interface {
+	EnqueueContext(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
+}
+
 type CrawlHandler struct {
-	readerClient *client.ReaderClient
-	articleRepo  *repository.ArticleRepo
-	taskRepo     *repository.TaskRepo
-	asynqClient  *asynq.Client
+	readerClient scraper
+	articleRepo  crawlArticleRepo
+	taskRepo     crawlTaskRepo
+	asynqClient  crawlEnqueuer
 	enableImage  bool
 }
 
@@ -50,6 +75,40 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	// Scrape
 	result, err := h.readerClient.Scrape(ctx, p.URL)
 	if err != nil {
+		// Fallback: check if article already has client-provided content
+		article, getErr := h.articleRepo.GetByID(ctx, p.ArticleID)
+		if getErr == nil && article != nil && article.MarkdownContent != nil && *article.MarkdownContent != "" {
+			// Client content available — mark crawl done and enqueue AI with client content
+			h.taskRepo.SetCrawlFinished(ctx, p.TaskID)
+
+			title := ""
+			if article.Title != nil {
+				title = *article.Title
+			}
+			source := ""
+			if article.SiteName != nil {
+				source = *article.SiteName
+			}
+			if source == "" {
+				source = "web"
+			}
+			author := ""
+			if article.Author != nil {
+				author = *article.Author
+			}
+
+			aiTask := NewAIProcessTask(
+				p.ArticleID, p.TaskID, p.UserID,
+				title, *article.MarkdownContent,
+				source, author,
+			)
+			if _, enqErr := h.asynqClient.EnqueueContext(ctx, aiTask); enqErr != nil {
+				return fmt.Errorf("enqueue ai task (client fallback): %w", enqErr)
+			}
+			return nil
+		}
+
+		// No client content — keep existing failure behavior
 		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
 		h.articleRepo.SetError(ctx, p.ArticleID, err.Error())
 		return fmt.Errorf("scrape failed: %w", err)

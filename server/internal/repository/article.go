@@ -20,18 +20,28 @@ func NewArticleRepo(pool *pgxpool.Pool) *ArticleRepo {
 }
 
 type CreateArticleParams struct {
-	UserID     string
-	URL        string
-	SourceType domain.SourceType
+	UserID          string
+	URL             string
+	SourceType      domain.SourceType
+	Title           *string
+	Author          *string
+	SiteName        *string
+	MarkdownContent *string
+	WordCount       *int
 }
 
 func (r *ArticleRepo) Create(ctx context.Context, p CreateArticleParams) (*domain.Article, error) {
+	wordCount := 0
+	if p.WordCount != nil {
+		wordCount = *p.WordCount
+	}
+
 	var a domain.Article
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO articles (user_id, url, source_type)
-		VALUES ($1, $2, $3)
+		INSERT INTO articles (user_id, url, source_type, title, author, site_name, markdown_content, word_count)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, user_id, url, status, source_type, created_at, updated_at`,
-		p.UserID, p.URL, p.SourceType,
+		p.UserID, p.URL, p.SourceType, p.Title, p.Author, p.SiteName, p.MarkdownContent, wordCount,
 	).Scan(&a.ID, &a.UserID, &a.URL, &a.Status, &a.SourceType, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("insert article: %w", err)

@@ -46,16 +46,18 @@ final class OfflineQueueManager {
 
     func refreshPendingCount() {
         let pendingRaw = ArticleStatus.pending.rawValue
+        let clientReadyRaw = ArticleStatus.clientReady.rawValue
         let descriptor = FetchDescriptor<Article>(
-            predicate: #Predicate { $0.statusRaw == pendingRaw }
+            predicate: #Predicate { $0.statusRaw == pendingRaw || $0.statusRaw == clientReadyRaw }
         )
         pendingCount = (try? context.fetchCount(descriptor)) ?? 0
     }
 
     func processPendingArticles() async {
         let pendingRaw = ArticleStatus.pending.rawValue
+        let clientReadyRaw = ArticleStatus.clientReady.rawValue
         let descriptor = FetchDescriptor<Article>(
-            predicate: #Predicate { $0.statusRaw == pendingRaw },
+            predicate: #Predicate { $0.statusRaw == pendingRaw || $0.statusRaw == clientReadyRaw },
             sortBy: [SortDescriptor(\.createdAt)]
         )
         guard let pending = try? context.fetch(descriptor), !pending.isEmpty else { return }
@@ -65,9 +67,18 @@ final class OfflineQueueManager {
             let results = await processor(pending)
             for article in pending {
                 if let success = results[article.id] {
-                    article.status = success ? .processing : .failed
+                    if success {
+                        article.status = .processing
+                    } else {
+                        // Keep clientReady articles at clientReady on failure; mark pending as failed
+                        if article.status != .clientReady {
+                            article.status = .failed
+                        }
+                    }
                 } else {
-                    article.status = .failed
+                    if article.status != .clientReady {
+                        article.status = .failed
+                    }
                 }
             }
         } else {

@@ -15,6 +15,7 @@ extension Article {
         coverImageURL = dto.coverImageUrl
         if let content = dto.markdownContent {
             markdownContent = content
+            extractionSource = .server
         }
         summary = dto.summary
         keyPoints = dto.keyPoints ?? []

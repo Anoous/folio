@@ -22,7 +22,19 @@ final class SyncService {
 
         for article in articles {
             do {
-                let response = try await apiClient.submitArticle(url: article.url)
+                let response: SubmitArticleResponse
+                if article.extractionSource == .client {
+                    response = try await apiClient.submitArticle(
+                        url: article.url,
+                        title: article.title,
+                        author: article.author,
+                        siteName: article.siteName,
+                        markdownContent: article.markdownContent,
+                        wordCount: article.wordCount > 0 ? article.wordCount : nil
+                    )
+                } else {
+                    response = try await apiClient.submitArticle(url: article.url)
+                }
                 article.serverID = response.articleId
                 article.syncState = .synced
                 results[article.id] = true

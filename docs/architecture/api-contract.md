@@ -144,9 +144,22 @@ POST /api/v1/articles
 ```json
 {
   "url": "string — 必填",
-  "tag_ids": ["uuid"] // 可选，预绑定已有标签
+  "tag_ids": ["uuid"],           // 可选，预绑定已有标签
+  "title": "string",             // 可选，客户端提取的标题
+  "author": "string",            // 可选，客户端提取的作者
+  "site_name": "string",         // 可选，客户端提取的站点名
+  "markdown_content": "string",  // 可选，客户端提取的正文 Markdown（超过 500KB 自动截断）
+  "word_count": 1234             // 可选，客户端统计的字数
 }
 ```
+
+所有新增字段均为可选，不传时行为与原有逻辑一致（向后兼容）。
+
+**客户端内容抓取行为**：
+- `markdown_content` 非空时，后端在创建文章时填入内容字段
+- 无论是否携带客户端内容，爬取任务始终入队
+- 服务端爬取成功 → 覆盖客户端内容
+- 服务端爬取失败但文章已有 `markdown_content` → 使用客户端内容进行 AI 分析
 
 ### 响应 `202`
 

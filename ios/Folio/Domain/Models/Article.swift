@@ -8,6 +8,13 @@ enum ArticleStatus: String, Codable {
     case processing
     case ready
     case failed
+    case clientReady
+}
+
+enum ExtractionSource: String, Codable {
+    case none
+    case client
+    case server
 }
 
 enum SourceType: String, Codable {
@@ -18,6 +25,13 @@ enum SourceType: String, Codable {
     case zhihu
     case newsletter
     case youtube
+
+    var supportsClientExtraction: Bool {
+        switch self {
+        case .youtube: return false
+        default: return true
+        }
+    }
 
     static func detect(from urlString: String) -> SourceType {
         guard let url = URL(string: urlString),
@@ -80,6 +94,8 @@ final class Article {
     var sourceTypeRaw: String
     var syncStateRaw: String
     var serverID: String?
+    var extractionSourceRaw: String
+    var clientExtractedAt: Date?
 
     var status: ArticleStatus {
         get { ArticleStatus(rawValue: statusRaw) ?? .pending }
@@ -94,6 +110,11 @@ final class Article {
     var syncState: SyncState {
         get { SyncState(rawValue: syncStateRaw) ?? .pendingUpload }
         set { syncStateRaw = newValue.rawValue }
+    }
+
+    var extractionSource: ExtractionSource {
+        get { ExtractionSource(rawValue: extractionSourceRaw) ?? .none }
+        set { extractionSourceRaw = newValue.rawValue }
     }
 
     /// User-friendly title: uses title if available, otherwise extracts a readable form from URL.
@@ -152,5 +173,7 @@ final class Article {
         self.sourceTypeRaw = sourceType.rawValue
         self.syncStateRaw = SyncState.pendingUpload.rawValue
         self.serverID = nil
+        self.extractionSourceRaw = ExtractionSource.none.rawValue
+        self.clientExtractedAt = nil
     }
 }

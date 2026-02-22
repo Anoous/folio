@@ -19,6 +19,9 @@ packages:
   KeychainAccess:
     url: https://github.com/kishikawakatsumi/KeychainAccess.git
     from: "4.2.2"
+  SwiftSoup:
+    url: https://github.com/scinfu/SwiftSoup.git
+    from: "2.7.0"
 
 settings:
   base:
@@ -33,6 +36,7 @@ targets:
       - path: Folio
         excludes:
           - "**/.DS_Store"
+      - path: Shared/Extraction
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.folio.app
@@ -59,6 +63,7 @@ targets:
       - package: Nuke
         product: NukeUI
       - package: KeychainAccess
+      - package: SwiftSoup
 
   ShareExtension:
     type: app-extension
@@ -76,6 +81,7 @@ targets:
       - path: Folio/Presentation/Components/FolioButton.swift
       - path: Folio/Presentation/Components/ReadingFontFamily.swift
       - path: Folio/Utils/Extensions/Color+Folio.swift
+      - path: Shared/Extraction
     resources:
       - path: Folio/Resources/Assets.xcassets
     settings:
@@ -91,6 +97,8 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.folio.app
+    dependencies:
+      - package: SwiftSoup
 
   FolioTests:
     type: bundle.unit-test

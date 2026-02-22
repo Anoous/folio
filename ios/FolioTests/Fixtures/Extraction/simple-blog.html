@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta property="og:title" content="Understanding Swift Concurrency">
+    <meta name="author" content="Jane Developer">
+    <meta property="og:site_name" content="Swift Blog">
+    <meta property="og:description" content="A deep dive into Swift async/await patterns.">
+    <title>Understanding Swift Concurrency - Swift Blog</title>
+</head>
+<body>
+    <nav>
+        <a href="/">Home</a>
+        <a href="/about">About</a>
+    </nav>
+    <article>
+        <h1>Understanding Swift Concurrency</h1>
+        <p>Swift concurrency brings structured concurrency to iOS development. This article explores the key concepts including async/await, actors, and task groups.</p>
+        <h2>Async/Await Basics</h2>
+        <p>The <code>async</code> keyword marks a function that can be suspended, while <code>await</code> marks the suspension point.</p>
+        <pre><code class="language-swift">func fetchData() async throws -> Data {
+    let (data, _) = try await URLSession.shared.data(from: url)
+    return data
+}</code></pre>
+        <h2>Actors for Thread Safety</h2>
+        <p>Actors provide <strong>data isolation</strong> and prevent <em>data races</em> by ensuring only one task accesses mutable state at a time.</p>
+        <ul>
+            <li>Actor types are reference types</li>
+            <li>Properties are isolated by default</li>
+            <li>Methods require await from outside</li>
+        </ul>
+        <blockquote>
+            <p>Concurrency is about structure, not just performance.</p>
+        </blockquote>
+        <p>For more details, visit the <a href="https://swift.org/concurrency">official documentation</a>.</p>
+        <img src="https://example.com/swift-concurrency.png" alt="Swift Concurrency Diagram">
+        <hr>
+        <p>Thanks for reading!</p>
+    </article>
+    <footer>
+        <p>Copyright 2025 Swift Blog</p>
+    </footer>
+</body>
+</html>

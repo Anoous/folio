@@ -73,7 +73,7 @@ class ShareViewController: UIViewController {
                 return
             }
 
-            _ = try manager.saveArticle(url: urlString)
+            let article = try manager.saveArticle(url: urlString)
             SharedDataManager.incrementQuota()
 
             // Check if nearing quota limit for warning
@@ -83,6 +83,31 @@ class ShareViewController: UIViewController {
                 showState(.quotaWarning(remaining: quota - currentCount))
             } else {
                 showState(.saved)
+            }
+
+            // Start client-side extraction if supported
+            if article.sourceType.supportsClientExtraction {
+                showState(.extracting)
+                let articleURL = article.url
+                Task {
+                    do {
+                        guard let url = URL(string: articleURL) else { return }
+                        let result = try await ContentExtractor().extract(url: url)
+                        try manager.updateWithExtraction(result, for: article)
+                        self.showState(.extracted)
+                    } catch {
+                        // Extraction failed — stay with saved state, server will process
+                        self.showState(.saved)
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                        self?.dismiss()
+                    }
+                }
+                // Hard limit: dismiss after 10s regardless
+                DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
+                    self?.dismiss()
+                }
+                return
             }
         } catch SharedDataError.duplicateURL {
             showState(.duplicate)
@@ -101,6 +126,9 @@ class ShareViewController: UIViewController {
         case .saved, .quotaWarning:
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
+        case .extracted:
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
         case .duplicate:
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.warning)
@@ -110,7 +138,7 @@ class ShareViewController: UIViewController {
         case .offline:
             let generator = UIImpactFeedbackGenerator(style: .light)
             generator.impactOccurred()
-        case .saving:
+        case .saving, .extracting:
             break
         }
 

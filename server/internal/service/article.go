@@ -12,12 +12,12 @@ import (
 )
 
 type ArticleService struct {
-	articleRepo  *repository.ArticleRepo
-	taskRepo     *repository.TaskRepo
-	tagRepo      *repository.TagRepo
-	categoryRepo *repository.CategoryRepo
-	quotaService *QuotaService
-	asynqClient  *asynq.Client
+	articleRepo  articleCreator
+	taskRepo     taskCreator
+	tagRepo      tagAttacher
+	categoryRepo categoryGetter
+	quotaService quotaChecker
+	asynqClient  taskEnqueuer
 }
 
 func NewArticleService(
@@ -39,8 +39,13 @@ func NewArticleService(
 }
 
 type SubmitURLRequest struct {
-	URL    string   `json:"url"`
-	TagIDs []string `json:"tag_ids,omitempty"`
+	URL             string   `json:"url"`
+	TagIDs          []string `json:"tag_ids,omitempty"`
+	Title           *string  `json:"title,omitempty"`
+	Author          *string  `json:"author,omitempty"`
+	SiteName        *string  `json:"site_name,omitempty"`
+	MarkdownContent *string  `json:"markdown_content,omitempty"`
+	WordCount       *int     `json:"word_count,omitempty"`
 }
 
 type SubmitURLResponse struct {
@@ -59,9 +64,14 @@ func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req Submi
 
 	// Create article
 	article, err := s.articleRepo.Create(ctx, repository.CreateArticleParams{
-		UserID:     userID,
-		URL:        req.URL,
-		SourceType: sourceType,
+		UserID:          userID,
+		URL:             req.URL,
+		SourceType:      sourceType,
+		Title:           req.Title,
+		Author:          req.Author,
+		SiteName:        req.SiteName,
+		MarkdownContent: req.MarkdownContent,
+		WordCount:       req.WordCount,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create article: %w", err)

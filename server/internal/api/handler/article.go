@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 
@@ -13,13 +15,26 @@ import (
 	"folio-server/internal/service"
 )
 
+// articleServicer defines the methods that ArticleHandler needs from the article service.
+type articleServicer interface {
+	SubmitURL(ctx context.Context, userID string, req service.SubmitURLRequest) (*service.SubmitURLResponse, error)
+	ListByUser(ctx context.Context, params repository.ListArticlesParams) (*repository.ListArticlesResult, error)
+	GetByID(ctx context.Context, userID, articleID string) (*domain.Article, error)
+	Update(ctx context.Context, userID, articleID string, params repository.UpdateArticleParams) error
+	Delete(ctx context.Context, userID, articleID string) error
+	Search(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error)
+}
+
 type ArticleHandler struct {
-	articleService *service.ArticleService
+	articleService articleServicer
 }
 
 func NewArticleHandler(articleService *service.ArticleService) *ArticleHandler {
 	return &ArticleHandler{articleService: articleService}
 }
+
+// maxMarkdownContentBytes is the maximum allowed size for client-provided markdown content (500 KB).
+const maxMarkdownContentBytes = 500 * 1024
 
 func (h *ArticleHandler) HandleSubmitURL(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
@@ -33,6 +48,17 @@ func (h *ArticleHandler) HandleSubmitURL(w http.ResponseWriter, r *http.Request)
 	if req.URL == "" {
 		writeError(w, http.StatusBadRequest, "url is required")
 		return
+	}
+
+	// Truncate markdown_content if it exceeds 500 KB, ensuring valid UTF-8 boundary
+	if req.MarkdownContent != nil && len(*req.MarkdownContent) > maxMarkdownContentBytes {
+		truncated := (*req.MarkdownContent)[:maxMarkdownContentBytes]
+		// Walk back from the cut point to find a valid UTF-8 boundary.
+		// If the last byte(s) form an incomplete multi-byte sequence, remove them.
+		for len(truncated) > 0 && !utf8.ValidString(truncated) {
+			truncated = truncated[:len(truncated)-1]
+		}
+		req.MarkdownContent = &truncated
 	}
 
 	resp, err := h.articleService.SubmitURL(r.Context(), userID, req)

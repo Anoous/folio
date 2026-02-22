@@ -109,6 +109,12 @@ struct ArticleCardView: View {
                 }
                 .padding(.top, Spacing.xxs)
                 .padding(.leading, Spacing.sm + 8) // align with content after badge
+            } else if article.status == .clientReady {
+                statusInfoBar(
+                    icon: "doc.richtext",
+                    text: String(localized: "article.status.clientReady", defaultValue: "Content ready, AI analyzing..."),
+                    color: Color.folio.success
+                )
             } else if article.status == .pending && article.syncState == .pendingUpload {
                 statusInfoBar(
                     icon: "arrow.up.icloud",
@@ -154,6 +160,8 @@ struct ArticleCardView: View {
             if article.readProgress == 0 {
                 StatusBadge(status: .unread)
             }
+        case .clientReady:
+            StatusBadge(status: .clientReady)
         }
     }
 

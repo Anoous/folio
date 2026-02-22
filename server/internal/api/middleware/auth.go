@@ -50,3 +50,9 @@ func UserIDFromContext(ctx context.Context) string {
 	id, _ := ctx.Value(userIDKey).(string)
 	return id
 }
+
+// ContextWithUserID returns a new context with the given userID set.
+// This is useful for testing handlers without going through JWT validation.
+func ContextWithUserID(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, userIDKey, userID)
+}

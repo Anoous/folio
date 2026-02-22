@@ -46,6 +46,11 @@ struct UserDTO: Decodable {
 struct SubmitArticleRequest: Encodable {
     let url: String
     let tagIds: [String]?
+    var title: String?
+    var author: String?
+    var siteName: String?
+    var markdownContent: String?
+    var wordCount: Int?
 }
 
 struct SubmitArticleResponse: Decodable {
@@ -395,8 +400,21 @@ final class APIClient {
 
     // MARK: - Articles
 
-    func submitArticle(url: String, tagIds: [String] = []) async throws -> SubmitArticleResponse {
-        let body = SubmitArticleRequest(url: url, tagIds: tagIds.isEmpty ? nil : tagIds)
+    func submitArticle(
+        url: String,
+        tagIds: [String] = [],
+        title: String? = nil,
+        author: String? = nil,
+        siteName: String? = nil,
+        markdownContent: String? = nil,
+        wordCount: Int? = nil
+    ) async throws -> SubmitArticleResponse {
+        var body = SubmitArticleRequest(url: url, tagIds: tagIds.isEmpty ? nil : tagIds)
+        body.title = title
+        body.author = author
+        body.siteName = siteName
+        body.markdownContent = markdownContent
+        body.wordCount = wordCount
         return try await request(method: "POST", path: "/api/v1/articles", body: body)
     }
 

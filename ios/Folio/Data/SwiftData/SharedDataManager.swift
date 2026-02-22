@@ -62,6 +62,33 @@ final class SharedDataManager {
         return nil
     }
 
+    // MARK: - Extraction
+
+    @MainActor
+    func updateWithExtraction(_ result: ExtractionResult, for article: Article) throws {
+        article.markdownContent = result.markdownContent
+        article.wordCount = result.wordCount
+        article.status = .clientReady
+        article.extractionSource = .client
+        article.clientExtractedAt = result.extractedAt
+
+        if let title = result.title, !title.isEmpty {
+            article.title = title
+        }
+        if let author = result.author, !author.isEmpty {
+            article.author = author
+        }
+        if let siteName = result.siteName, !siteName.isEmpty {
+            article.siteName = siteName
+        }
+        if let excerpt = result.excerpt, !excerpt.isEmpty {
+            article.summary = excerpt
+        }
+
+        article.updatedAt = Date()
+        try context.save()
+    }
+
     // MARK: - Quota
 
     static let freeMonthlyQuota = 30
