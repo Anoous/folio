@@ -13,11 +13,11 @@ struct EmptyStateView: View {
                 .foregroundStyle(Color.folio.textTertiary)
 
             VStack(spacing: Spacing.xs) {
-                Text("empty.title")
+                Text(String(localized: "empty.title", defaultValue: "Your library is empty"))
                     .font(Typography.listTitle)
                     .foregroundStyle(Color.folio.textPrimary)
 
-                Text("empty.subtitle")
+                Text(String(localized: "empty.subtitle", defaultValue: "Save your first article to get started"))
                     .font(Typography.body)
                     .foregroundStyle(Color.folio.textSecondary)
                     .multilineTextAlignment(.center)

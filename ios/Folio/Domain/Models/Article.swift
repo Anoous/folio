@@ -96,6 +96,27 @@ final class Article {
         set { syncStateRaw = newValue.rawValue }
     }
 
+    /// User-friendly title: uses title if available, otherwise extracts a readable form from URL.
+    var displayTitle: String {
+        if let title, !title.isEmpty {
+            return title
+        }
+        // Extract host + path from URL for a cleaner display
+        if let url = URL(string: url), let host = url.host {
+            let path = url.path
+            if path.isEmpty || path == "/" {
+                return host
+            }
+            // Show last meaningful path component
+            let lastComponent = url.lastPathComponent
+            if !lastComponent.isEmpty && lastComponent != "/" {
+                return "\(host) - \(lastComponent)"
+            }
+            return host
+        }
+        return url
+    }
+
     init(
         url: String,
         title: String? = nil,

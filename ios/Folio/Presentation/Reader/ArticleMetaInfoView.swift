@@ -99,19 +99,19 @@ struct ArticleMetaInfoView: View {
         Group {
             switch article.sourceType {
             case .wechat:
-                Image(systemName: "message.fill")
+                Image(systemName: "message.fill").accessibilityLabel("WeChat")
             case .twitter:
-                Image(systemName: "bird")
+                Image(systemName: "bird").accessibilityLabel("Twitter")
             case .weibo:
-                Image(systemName: "globe.asia.australia")
+                Image(systemName: "globe.asia.australia").accessibilityLabel("Weibo")
             case .zhihu:
-                Image(systemName: "questionmark.circle")
+                Image(systemName: "questionmark.circle").accessibilityLabel("Zhihu")
             case .youtube:
-                Image(systemName: "play.rectangle.fill")
+                Image(systemName: "play.rectangle.fill").accessibilityLabel("YouTube")
             case .newsletter:
-                Image(systemName: "envelope.fill")
+                Image(systemName: "envelope.fill").accessibilityLabel("Newsletter")
             case .web:
-                Image(systemName: "globe")
+                Image(systemName: "globe").accessibilityLabel("Web")
             }
         }
         .font(.caption2)
@@ -122,16 +122,17 @@ struct ArticleMetaInfoView: View {
 
     private var formattedWordCount: String {
         if wordCount >= 10_000 {
-            return String(format: "%.1fw", Double(wordCount) / 10_000)
+            let value = Double(wordCount) / 10_000
+            return String(format: "%.1f", value) + "w"
         }
-        return "\(wordCount) chars"
+        return "\(wordCount) " + String(localized: "meta.chars", defaultValue: "chars")
     }
 
     private var formattedReadingTime: String {
         if readingTimeMinutes < 1 {
-            return "< 1 min"
+            return String(localized: "meta.readTimeLess1", defaultValue: "< 1 min read")
         }
-        return "\(readingTimeMinutes) min read"
+        return "~\(readingTimeMinutes) " + String(localized: "meta.minRead", defaultValue: "min read")
     }
 }
 

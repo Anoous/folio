@@ -47,18 +47,22 @@ struct SettingsView: View {
                 }
                 .padding(.vertical, Spacing.xs)
             } else {
-                HStack(spacing: Spacing.md) {
-                    Image(systemName: "person.circle")
-                        .font(.system(size: 44))
-                        .foregroundStyle(Color.folio.textTertiary)
-
-                    VStack(alignment: .leading, spacing: Spacing.xxs) {
-                        Text(String(localized: "settings.notSignedIn", defaultValue: "Not signed in"))
-                            .font(Typography.listTitle)
-                            .foregroundStyle(Color.folio.textSecondary)
-                        Text(String(localized: "settings.signInPrompt", defaultValue: "Sign in to enable cloud sync"))
-                            .font(Typography.caption)
+                NavigationLink {
+                    SignInView()
+                } label: {
+                    HStack(spacing: Spacing.md) {
+                        Image(systemName: "person.circle")
+                            .font(.system(size: 44))
                             .foregroundStyle(Color.folio.textTertiary)
+
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
+                            Text(String(localized: "settings.notSignedIn", defaultValue: "Not signed in"))
+                                .font(Typography.listTitle)
+                                .foregroundStyle(Color.folio.textSecondary)
+                            Text(String(localized: "settings.signInBenefits", defaultValue: "Sign in to sync, AI processing, and more"))
+                                .font(Typography.caption)
+                                .foregroundStyle(Color.folio.textTertiary)
+                        }
                     }
                 }
                 .padding(.vertical, Spacing.xs)
@@ -87,6 +91,10 @@ struct SettingsView: View {
                     .font(Typography.caption)
                     .foregroundStyle(Color.folio.textSecondary)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(offlineQueueManager?.isNetworkAvailable == true
+                ? String(localized: "settings.a11y.networkConnected", defaultValue: "Network: Connected")
+                : String(localized: "settings.a11y.networkOffline", defaultValue: "Network: Offline"))
 
             HStack {
                 Label {

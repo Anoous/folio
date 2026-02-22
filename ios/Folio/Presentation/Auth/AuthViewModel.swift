@@ -58,7 +58,7 @@ final class AuthViewModel {
             guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
                   let identityTokenData = credential.identityToken,
                   let identityToken = String(data: identityTokenData, encoding: .utf8) else {
-                errorMessage = "Failed to get Apple ID credentials"
+                errorMessage = String(localized: "auth.error.credentials", defaultValue: "Unable to verify your Apple ID. Please try again.")
                 return
             }
 
@@ -77,11 +77,11 @@ final class AuthViewModel {
                 currentUser = response.user
                 authState = .signedIn
             } catch {
-                errorMessage = "Sign in failed. Please try again."
+                errorMessage = String(localized: "auth.error.network", defaultValue: "Could not connect to the server. Please check your network and try again.")
             }
 
         case .failure:
-            errorMessage = "Apple Sign-In was cancelled."
+            errorMessage = String(localized: "auth.error.cancelled", defaultValue: "Sign-in was cancelled.")
         }
     }
 

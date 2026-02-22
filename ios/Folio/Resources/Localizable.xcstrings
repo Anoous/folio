@@ -149,6 +149,9 @@
         }
       }
     },
+    "Failed to load image" : {
+
+    },
     "home.article.archived" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -267,12 +270,6 @@
           }
         }
       }
-    },
-    "Failed to load image" : {
-
-    },
-    "Folio" : {
-
     },
     "share.saved" : {
       "extractionState" : "manual",

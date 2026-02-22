@@ -77,11 +77,12 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
     // MARK: - Paragraph
 
     mutating func visitParagraph(_ paragraph: Paragraph) -> [AnyView] {
-        // Check if paragraph contains any images
+        // Check if paragraph contains any images or links
         let hasImages = paragraph.children.contains { $0 is Markdown.Image }
+        let hasLinks = paragraph.children.contains { $0 is Markdown.Link }
 
-        if !hasImages {
-            // Fast path: no images, render as a single Text
+        if !hasImages && !hasLinks {
+            // Fast path: no images or links, render as a single Text
             let text = collectInlineText(paragraph)
             let view = text
                 .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
@@ -91,48 +92,53 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
             return [AnyView(view)]
         }
 
-        // Split paragraph children into text runs and image blocks
+        // Split paragraph children into text runs, image blocks, and link blocks
         var result: [AnyView] = []
         var pendingInline: [any Markup] = []
 
         for child in paragraph.children {
             if let image = child as? Markdown.Image {
                 // Flush accumulated inline content as Text
-                if !pendingInline.isEmpty {
-                    let text = pendingInline.reduce(SwiftUI.Text("")) { acc, node in
-                        acc + inlineText(node)
-                    }
-                    let view = text
-                        .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
-                        .foregroundStyle(Color.folio.textPrimary)
-                        .lineSpacing(lineSpacing)
-                        .fixedSize(horizontal: false, vertical: true)
-                    result.append(AnyView(view))
-                    pendingInline.removeAll()
-                }
+                flushInlineContent(&pendingInline, into: &result)
                 // Render image as ImageView
                 let urlString = image.source ?? ""
                 let altText = image.plainText
                 result.append(AnyView(ImageView(urlString: urlString, altText: altText)))
+            } else if let link = child as? Markdown.Link, let dest = link.destination, let url = URL(string: dest) {
+                // Flush accumulated inline content
+                flushInlineContent(&pendingInline, into: &result)
+                // Render as tappable Link
+                let linkText = collectInlineText(link)
+                let linkView = SwiftUI.Link(destination: url) {
+                    linkText
+                        .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
+                        .foregroundStyle(Color.folio.link)
+                        .underline()
+                }
+                result.append(AnyView(linkView))
             } else {
                 pendingInline.append(child)
             }
         }
 
         // Flush any remaining inline content
-        if !pendingInline.isEmpty {
-            let text = pendingInline.reduce(SwiftUI.Text("")) { acc, node in
-                acc + inlineText(node)
-            }
-            let view = text
-                .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
-                .foregroundStyle(Color.folio.textPrimary)
-                .lineSpacing(lineSpacing)
-                .fixedSize(horizontal: false, vertical: true)
-            result.append(AnyView(view))
-        }
+        flushInlineContent(&pendingInline, into: &result)
 
         return result
+    }
+
+    private mutating func flushInlineContent(_ pending: inout [any Markup], into result: inout [AnyView]) {
+        guard !pending.isEmpty else { return }
+        let text = pending.reduce(SwiftUI.Text("")) { acc, node in
+            acc + inlineText(node)
+        }
+        let view = text
+            .font(Font.custom("NotoSerifSC-Regular", size: fontSize))
+            .foregroundStyle(Color.folio.textPrimary)
+            .lineSpacing(lineSpacing)
+            .fixedSize(horizontal: false, vertical: true)
+        result.append(AnyView(view))
+        pending.removeAll()
     }
 
     // MARK: - Code Block

@@ -63,7 +63,7 @@ struct TimelineView: View {
 
             ForEach(articles) { article in
                 NavigationLink(value: article.id) {
-                    Text(article.title ?? article.url)
+                    Text(article.displayTitle)
                         .font(Typography.body)
                         .foregroundStyle(Color.folio.textPrimary)
                         .lineLimit(1)
@@ -90,8 +90,8 @@ struct TimelineView: View {
     private func groupByMonth(_ articles: [Article]) -> [MonthGroup] {
         let formatter = DateFormatter()
         let dayFormatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM"
-        dayFormatter.dateFormat = "M/d"
+        formatter.setLocalizedDateFormatFromTemplate("yyyyMMMM")
+        dayFormatter.setLocalizedDateFormatFromTemplate("MMMd")
 
         var monthDict: [String: [String: [Article]]] = [:]
         var monthOrder: [String] = []

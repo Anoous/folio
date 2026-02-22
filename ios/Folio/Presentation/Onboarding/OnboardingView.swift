@@ -6,7 +6,11 @@ struct OnboardingView: View {
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
     @Environment(\.colorScheme) private var colorScheme
     @State private var currentPage = 0
+    @State private var showPermission = false
     let onComplete: () -> Void
+
+    /// Total steps: 3 intro pages + 1 sign-in page
+    private let totalPages = 4
 
     private let pages = [
         OnboardingPageData(
@@ -27,64 +31,81 @@ struct OnboardingView: View {
             subtitle: String(localized: "onboarding.page3.subtitle", defaultValue: "Your data stays on your device"),
             description: String(localized: "onboarding.page3.description", defaultValue: "All content is stored locally. Only AI processing uses the cloud.")
         ),
+        OnboardingPageData(
+            icon: "shareplay",
+            title: String(localized: "onboarding.page4.title", defaultValue: "Share Extension"),
+            subtitle: String(localized: "onboarding.page4.subtitle", defaultValue: "The fastest way to save"),
+            description: String(localized: "onboarding.page4.description", defaultValue: "In Safari or any app, tap Share → scroll to find Folio → tap to save instantly. Free users get 30 saves per month.")
+        ),
     ]
 
     var body: some View {
-        VStack {
-            TabView(selection: $currentPage) {
-                ForEach(0..<pages.count, id: \.self) { index in
-                    OnboardingPage(data: pages[index])
-                        .tag(index)
-                }
+        if showPermission {
+            PermissionView {
+                completeOnboarding()
             }
-            .tabViewStyle(.page(indexDisplayMode: .always))
-
-            VStack(spacing: Spacing.sm) {
-                if currentPage < pages.count - 1 {
-                    FolioButton(title: String(localized: "onboarding.continue", defaultValue: "Continue"), style: .primary) {
-                        withAnimation {
-                            currentPage += 1
-                        }
+        } else {
+            VStack {
+                TabView(selection: $currentPage) {
+                    ForEach(0..<pages.count, id: \.self) { index in
+                        OnboardingPage(data: pages[index])
+                            .tag(index)
                     }
-                } else {
-                    SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.email, .fullName]
-                    } onCompletion: { result in
-                        Task {
-                            await authViewModel?.handleAppleSignIn(result: result)
-                            if authViewModel?.isAuthenticated == true {
-                                completeOnboarding()
+                }
+                .tabViewStyle(.page(indexDisplayMode: .always))
+
+                VStack(spacing: Spacing.sm) {
+                    if currentPage < pages.count - 1 {
+                        FolioButton(title: String(localized: "onboarding.continue", defaultValue: "Continue"), style: .primary) {
+                            withAnimation {
+                                currentPage += 1
                             }
                         }
-                    }
-                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                    .frame(height: 50)
-                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
-
-                    #if DEBUG
-                    FolioButton(title: "Dev Login", style: .secondary) {
-                        Task {
-                            await authViewModel?.loginDev()
-                            if authViewModel?.isAuthenticated == true {
-                                completeOnboarding()
+                    } else {
+                        SignInWithAppleButton(.signIn) { request in
+                            request.requestedScopes = [.email, .fullName]
+                        } onCompletion: { result in
+                            Task {
+                                await authViewModel?.handleAppleSignIn(result: result)
+                                if authViewModel?.isAuthenticated == true {
+                                    showPermission = true
+                                }
                             }
                         }
-                    }
-                    #endif
+                        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                        .frame(height: 50)
+                        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
 
-                    Button {
-                        completeOnboarding()
-                    } label: {
-                        Text(String(localized: "onboarding.skip", defaultValue: "Skip for now"))
-                            .font(Typography.body)
+                        #if DEBUG
+                        FolioButton(title: "Dev Login", style: .secondary) {
+                            Task {
+                                await authViewModel?.loginDev()
+                                if authViewModel?.isAuthenticated == true {
+                                    showPermission = true
+                                }
+                            }
+                        }
+                        #endif
+
+                        Button {
+                            showPermission = true
+                        } label: {
+                            Text(String(localized: "onboarding.skipSignIn", defaultValue: "Use without account"))
+                                .font(Typography.body)
+                                .foregroundStyle(Color.folio.textTertiary)
+                        }
+
+                        Text(String(localized: "onboarding.skipNote", defaultValue: "You can sign in later in Settings to enable cloud sync"))
+                            .font(Typography.caption)
                             .foregroundStyle(Color.folio.textTertiary)
+                            .multilineTextAlignment(.center)
                     }
                 }
+                .padding(.horizontal, Spacing.xl)
+                .padding(.bottom, Spacing.xl)
             }
-            .padding(.horizontal, Spacing.xl)
-            .padding(.bottom, Spacing.xl)
+            .background(Color.folio.background)
         }
-        .background(Color.folio.background)
     }
 
     private func completeOnboarding() {

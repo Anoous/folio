@@ -189,7 +189,7 @@ struct ReadingPreferenceView: View {
                 .font(Typography.listTitle)
                 .foregroundStyle(Color.folio.textPrimary)
 
-            Text("The quick brown fox jumps over the lazy dog. Swift is a powerful and intuitive programming language.")
+            Text(String(localized: "reader.prefs.previewText", defaultValue: "The quick brown fox jumps over the lazy dog. Swift is a powerful and intuitive programming language."))
                 .font(currentPreviewFont)
                 .foregroundStyle(Color.folio.textPrimary)
                 .lineSpacing(CGFloat(lineSpacing))

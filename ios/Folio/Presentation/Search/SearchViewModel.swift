@@ -11,6 +11,8 @@ final class SearchViewModel: ObservableObject {
     @Published var results: [SearchResultItem] = []
     @Published var isSearching: Bool = false
     @Published var showsEmptyState: Bool = false
+    @Published var searchError: String?
+    @Published var resultCount: Int = 0
     @Published var popularTags: [Tag] = []
     @Published var searchHistory: [String] = []
 
@@ -71,12 +73,15 @@ final class SearchViewModel: ObservableObject {
         guard !query.isEmpty else {
             results = []
             showsEmptyState = false
+            searchError = nil
+            resultCount = 0
             isSearching = false
             return
         }
 
         isSearching = true
         showsEmptyState = false
+        searchError = nil
 
         do {
             let searchResults = try searchManager.searchWithSnippet(query: query, limit: 20)
@@ -95,10 +100,13 @@ final class SearchViewModel: ObservableObject {
             }
 
             results = items
+            resultCount = items.count
             showsEmptyState = items.isEmpty
         } catch {
             results = []
-            showsEmptyState = true
+            resultCount = 0
+            showsEmptyState = false
+            searchError = error.localizedDescription
         }
 
         isSearching = false

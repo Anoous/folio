@@ -18,8 +18,8 @@ final class ReaderViewModel {
     var showToast: Bool = false
     var toastMessage: String = ""
     var toastIcon: String? = nil
-
-    private var progressSyncTask: Task<Void, Never>?
+    var isLoadingContent: Bool = false
+    var contentLoadError: String?
 
     /// Characters per minute for reading time estimation.
     private static let charsPerMinute: Double = 400
@@ -32,7 +32,6 @@ final class ReaderViewModel {
         self.isAuthenticated = isAuthenticated
         self.apiClient = apiClient
         calculateWordCount()
-        loadReadingProgress()
     }
 
     // MARK: - Word Count & Reading Time
@@ -51,14 +50,19 @@ final class ReaderViewModel {
               isAuthenticated,
               let serverID = article.serverID else { return }
 
+        isLoadingContent = true
+        contentLoadError = nil
+
         do {
             let dto = try await apiClient.getArticle(id: serverID)
             article.updateFromDTO(dto)
             try? context.save()
             calculateWordCount()
         } catch {
-            // Will retry on next open
+            contentLoadError = error.localizedDescription
         }
+
+        isLoadingContent = false
     }
 
     // MARK: - Mark as Read
@@ -72,43 +76,29 @@ final class ReaderViewModel {
         try? context.save()
     }
 
-    // MARK: - Reading Progress
+    // MARK: - Reading Progress (local only)
 
     func updateReadingProgress(_ progress: Double) {
         let clamped = min(max(progress, 0.0), 1.0)
+        guard clamped >= readingProgress else { return }
         readingProgress = clamped
         article.readProgress = clamped
         article.lastReadAt = Date()
-        article.updatedAt = Date()
         try? context.save()
-
-        // Debounced server sync (5 seconds)
-        progressSyncTask?.cancel()
-        progressSyncTask = Task {
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-            guard !Task.isCancelled, isAuthenticated, let serverID = article.serverID else { return }
-            try? await apiClient.updateArticle(
-                id: serverID,
-                request: UpdateArticleRequest(readProgress: clamped)
-            )
-        }
-    }
-
-    private func loadReadingProgress() {
-        readingProgress = article.readProgress
     }
 
     // MARK: - Favorite
 
     func toggleFavorite() {
+        let previousValue = article.isFavorite
         article.isFavorite.toggle()
         article.updatedAt = Date()
         try? context.save()
 
         if article.isFavorite {
-            showToastMessage("Added to favorites", icon: "heart.fill")
+            showToastMessage(String(localized: "home.article.favorited", defaultValue: "Added to favorites"), icon: "heart.fill")
         } else {
-            showToastMessage("Removed from favorites", icon: "heart")
+            showToastMessage(String(localized: "home.article.unfavorited", defaultValue: "Removed from favorites"), icon: "heart")
         }
 
         if isAuthenticated, let serverID = article.serverID {
@@ -120,7 +110,10 @@ final class ReaderViewModel {
                     )
                     article.syncState = .synced
                 } catch {
+                    article.isFavorite = previousValue
                     article.syncState = .pendingUpdate
+                    try? context.save()
+                    showToastMessage(String(localized: "home.article.syncFailed", defaultValue: "Sync failed, will retry"), icon: "exclamationmark.icloud")
                 }
             }
         }
@@ -129,14 +122,15 @@ final class ReaderViewModel {
     // MARK: - Archive
 
     func archiveArticle() {
+        let previousValue = article.isArchived
         article.isArchived.toggle()
         article.updatedAt = Date()
         try? context.save()
 
         if article.isArchived {
-            showToastMessage("Archived", icon: "archivebox.fill")
+            showToastMessage(String(localized: "home.article.archived", defaultValue: "Archived"), icon: "archivebox.fill")
         } else {
-            showToastMessage("Unarchived", icon: "archivebox")
+            showToastMessage(String(localized: "home.article.unarchived", defaultValue: "Unarchived"), icon: "archivebox")
         }
 
         if isAuthenticated, let serverID = article.serverID {
@@ -148,7 +142,10 @@ final class ReaderViewModel {
                     )
                     article.syncState = .synced
                 } catch {
+                    article.isArchived = previousValue
                     article.syncState = .pendingUpdate
+                    try? context.save()
+                    showToastMessage(String(localized: "home.article.syncFailed", defaultValue: "Sync failed, will retry"), icon: "exclamationmark.icloud")
                 }
             }
         }
@@ -171,12 +168,12 @@ final class ReaderViewModel {
 
     func copyMarkdown() {
         guard let content = article.markdownContent else {
-            showToastMessage("No content to copy", icon: "exclamationmark.triangle")
+            showToastMessage(String(localized: "reader.noContentToCopy", defaultValue: "No content to copy"), icon: "exclamationmark.triangle")
             return
         }
 
         UIPasteboard.general.string = content
-        showToastMessage("Markdown copied", icon: "doc.on.doc")
+        showToastMessage(String(localized: "reader.markdownCopied", defaultValue: "Markdown copied"), icon: "doc.on.doc")
     }
 
     // MARK: - Share

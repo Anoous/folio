@@ -39,6 +39,11 @@ struct ToastModifier: ViewModifier {
                     ToastView(message: message, icon: icon)
                         .padding(.top, Spacing.lg)
                         .transition(.move(edge: .top).combined(with: .opacity))
+                        .onTapGesture {
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                isPresented = false
+                            }
+                        }
                         .onAppear {
                             DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
                                 withAnimation(.easeOut(duration: 0.3)) {

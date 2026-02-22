@@ -86,11 +86,11 @@ struct ReaderView: View {
 
     @ViewBuilder
     private func readerContent(viewModel: ReaderViewModel) -> some View {
-        GeometryReader { outerGeometry in
+        GeometryReader { outerProxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     // Article title
-                    Text(article.title ?? article.url)
+                    Text(article.displayTitle)
                         .font(Typography.articleTitle)
                         .foregroundStyle(Color.folio.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -119,6 +119,15 @@ struct ReaderView: View {
                             fontSize: CGFloat(fontSize),
                             lineSpacing: CGFloat(lineSpacing)
                         )
+                    } else if viewModel.isLoadingContent {
+                        VStack(spacing: Spacing.md) {
+                            ProgressView()
+                            Text(String(localized: "reader.loadingContent", defaultValue: "Loading content..."))
+                                .font(Typography.caption)
+                                .foregroundStyle(Color.folio.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Spacing.xl)
                     } else {
                         contentUnavailableView
                     }
@@ -128,17 +137,25 @@ struct ReaderView: View {
                 .padding(.horizontal, Spacing.screenPadding)
                 .padding(.top, Spacing.md)
                 .background(
-                    GeometryReader { innerGeometry in
+                    GeometryReader { innerProxy in
                         Color.clear.preference(
-                            key: ScrollOffsetPreferenceKey.self,
-                            value: innerGeometry.frame(in: .named("scroll")).origin.y
+                            key: ScrollMetricsPreferenceKey.self,
+                            value: ScrollMetrics(
+                                contentHeight: innerProxy.size.height,
+                                offsetY: innerProxy.frame(in: .named("scroll")).minY
+                            )
                         )
                     }
                 )
             }
             .coordinateSpace(name: "scroll")
-            .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
-                updateReadingProgress(offset: offset, outerHeight: outerGeometry.size.height)
+            .onPreferenceChange(ScrollMetricsPreferenceKey.self) { metrics in
+                let viewportHeight = outerProxy.size.height
+                let scrollableDistance = metrics.contentHeight - viewportHeight
+                guard scrollableDistance > 0 else { return }
+                let scrolled = -metrics.offsetY
+                let progress = scrolled / scrollableDistance
+                self.viewModel?.updateReadingProgress(progress)
             }
             .safeAreaInset(edge: .bottom) {
                 bottomToolbar
@@ -204,13 +221,67 @@ struct ReaderView: View {
 
     private var contentUnavailableView: some View {
         VStack(spacing: Spacing.md) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 40))
-                .foregroundStyle(Color.folio.textTertiary)
+            if let error = viewModel?.contentLoadError {
+                // Error state with retry
+                Image(systemName: "exclamationmark.icloud")
+                    .font(.system(size: 40))
+                    .foregroundStyle(Color.folio.error)
 
-            Text(String(localized: "reader.noContent", defaultValue: "Content not yet available"))
-                .font(Typography.body)
-                .foregroundStyle(Color.folio.textSecondary)
+                Text(String(localized: "reader.loadFailed", defaultValue: "Failed to load content"))
+                    .font(Typography.body)
+                    .foregroundStyle(Color.folio.textPrimary)
+
+                Text(error)
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.folio.textTertiary)
+                    .multilineTextAlignment(.center)
+
+                FolioButton(
+                    title: String(localized: "reader.retryLoad", defaultValue: "Retry"),
+                    style: .primary
+                ) {
+                    Task { await viewModel?.fetchContentIfNeeded() }
+                }
+                .frame(width: 200)
+            } else if article.status == .processing {
+                // Still processing
+                Image(systemName: "sparkles")
+                    .font(.system(size: 40))
+                    .foregroundStyle(Color.folio.warning)
+
+                Text(String(localized: "reader.stillProcessing", defaultValue: "AI is still analyzing this article"))
+                    .font(Typography.body)
+                    .foregroundStyle(Color.folio.textSecondary)
+
+                Text(String(localized: "reader.checkBackSoon", defaultValue: "Check back in a moment"))
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.folio.textTertiary)
+            } else if article.status == .failed {
+                // Failed
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 40))
+                    .foregroundStyle(Color.folio.error)
+
+                Text(String(localized: "reader.processingFailed", defaultValue: "Processing failed"))
+                    .font(Typography.body)
+                    .foregroundStyle(Color.folio.textPrimary)
+
+                if let fetchError = article.fetchError {
+                    Text(fetchError)
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.folio.textTertiary)
+                        .multilineTextAlignment(.center)
+                }
+            } else {
+                // Generic unavailable
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 40))
+                    .foregroundStyle(Color.folio.textTertiary)
+
+                Text(String(localized: "reader.noContent", defaultValue: "Content not yet available"))
+                    .font(Typography.body)
+                    .foregroundStyle(Color.folio.textSecondary)
+            }
 
             FolioButton(
                 title: String(localized: "reader.openOriginal", defaultValue: "Open Original"),
@@ -298,8 +369,7 @@ struct ReaderView: View {
 
             Spacer()
 
-            // Reading progress indicator
-            Text("\(Int(viewModel?.readingProgress ?? 0 * 100))%")
+            Text("\(Int((viewModel?.readingProgress ?? 0) * 100))%")
                 .font(Typography.caption)
                 .foregroundStyle(Color.folio.textTertiary)
 
@@ -326,25 +396,18 @@ struct ReaderView: View {
         .background(.ultraThinMaterial)
     }
 
-    // MARK: - Reading Progress Tracking
-
-    private func updateReadingProgress(offset: CGFloat, outerHeight: CGFloat) {
-        // offset is the Y position of the inner content within the scroll coordinate space.
-        // As the user scrolls down, offset becomes increasingly negative.
-        guard offset < 0 else { return }
-        let scrolled = abs(offset)
-        // Estimate total scrollable height as a rough multiple of screen
-        let estimatedContentHeight = max(outerHeight * 3, outerHeight)
-        let progress = scrolled / estimatedContentHeight
-        viewModel?.updateReadingProgress(progress)
-    }
 }
 
-// MARK: - Scroll Offset Preference Key
+// MARK: - Scroll Metrics
 
-private struct ScrollOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+private struct ScrollMetrics: Equatable {
+    var contentHeight: CGFloat = 0
+    var offsetY: CGFloat = 0
+}
+
+private struct ScrollMetricsPreferenceKey: PreferenceKey {
+    static var defaultValue = ScrollMetrics()
+    static func reduce(value: inout ScrollMetrics, nextValue: () -> ScrollMetrics) {
         value = nextValue()
     }
 }

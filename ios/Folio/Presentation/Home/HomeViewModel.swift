@@ -191,6 +191,7 @@ final class HomeViewModel {
     // MARK: - Article Actions
 
     func toggleFavorite(_ article: Article) {
+        let previousValue = article.isFavorite
         article.isFavorite.toggle()
         article.updatedAt = Date()
         try? context.save()
@@ -210,13 +211,18 @@ final class HomeViewModel {
                     )
                     article.syncState = .synced
                 } catch {
+                    // Rollback on failure
+                    article.isFavorite = previousValue
                     article.syncState = .pendingUpdate
+                    try? context.save()
+                    showToastMessage(String(localized: "home.article.syncFailed", defaultValue: "Sync failed, will retry"), icon: "exclamationmark.icloud")
                 }
             }
         }
     }
 
     func archiveArticle(_ article: Article) {
+        let previousValue = article.isArchived
         article.isArchived.toggle()
         article.updatedAt = Date()
         try? context.save()
@@ -236,7 +242,11 @@ final class HomeViewModel {
                     )
                     article.syncState = .synced
                 } catch {
+                    // Rollback on failure
+                    article.isArchived = previousValue
                     article.syncState = .pendingUpdate
+                    try? context.save()
+                    showToastMessage(String(localized: "home.article.syncFailed", defaultValue: "Sync failed, will retry"), icon: "exclamationmark.icloud")
                 }
             }
         }
@@ -254,6 +264,41 @@ final class HomeViewModel {
         if isAuthenticated, let serverID {
             Task { try? await apiClient.deleteArticle(id: serverID) }
         }
+    }
+
+    // MARK: - Retry Failed Article
+
+    func retryArticle(_ article: Article) {
+        article.status = .pending
+        article.fetchError = nil
+        article.retryCount += 1
+        article.updatedAt = Date()
+        try? context.save()
+        fetchArticles()
+
+        showToastMessage(String(localized: "home.article.retrying", defaultValue: "Retrying..."), icon: "arrow.clockwise")
+
+        if isAuthenticated {
+            Task {
+                do {
+                    // Re-submit URL to server for processing
+                    let response = try await apiClient.submitArticle(url: article.url)
+                    article.serverID = response.articleId
+                    article.status = .processing
+                } catch {
+                    article.status = .failed
+                    article.fetchError = error.localizedDescription
+                }
+                try? context.save()
+                fetchArticles()
+            }
+        }
+    }
+
+    // MARK: - Dismiss Sync Error
+
+    func dismissSyncError() {
+        syncError = nil
     }
 
     // MARK: - Toast
@@ -308,6 +353,14 @@ final class HomeViewModel {
         var groups: [String: [Article]] = [:]
         var order: [String] = []
 
+        let dateFormatter: DateFormatter = {
+            let f = DateFormatter()
+            f.doesRelativeDateFormatting = false
+            f.dateStyle = .medium
+            f.timeStyle = .none
+            return f
+        }()
+
         for article in articles {
             let key: String
             if calendar.isDateInToday(article.createdAt) {
@@ -315,9 +368,7 @@ final class HomeViewModel {
             } else if calendar.isDateInYesterday(article.createdAt) {
                 key = String(localized: "yesterday", defaultValue: "Yesterday")
             } else {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "yyyy-MM-dd"
-                key = formatter.string(from: article.createdAt)
+                key = dateFormatter.string(from: article.createdAt)
             }
 
             if groups[key] == nil {

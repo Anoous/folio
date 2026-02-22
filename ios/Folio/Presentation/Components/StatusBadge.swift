@@ -5,6 +5,7 @@ enum ContentStatus {
     case processing
     case failed
     case offline
+    case pendingSync
 }
 
 struct StatusBadge: View {
@@ -16,18 +17,39 @@ struct StatusBadge: View {
             Circle()
                 .fill(Color.folio.unread)
                 .frame(width: 8, height: 8)
+                .accessibilityLabel(Text(String(localized: "status.unread", defaultValue: "Unread")))
         case .processing:
             Image(systemName: "hourglass")
                 .font(.caption2)
                 .foregroundStyle(Color.folio.warning)
+                .symbolEffect(.pulse, options: .repeating)
+                .accessibilityLabel(Text(String(localized: "status.processing", defaultValue: "Processing")))
         case .failed:
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.caption2)
                 .foregroundStyle(Color.folio.error)
+                .accessibilityLabel(Text(String(localized: "status.failed", defaultValue: "Failed")))
         case .offline:
             Image(systemName: "icloud.slash")
                 .font(.caption2)
                 .foregroundStyle(Color.folio.textTertiary)
+                .accessibilityLabel(Text(String(localized: "status.offline", defaultValue: "Offline")))
+        case .pendingSync:
+            Image(systemName: "arrow.up.icloud")
+                .font(.caption2)
+                .foregroundStyle(Color.folio.textTertiary)
+                .accessibilityLabel(Text(String(localized: "status.pendingSync", defaultValue: "Pending sync")))
+        }
+    }
+
+    /// User-facing description of the status
+    var statusText: String {
+        switch status {
+        case .unread: return String(localized: "status.unread", defaultValue: "Unread")
+        case .processing: return String(localized: "status.processingText", defaultValue: "AI is analyzing...")
+        case .failed: return String(localized: "status.failedText", defaultValue: "Processing failed")
+        case .offline: return String(localized: "status.offlineText", defaultValue: "Saved offline")
+        case .pendingSync: return String(localized: "status.pendingSyncText", defaultValue: "Waiting to sync")
         }
     }
 }

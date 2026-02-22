@@ -63,9 +63,27 @@ class ShareViewController: UIViewController {
             let container = try ModelContainer(for: schema, configurations: [config])
             let manager = SharedDataManager(context: container.mainContext)
 
+            // Check quota before saving
+            let isPro = UserDefaults.appGroup.bool(forKey: "is_pro_user")
+            guard SharedDataManager.canSave(isPro: isPro) else {
+                showState(.quotaExceeded)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                    self?.dismiss()
+                }
+                return
+            }
+
             _ = try manager.saveArticle(url: urlString)
             SharedDataManager.incrementQuota()
-            showState(.saved)
+
+            // Check if nearing quota limit for warning
+            let currentCount = SharedDataManager.currentMonthCount()
+            let quota = SharedDataManager.freeMonthlyQuota
+            if !isPro && currentCount >= Int(Double(quota) * 0.9) {
+                showState(.quotaWarning(remaining: quota - currentCount))
+            } else {
+                showState(.saved)
+            }
         } catch SharedDataError.duplicateURL {
             showState(.duplicate)
         } catch {
@@ -78,6 +96,24 @@ class ShareViewController: UIViewController {
     }
 
     private func showState(_ state: ShareState) {
+        // Haptic feedback based on state
+        switch state {
+        case .saved, .quotaWarning:
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+        case .duplicate:
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.warning)
+        case .quotaExceeded:
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.error)
+        case .offline:
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+        case .saving:
+            break
+        }
+
         if let hostingController {
             hostingController.rootView = CompactShareView(state: state, onDismiss: { [weak self] in
                 self?.dismiss()

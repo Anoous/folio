@@ -6,20 +6,41 @@ struct CodeBlockView: View {
     let code: String
     let language: String
 
+    @State private var copied = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Language label
-            if !language.isEmpty {
-                HStack {
+            // Header: language label + copy button
+            HStack {
+                if !language.isEmpty {
                     Text(language.uppercased())
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.5))
-                        .padding(.horizontal, Spacing.sm)
-                        .padding(.top, Spacing.xs)
-
-                    Spacer()
                 }
+
+                Spacer()
+
+                Button {
+                    UIPasteboard.general.string = code
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        copied = false
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 11))
+                        Text(copied
+                             ? String(localized: "code.copied", defaultValue: "Copied")
+                             : String(localized: "code.copy", defaultValue: "Copy"))
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    }
+                    .foregroundStyle(.white.opacity(0.5))
+                }
+                .buttonStyle(.plain)
             }
+            .padding(.horizontal, Spacing.sm)
+            .padding(.top, Spacing.xs)
 
             // Code content with horizontal scroll
             ScrollView(.horizontal, showsIndicators: false) {

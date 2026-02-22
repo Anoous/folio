@@ -10,14 +10,20 @@ struct SearchView: View {
             if let viewModel {
                 SearchContentView(viewModel: viewModel)
             } else {
-                Color.clear
+                VStack(spacing: Spacing.md) {
+                    ProgressView()
+                    Text(String(localized: "search.indexing", defaultValue: "Preparing search..."))
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.folio.textTertiary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .navigationTitle(String(localized: "tab.search"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             if viewModel == nil {
-                let manager = try! FTS5SearchManager(inMemory: true)
+                guard let manager = try? FTS5SearchManager(inMemory: true) else { return }
                 let vm = SearchViewModel(searchManager: manager, context: modelContext)
                 viewModel = vm
                 vm.loadPopularTags()
@@ -68,6 +74,8 @@ private struct SearchContentView: View {
                 } else if viewModel.isSearching {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let error = viewModel.searchError {
+                    searchErrorState(error: error)
                 } else if viewModel.showsEmptyState {
                     searchEmptyState
                 } else {
@@ -127,6 +135,16 @@ private struct SearchContentView: View {
     private var searchResultsList: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
+                // Result count header
+                HStack {
+                    Text("\(viewModel.resultCount) " + String(localized: "search.results", defaultValue: "results"))
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.folio.textTertiary)
+                    Spacer()
+                }
+                .padding(.horizontal, Spacing.screenPadding)
+                .padding(.vertical, Spacing.xs)
+
                 ForEach(viewModel.results) { item in
                     NavigationLink {
                         ReaderView(article: item.article)
@@ -143,6 +161,35 @@ private struct SearchContentView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Error State
+
+    private func searchErrorState(error: String) -> some View {
+        VStack(spacing: Spacing.md) {
+            Image(systemName: "exclamationmark.magnifyingglass")
+                .font(.system(size: 48))
+                .foregroundStyle(Color.folio.error)
+
+            Text(String(localized: "search.error", defaultValue: "Search failed"))
+                .font(Typography.listTitle)
+                .foregroundStyle(Color.folio.textPrimary)
+
+            Text(error)
+                .font(Typography.caption)
+                .foregroundStyle(Color.folio.textTertiary)
+                .multilineTextAlignment(.center)
+
+            FolioButton(
+                title: String(localized: "search.retry", defaultValue: "Retry"),
+                style: .secondary
+            ) {
+                viewModel.performSearch()
+            }
+            .frame(width: 160)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(Spacing.screenPadding)
     }
 
     // MARK: - Empty State
