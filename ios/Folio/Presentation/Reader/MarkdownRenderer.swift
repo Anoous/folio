@@ -96,12 +96,10 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
     // MARK: - Paragraph
 
     mutating func visitParagraph(_ paragraph: Paragraph) -> [AnyView] {
-        // Check if paragraph contains any images or links
         let hasImages = paragraph.children.contains { $0 is Markdown.Image }
-        let hasLinks = paragraph.children.contains { $0 is Markdown.Link }
 
-        if !hasImages && !hasLinks {
-            // Fast path: no images or links, render as a single Text
+        if !hasImages {
+            // Fast path: no images — render as single Text (links stay inline)
             let text = collectInlineText(paragraph)
             let view = text
                 .font(fontFamily.font(size: fontSize))
@@ -111,7 +109,7 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
             return [AnyView(view)]
         }
 
-        // Split paragraph children into text runs, image blocks, and link blocks
+        // Split paragraph only at image boundaries; links stay inline with text
         var result: [AnyView] = []
         var pendingInline: [any Markup] = []
 
@@ -123,18 +121,6 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
                 let urlString = image.source ?? ""
                 let altText = image.plainText
                 result.append(AnyView(ImageView(urlString: urlString, altText: altText)))
-            } else if let link = child as? Markdown.Link, let dest = link.destination, let url = URL(string: dest) {
-                // Flush accumulated inline content
-                flushInlineContent(&pendingInline, into: &result)
-                // Render as tappable Link
-                let linkText = collectInlineText(link)
-                let linkView = SwiftUI.Link(destination: url) {
-                    linkText
-                        .font(fontFamily.font(size: fontSize))
-                        .foregroundStyle(Color.folio.link)
-                        .underline()
-                }
-                result.append(AnyView(linkView))
             } else {
                 pendingInline.append(child)
             }
@@ -336,8 +322,13 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
                 .font(Typography.articleCode)
                 .foregroundStyle(Color.folio.accent)
         } else if let link = markup as? Markdown.Link {
-            // SwiftUI Text doesn't support tappable links directly,
-            // so we style link text distinctly.
+            if let dest = link.destination, let url = URL(string: dest) {
+                // Tappable inline link via AttributedString
+                var attrStr = AttributedString(plainText(link))
+                attrStr.link = url
+                return Text(attrStr)
+            }
+            // Fallback: style link text distinctly when URL is invalid
             return collectInlineText(link)
                 .foregroundStyle(Color.folio.link)
                 .underline()
@@ -372,6 +363,56 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
             result += plainText(child)
         }
         return result
+    }
+}
+
+// MARK: - Content Preprocessing
+
+extension MarkdownRenderer {
+    /// Cleans up scraped markdown before rendering:
+    /// - Strips leading text that duplicates the article title
+    /// - Removes trailing social-media metadata (timestamps, view counts)
+    static func preprocessed(
+        _ markdown: String,
+        title: String?
+    ) -> String {
+        var text = markdown
+
+        // 1. Strip leading duplicate title
+        //    Scrapers often emit "Author on X: \"full tweet...\" / X" followed
+        //    by the same content again.  Detect and remove the prefix.
+        if let title, !title.isEmpty {
+            // Normalize for comparison (trim, collapse whitespace)
+            let normalizedTitle = title
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Case 1: markdown starts with "Title\n" — strip that first line
+            if trimmedText.hasPrefix(normalizedTitle) {
+                let afterTitle = trimmedText.dropFirst(normalizedTitle.count)
+                text = afterTitle
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        // 2. Strip trailing social-media metadata lines
+        //    e.g. "[5:15 AM · Feb 22, 2026](…)" or "[1,934 Views](…/analytics)"
+        let metadataPatterns: [String] = [
+            #"\[[\d,]+ Views?\]\([^\)]+/analytics\)"#,      // view counts
+            #"\[\d{1,2}:\d{2} [AP]M · .+?\]\([^\)]+\)"#,   // timestamps
+        ]
+        for pattern in metadataPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                text = regex.stringByReplacingMatches(
+                    in: text,
+                    range: NSRange(text.startIndex..., in: text),
+                    withTemplate: ""
+                )
+            }
+        }
+
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

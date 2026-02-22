@@ -80,15 +80,17 @@ struct ReaderView: View {
                 WebViewContainer(url: url)
             }
         }
-        .confirmationDialog(
+        .alert(
             String(localized: "reader.deleteConfirm", defaultValue: "Delete this article?"),
-            isPresented: $showsDeleteConfirmation,
-            titleVisibility: .visible
+            isPresented: $showsDeleteConfirmation
         ) {
+            Button(String(localized: "button.cancel", defaultValue: "Cancel"), role: .cancel) {}
             Button(String(localized: "reader.delete", defaultValue: "Delete"), role: .destructive) {
                 viewModel?.deleteArticle()
                 dismiss()
             }
+        } message: {
+            Text(String(localized: "reader.deleteMessage", defaultValue: "This article will be permanently removed."))
         }
     }
 
@@ -127,7 +129,7 @@ struct ReaderView: View {
                     // Markdown body
                     if let content = article.markdownContent {
                         MarkdownRenderer(
-                            markdownText: content,
+                            markdownText: MarkdownRenderer.preprocessed(content, title: article.title),
                             fontSize: CGFloat(fontSize),
                             lineSpacing: CGFloat(lineSpacing),
                             fontFamily: readingFontFamily,
