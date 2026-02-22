@@ -24,6 +24,7 @@ final class ColorTests: XCTestCase {
             .folio.highlightGreen,
             .folio.highlightBlue,
             .folio.highlightRed,
+            .folio.codeBackground,
         ]
         for color in colors {
             XCTAssertNotNil(color)
@@ -52,10 +53,10 @@ final class ColorTests: XCTestCase {
 
     func testAccentColor() {
         let resolved = Color.folio.accent.resolve(in: EnvironmentValues())
-        // #2C2C2C => R:44/255≈0.173, G:44/255≈0.173, B:44/255≈0.173
-        XCTAssertEqual(resolved.red, 44.0 / 255.0, accuracy: 0.01)
-        XCTAssertEqual(resolved.green, 44.0 / 255.0, accuracy: 0.01)
-        XCTAssertEqual(resolved.blue, 44.0 / 255.0, accuracy: 0.01)
+        // #3A6B4E => R:58/255≈0.227, G:107/255≈0.420, B:78/255≈0.306
+        XCTAssertEqual(resolved.red, 58.0 / 255.0, accuracy: 0.01)
+        XCTAssertEqual(resolved.green, 107.0 / 255.0, accuracy: 0.01)
+        XCTAssertEqual(resolved.blue, 78.0 / 255.0, accuracy: 0.01)
     }
 
     func testHighlightColors() {

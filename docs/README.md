@@ -40,6 +40,7 @@
 | 文档 | 内容 | 状态 |
 |------|------|------|
 | [系统架构设计](architecture/system-design.md) | 整体架构、iOS 客户端、后端抓取引擎、AI Pipeline、数据模型、API、部署 | v1.0 |
+| [扩展优化方案](architecture/scaling-plan.md) | 客户端抓取方案、服务端瓶颈分析、分布式部署、水平扩展、实施计划 | v1.2 |
 
 ### 交互设计（interaction/）
 
@@ -55,6 +56,7 @@
 
 - **想了解产品做什么** → [PRD](design/prd.md)
 - **想了解技术怎么搭** → [系统架构](architecture/system-design.md)
+- **想了解扩展怎么做** → [扩展优化方案](architecture/scaling-plan.md)
 - **想了解用户怎么用** → [交互流程](interaction/core-flows.md)
 - **想了解完整想法背景** → TECH-004 概念文档（见 my-ideas-journal 仓库）
 

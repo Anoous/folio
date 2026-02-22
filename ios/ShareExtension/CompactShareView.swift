@@ -15,22 +15,22 @@ struct CompactShareView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: Spacing.md) {
             switch state {
             case .saving:
                 ProgressView()
                 Text(String(localized: "share.saving", defaultValue: "Adding..."))
-                    .font(.headline)
+                    .font(Typography.listTitle)
 
             case .saved:
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 44))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.folio.success)
                 Text(String(localized: "share.saved", defaultValue: "Added to Folio"))
-                    .font(.headline)
+                    .font(Typography.listTitle)
                 Text(String(localized: "share.savedSubtitle", defaultValue: "AI will organize it in the background"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.folio.textSecondary)
                 Button {
                     if let url = URL(string: "folio://library") {
                         openURL(url)
@@ -38,54 +38,54 @@ struct CompactShareView: View {
                     onDismiss()
                 } label: {
                     Text(String(localized: "share.openApp", defaultValue: "Open Folio"))
-                        .font(.caption)
-                        .foregroundStyle(.blue)
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.folio.accent)
                 }
 
             case .duplicate:
                 Image(systemName: "pin.fill")
                     .font(.system(size: 44))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.folio.warning)
                 Text(String(localized: "share.duplicate", defaultValue: "Already saved"))
-                    .font(.headline)
+                    .font(Typography.listTitle)
 
             case .offline:
                 Image(systemName: "wifi.slash")
                     .font(.system(size: 44))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.folio.textSecondary)
                 Text(String(localized: "share.offline", defaultValue: "Added to Folio"))
-                    .font(.headline)
+                    .font(Typography.listTitle)
                 Text(String(localized: "share.offlineSubtitle", defaultValue: "Content will be fetched when online"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.folio.textSecondary)
 
             case .quotaExceeded:
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 44))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.folio.error)
                 Text(String(localized: "share.quotaExceeded", defaultValue: "Monthly limit reached"))
-                    .font(.headline)
+                    .font(Typography.listTitle)
                 Text(String(localized: "share.quotaExceededSubtitle", defaultValue: "Upgrade to Pro for unlimited saves"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.folio.textSecondary)
 
             case .quotaWarning(let remaining):
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 44))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.folio.success)
                 Text(String(localized: "share.saved", defaultValue: "Added to Folio"))
-                    .font(.headline)
-                HStack(spacing: 4) {
+                    .font(Typography.listTitle)
+                HStack(spacing: Spacing.xxs) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.caption2)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.folio.warning)
                     Text("\(remaining) " + String(localized: "share.quotaWarning", defaultValue: "saves remaining this month"))
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.folio.warning)
                 }
             }
         }
-        .padding(32)
+        .padding(Spacing.xl)
         .frame(maxWidth: .infinity)
     }
 }

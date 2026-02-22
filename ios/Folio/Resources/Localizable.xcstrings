@@ -44,7 +44,13 @@
     "+%@" : {
 
     },
+    "✦" : {
+
+    },
     "A" : {
+
+    },
+    "AI" : {
 
     },
     "button.cancel" : {
@@ -282,6 +288,23 @@
         }
       }
     },
+    "settings.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置"
+          }
+        }
+      }
+    },
     "share.saved" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -312,23 +335,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存到 Folio"
-          }
-        }
-      }
-    },
-    "settings.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Settings"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置"
           }
         }
       }

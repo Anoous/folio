@@ -119,11 +119,13 @@ struct HomeView: View {
             get: { viewModel?.showToast ?? false },
             set: { viewModel?.showToast = $0 }
         ), message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
-        .confirmationDialog(
+        .alert(
             deleteConfirmTitle,
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
+            isPresented: $showDeleteConfirmation
         ) {
+            Button(String(localized: "button.cancel", defaultValue: "Cancel"), role: .cancel) {
+                articleToDelete = nil
+            }
             Button(String(localized: "reader.delete", defaultValue: "Delete"), role: .destructive) {
                 if let article = articleToDelete {
                     viewModel?.deleteArticle(article)

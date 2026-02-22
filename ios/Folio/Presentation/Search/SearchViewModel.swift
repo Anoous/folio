@@ -4,23 +4,27 @@ import SwiftUI
 import Combine
 
 @MainActor
-final class SearchViewModel: ObservableObject {
-    // MARK: - Published Properties
+@Observable
+final class SearchViewModel {
+    // MARK: - Properties
 
-    @Published var searchText: String = ""
-    @Published var results: [SearchResultItem] = []
-    @Published var isSearching: Bool = false
-    @Published var showsEmptyState: Bool = false
-    @Published var searchError: String?
-    @Published var resultCount: Int = 0
-    @Published var popularTags: [Tag] = []
-    @Published var searchHistory: [String] = []
+    var searchText: String = "" {
+        didSet { searchTextSubject.send(searchText) }
+    }
+    var results: [SearchResultItem] = []
+    var isSearching: Bool = false
+    var showsEmptyState: Bool = false
+    var searchError: String?
+    var resultCount: Int = 0
+    var popularTags: [Tag] = []
+    var searchHistory: [String] = []
 
     // MARK: - Dependencies
 
     private let searchManager: FTS5SearchManager
     private let articleRepository: ArticleRepository
     private let tagRepository: TagRepository
+    private let searchTextSubject = PassthroughSubject<String, Never>()
     private var cancellables = Set<AnyCancellable>()
 
     private static let historyKey = "folio_search_history"
@@ -50,7 +54,7 @@ final class SearchViewModel: ObservableObject {
     // MARK: - Debounce Setup
 
     private func setupDebounce() {
-        $searchText
+        searchTextSubject
             .debounce(for: .milliseconds(200), scheduler: DispatchQueue.main)
             .removeDuplicates()
             .sink { [weak self] query in

@@ -54,7 +54,7 @@ struct CodeBlockView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(white: 0.12))
+        .background(Color.folio.codeBackground)
         .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
     }
 }

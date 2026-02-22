@@ -29,6 +29,9 @@ struct FolioColors {
     let tagBackground = Color("Colors/tagBackground")
     let tagText = Color("Colors/tagText")
 
+    // MARK: - Code
+    let codeBackground = Color("Colors/codeBackground")
+
     // MARK: - Highlights
     let highlightYellow = Color("Colors/highlightYellow")
     let highlightGreen = Color("Colors/highlightGreen")

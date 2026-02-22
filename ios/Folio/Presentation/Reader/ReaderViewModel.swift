@@ -31,6 +31,7 @@ final class ReaderViewModel {
         self.context = context
         self.isAuthenticated = isAuthenticated
         self.apiClient = apiClient
+        self.readingProgress = article.readProgress
         calculateWordCount()
     }
 

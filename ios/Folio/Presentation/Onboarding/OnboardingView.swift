@@ -76,6 +76,13 @@ struct OnboardingView: View {
                         .frame(height: 50)
                         .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
 
+                        if let error = authViewModel?.errorMessage {
+                            Text(error)
+                                .font(Typography.caption)
+                                .foregroundStyle(Color.folio.error)
+                                .multilineTextAlignment(.center)
+                        }
+
                         #if DEBUG
                         FolioButton(title: "Dev Login", style: .secondary) {
                             Task {
