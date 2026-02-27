@@ -20,8 +20,8 @@ type mockArticleRepo struct {
 	lastCreateP  *repository.CreateArticleParams // captures the last CreateArticleParams passed
 	getByIDFn    func(ctx context.Context, id string) (*domain.Article, error)
 	listByUserFn func(ctx context.Context, p repository.ListArticlesParams) (*repository.ListArticlesResult, error)
-	updateFn     func(ctx context.Context, id string, p repository.UpdateArticleParams) error
-	deleteFn     func(ctx context.Context, id string) error
+	updateFn     func(ctx context.Context, id string, userID string, p repository.UpdateArticleParams) error
+	deleteFn     func(ctx context.Context, id string, userID string) error
 	searchFn     func(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error)
 }
 
@@ -47,16 +47,16 @@ func (m *mockArticleRepo) ListByUser(ctx context.Context, p repository.ListArtic
 	return &repository.ListArticlesResult{}, nil
 }
 
-func (m *mockArticleRepo) Update(ctx context.Context, id string, p repository.UpdateArticleParams) error {
+func (m *mockArticleRepo) Update(ctx context.Context, id string, userID string, p repository.UpdateArticleParams) error {
 	if m.updateFn != nil {
-		return m.updateFn(ctx, id, p)
+		return m.updateFn(ctx, id, userID, p)
 	}
 	return nil
 }
 
-func (m *mockArticleRepo) Delete(ctx context.Context, id string) error {
+func (m *mockArticleRepo) Delete(ctx context.Context, id string, userID string) error {
 	if m.deleteFn != nil {
-		return m.deleteFn(ctx, id)
+		return m.deleteFn(ctx, id, userID)
 	}
 	return nil
 }
@@ -66,6 +66,10 @@ func (m *mockArticleRepo) SearchByTitle(ctx context.Context, userID, query strin
 		return m.searchFn(ctx, userID, query, page, perPage)
 	}
 	return &repository.ListArticlesResult{}, nil
+}
+
+func (m *mockArticleRepo) ExistsByUserAndURL(ctx context.Context, userID, url string) (bool, error) {
+	return false, nil
 }
 
 type mockTaskRepo struct {
@@ -121,6 +125,10 @@ func (m *mockQuotaService) CheckAndIncrement(ctx context.Context, userID string)
 	if m.checkFn != nil {
 		return m.checkFn(ctx, userID)
 	}
+	return nil
+}
+
+func (m *mockQuotaService) DecrementQuota(ctx context.Context, userID string) error {
 	return nil
 }
 

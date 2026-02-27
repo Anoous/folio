@@ -14,9 +14,10 @@ type articleCreator interface {
 	Create(ctx context.Context, p repository.CreateArticleParams) (*domain.Article, error)
 	GetByID(ctx context.Context, id string) (*domain.Article, error)
 	ListByUser(ctx context.Context, p repository.ListArticlesParams) (*repository.ListArticlesResult, error)
-	Update(ctx context.Context, id string, p repository.UpdateArticleParams) error
-	Delete(ctx context.Context, id string) error
+	Update(ctx context.Context, id string, userID string, p repository.UpdateArticleParams) error
+	Delete(ctx context.Context, id string, userID string) error
 	SearchByTitle(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error)
+	ExistsByUserAndURL(ctx context.Context, userID, url string) (bool, error)
 }
 
 // taskCreator is the subset of TaskRepo used by ArticleService.
@@ -38,6 +39,7 @@ type categoryGetter interface {
 // quotaChecker is the subset of QuotaService used by ArticleService.
 type quotaChecker interface {
 	CheckAndIncrement(ctx context.Context, userID string) error
+	DecrementQuota(ctx context.Context, userID string) error
 }
 
 // taskEnqueuer abstracts the asynq.Client for enqueueing tasks.

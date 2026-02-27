@@ -11,7 +11,7 @@ final class CategoryRepository {
     /// Fetch all categories
     func fetchAll() throws -> [Folio.Category] {
         let descriptor = FetchDescriptor<Folio.Category>(
-            sortBy: [SortDescriptor(\.createdAt)]
+            sortBy: [SortDescriptor(\.sortOrder)]
         )
         return try context.fetch(descriptor)
     }

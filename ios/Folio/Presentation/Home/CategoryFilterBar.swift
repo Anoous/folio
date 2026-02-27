@@ -4,6 +4,13 @@ import SwiftData
 struct CategoryFilterBar: View {
     @Binding var selectedCategory: Folio.Category?
     let categories: [Folio.Category]
+    let articles: [Article]
+
+    /// Categories that have at least one article assigned
+    private var categoriesWithArticles: [Folio.Category] {
+        let usedCategoryIDs = Set(articles.compactMap { $0.category?.id })
+        return categories.filter { usedCategoryIDs.contains($0.id) }
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -18,7 +25,7 @@ struct CategoryFilterBar: View {
                     }
                 }
 
-                ForEach(categories.filter { $0.articleCount > 0 }) { category in
+                ForEach(categoriesWithArticles) { category in
                     filterChip(
                         title: category.localizedName,
                         icon: category.icon,

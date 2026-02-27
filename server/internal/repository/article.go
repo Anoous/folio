@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -207,11 +208,17 @@ type CrawlResult struct {
 }
 
 func (r *ArticleRepo) UpdateCrawlResult(ctx context.Context, id string, cr CrawlResult) error {
-	wordCount := len([]rune(cr.Markdown))
+	wordCount := countWords(cr.Markdown)
 	_, err := r.pool.Exec(ctx, `
 		UPDATE articles SET
-			title = $1, author = $2, site_name = $3, markdown_content = $4,
-			cover_image_url = $5, language = $6, favicon_url = $7, word_count = $8
+			title = COALESCE(NULLIF($1, ''), title),
+			author = COALESCE(NULLIF($2, ''), author),
+			site_name = COALESCE(NULLIF($3, ''), site_name),
+			markdown_content = $4,
+			cover_image_url = COALESCE(NULLIF($5, ''), cover_image_url),
+			language = COALESCE(NULLIF($6, ''), language),
+			favicon_url = COALESCE(NULLIF($7, ''), favicon_url),
+			word_count = $8
 		WHERE id = $9`,
 		truncateUTF8(cr.Title, 500), truncateUTF8(cr.Author, 200), truncateUTF8(cr.SiteName, 200), cr.Markdown,
 		truncateUTF8(cr.CoverImage, 500), truncateUTF8(cr.Language, 10), truncateUTF8(cr.FaviconURL, 500), wordCount, id)
@@ -219,6 +226,11 @@ func (r *ArticleRepo) UpdateCrawlResult(ctx context.Context, id string, cr Crawl
 		return fmt.Errorf("update crawl result: %w", err)
 	}
 	return nil
+}
+
+// countWords counts whitespace-separated words in text.
+func countWords(text string) int {
+	return len(strings.Fields(text))
 }
 
 // truncateUTF8 truncates s to at most maxLen runes.
@@ -254,7 +266,7 @@ func (r *ArticleRepo) UpdateAIResult(ctx context.Context, id string, ai AIResult
 }
 
 func (r *ArticleRepo) UpdateMarkdownContent(ctx context.Context, id string, markdown string) error {
-	wordCount := len([]rune(markdown))
+	wordCount := countWords(markdown)
 	_, err := r.pool.Exec(ctx,
 		`UPDATE articles SET markdown_content = $1, word_count = $2 WHERE id = $3`,
 		markdown, wordCount, id)
@@ -270,7 +282,7 @@ type UpdateArticleParams struct {
 	ReadProgress *float64 `json:"read_progress,omitempty"`
 }
 
-func (r *ArticleRepo) Update(ctx context.Context, id string, p UpdateArticleParams) error {
+func (r *ArticleRepo) Update(ctx context.Context, id string, userID string, p UpdateArticleParams) error {
 	setClauses := ""
 	args := []any{}
 	argIdx := 1
@@ -297,8 +309,8 @@ func (r *ArticleRepo) Update(ctx context.Context, id string, p UpdateArticlePara
 
 	// Remove trailing comma+space
 	setClauses = setClauses[:len(setClauses)-2]
-	query := fmt.Sprintf("UPDATE articles SET %s WHERE id = $%d", setClauses, argIdx)
-	args = append(args, id)
+	query := fmt.Sprintf("UPDATE articles SET %s WHERE id = $%d AND user_id = $%d", setClauses, argIdx, argIdx+1)
+	args = append(args, id, userID)
 
 	_, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
@@ -307,8 +319,19 @@ func (r *ArticleRepo) Update(ctx context.Context, id string, p UpdateArticlePara
 	return nil
 }
 
-func (r *ArticleRepo) Delete(ctx context.Context, id string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM articles WHERE id = $1`, id)
+func (r *ArticleRepo) ExistsByUserAndURL(ctx context.Context, userID, url string) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM articles WHERE user_id = $1 AND url = $2)`,
+		userID, url).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check article exists: %w", err)
+	}
+	return exists, nil
+}
+
+func (r *ArticleRepo) Delete(ctx context.Context, id string, userID string) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM articles WHERE id = $1 AND user_id = $2`, id, userID)
 	if err != nil {
 		return fmt.Errorf("delete article: %w", err)
 	}
@@ -323,7 +346,8 @@ func (r *ArticleRepo) SearchByTitle(ctx context.Context, userID, query string, p
 		perPage = 20
 	}
 	offset := (page - 1) * perPage
-	pattern := "%" + query + "%"
+	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
+	pattern := "%" + escaped + "%"
 
 	var total int
 	err := r.pool.QueryRow(ctx,

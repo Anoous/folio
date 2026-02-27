@@ -32,6 +32,9 @@ func (h *SearchHandler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	if perPage < 1 {
 		perPage = 20
 	}
+	if perPage > 100 {
+		perPage = 100
+	}
 
 	result, err := h.articleService.Search(r.Context(), userID, query, page, perPage)
 	if err != nil {

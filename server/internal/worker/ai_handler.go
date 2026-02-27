@@ -8,6 +8,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"folio-server/internal/client"
+	"folio-server/internal/domain"
 	"folio-server/internal/repository"
 )
 
@@ -55,6 +56,8 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	})
 	if err != nil {
 		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
+		h.articleRepo.SetError(ctx, p.ArticleID, err.Error())
+		h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusFailed)
 		return fmt.Errorf("ai analyze failed: %w", err)
 	}
 

@@ -21,8 +21,8 @@ final class ReaderViewModel {
     var isLoadingContent: Bool = false
     var contentLoadError: String?
 
-    /// Characters per minute for reading time estimation.
-    private static let charsPerMinute: Double = 400
+    /// Words per minute for reading time estimation.
+    private static let wordsPerMinute: Double = 250
 
     // MARK: - Initialization
 
@@ -38,9 +38,15 @@ final class ReaderViewModel {
     // MARK: - Word Count & Reading Time
 
     private func calculateWordCount() {
-        let content = article.markdownContent ?? ""
-        wordCount = content.count
-        estimatedReadTimeMinutes = max(1, Int(ceil(Double(wordCount) / Self.charsPerMinute)))
+        if article.wordCount > 0 {
+            wordCount = article.wordCount
+        } else {
+            let content = article.markdownContent ?? ""
+            // Count words: split by whitespace for mixed English/CJK text
+            let components = content.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+            wordCount = components.count
+        }
+        estimatedReadTimeMinutes = max(1, Int(ceil(Double(wordCount) / Self.wordsPerMinute)))
     }
 
     // MARK: - Fetch Content from Server

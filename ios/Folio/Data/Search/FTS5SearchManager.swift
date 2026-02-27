@@ -20,7 +20,14 @@ final class FTS5SearchManager {
     }
 
     init(inMemory: Bool = true) throws {
-        guard sqlite3_open(":memory:", &db) == SQLITE_OK else {
+        let path: String
+        if inMemory {
+            path = ":memory:"
+        } else {
+            let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            path = cacheDir.appendingPathComponent("folio_fts5.db").path
+        }
+        guard sqlite3_open(path, &db) == SQLITE_OK else {
             throw FTS5Error.cannotOpenDatabase
         }
         try createFTS5Table()
@@ -84,12 +91,28 @@ final class FTS5SearchManager {
         }
     }
 
+    // MARK: - Helpers (Query Safety)
+
+    private static func sanitizeFTSQuery(_ query: String) -> String {
+        // Remove FTS5 special syntax characters
+        let specialChars = CharacterSet(charactersIn: "\"()*:^{}")
+        let cleaned = query.unicodeScalars.filter { !specialChars.contains($0) }
+        return String(cleaned)
+    }
+
+    private func columnText(_ stmt: OpaquePointer?, _ index: Int32) -> String {
+        guard let cString = sqlite3_column_text(stmt, index) else { return "" }
+        return String(cString: cString)
+    }
+
     // MARK: - Search
 
     func search(query: String, limit: Int = 20) throws -> [SearchResult] {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
 
-        let ftsQuery = query.split(separator: " ").map { "\($0)*" }.joined(separator: " ")
+        let sanitized = Self.sanitizeFTSQuery(query)
+        let ftsQuery = sanitized.split(separator: " ").map { "\($0)*" }.joined(separator: " ")
+        guard !ftsQuery.isEmpty else { return [] }
 
         let sql = """
         SELECT article_id,
@@ -111,7 +134,7 @@ final class FTS5SearchManager {
 
         var results: [SearchResult] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
-            let idString = String(cString: sqlite3_column_text(stmt, 0))
+            let idString = columnText(stmt, 0)
             let rank = sqlite3_column_double(stmt, 1)
             if let uuid = UUID(uuidString: idString) {
                 results.append(SearchResult(articleID: uuid, rank: rank))
@@ -123,7 +146,9 @@ final class FTS5SearchManager {
     func searchWithHighlight(query: String, limit: Int = 20) throws -> [SearchResult] {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
 
-        let ftsQuery = query.split(separator: " ").map { "\($0)*" }.joined(separator: " ")
+        let sanitized = Self.sanitizeFTSQuery(query)
+        let ftsQuery = sanitized.split(separator: " ").map { "\($0)*" }.joined(separator: " ")
+        guard !ftsQuery.isEmpty else { return [] }
 
         let sql = """
         SELECT article_id,
@@ -146,9 +171,9 @@ final class FTS5SearchManager {
 
         var results: [SearchResult] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
-            let idString = String(cString: sqlite3_column_text(stmt, 0))
+            let idString = columnText(stmt, 0)
             let rank = sqlite3_column_double(stmt, 1)
-            let hlTitle = String(cString: sqlite3_column_text(stmt, 2))
+            let hlTitle = columnText(stmt, 2)
             if let uuid = UUID(uuidString: idString) {
                 var result = SearchResult(articleID: uuid, rank: rank)
                 result.highlightedTitle = hlTitle
@@ -161,7 +186,9 @@ final class FTS5SearchManager {
     func searchWithSnippet(query: String, limit: Int = 20) throws -> [SearchResult] {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
 
-        let ftsQuery = query.split(separator: " ").map { "\($0)*" }.joined(separator: " ")
+        let sanitized = Self.sanitizeFTSQuery(query)
+        let ftsQuery = sanitized.split(separator: " ").map { "\($0)*" }.joined(separator: " ")
+        guard !ftsQuery.isEmpty else { return [] }
 
         let sql = """
         SELECT article_id,
@@ -184,9 +211,9 @@ final class FTS5SearchManager {
 
         var results: [SearchResult] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
-            let idString = String(cString: sqlite3_column_text(stmt, 0))
+            let idString = columnText(stmt, 0)
             let rank = sqlite3_column_double(stmt, 1)
-            let snip = String(cString: sqlite3_column_text(stmt, 2))
+            let snip = columnText(stmt, 2)
             if let uuid = UUID(uuidString: idString) {
                 var result = SearchResult(articleID: uuid, rank: rank)
                 result.snippet = snip

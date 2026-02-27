@@ -24,8 +24,14 @@ final class KeyChainManager {
     func saveTokens(access: String, refresh: String) throws {
         do {
             try keychain.set(access, key: Keys.accessToken)
+        } catch {
+            throw KeychainError.saveFailed
+        }
+        do {
             try keychain.set(refresh, key: Keys.refreshToken)
         } catch {
+            // Roll back access token on failure
+            try? keychain.remove(Keys.accessToken)
             throw KeychainError.saveFailed
         }
     }

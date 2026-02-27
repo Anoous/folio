@@ -61,7 +61,7 @@ final class HomeViewModel {
         syncError = nil
 
         do {
-            let response = try await apiClient.listArticles(page: 1, perPage: 20, status: "ready")
+            let response = try await apiClient.listArticles(page: 1, perPage: 50)
             let needsDetail = mergeServerArticles(response.data)
             await fetchMissingContent(needsDetail)
         } catch {
@@ -317,6 +317,14 @@ final class HomeViewModel {
         var descriptor = FetchDescriptor<Article>(
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
+
+        // Apply category filter at predicate level for correct pagination
+        if let categoryID = selectedCategory?.id {
+            descriptor.predicate = #Predicate<Article> { article in
+                article.category?.id == categoryID
+            }
+        }
+
         descriptor.fetchLimit = pageSize
         descriptor.fetchOffset = currentPage * pageSize
 
@@ -325,10 +333,8 @@ final class HomeViewModel {
             return
         }
 
-        // Apply filters
-        if let category = selectedCategory {
-            fetched = fetched.filter { $0.category?.id == category.id }
-        }
+        // Tag filtering must remain post-fetch because SwiftData #Predicate
+        // does not support relationship collection queries.
         if !selectedTags.isEmpty {
             let tagIDs = Set(selectedTags.map(\.id))
             fetched = fetched.filter { article in

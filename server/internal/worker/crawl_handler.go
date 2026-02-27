@@ -22,6 +22,7 @@ type scraper interface {
 type crawlArticleRepo interface {
 	GetByID(ctx context.Context, id string) (*domain.Article, error)
 	UpdateCrawlResult(ctx context.Context, id string, cr repository.CrawlResult) error
+	UpdateStatus(ctx context.Context, id string, status domain.ArticleStatus) error
 	SetError(ctx context.Context, id string, errMsg string) error
 }
 
@@ -70,6 +71,11 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	// Mark crawl started
 	if err := h.taskRepo.SetCrawlStarted(ctx, p.TaskID); err != nil {
 		return fmt.Errorf("set crawl started: %w", err)
+	}
+
+	// Set article status to processing
+	if err := h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusProcessing); err != nil {
+		return fmt.Errorf("update article status to processing: %w", err)
 	}
 
 	// Scrape

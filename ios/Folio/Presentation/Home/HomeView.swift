@@ -144,7 +144,7 @@ struct HomeView: View {
                 viewModel?.fetchArticles()
             }
             if searchViewModel == nil {
-                guard let manager = try? FTS5SearchManager(inMemory: true) else { return }
+                guard let manager = try? FTS5SearchManager(inMemory: false) else { return }
                 let svm = SearchViewModel(searchManager: manager, context: modelContext)
                 searchViewModel = svm
                 svm.loadPopularTags()
@@ -273,7 +273,8 @@ struct HomeView: View {
                             viewModel?.fetchArticles()
                         }
                     ),
-                    categories: categories
+                    categories: categories,
+                    articles: articles
                 )
             }
 

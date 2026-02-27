@@ -62,14 +62,16 @@ func (r *TagRepo) Delete(ctx context.Context, id string) error {
 }
 
 func (r *TagRepo) AttachToArticle(ctx context.Context, articleID, tagID string) error {
-	_, err := r.pool.Exec(ctx, `
+	ct, err := r.pool.Exec(ctx, `
 		INSERT INTO article_tags (article_id, tag_id) VALUES ($1, $2)
 		ON CONFLICT DO NOTHING`, articleID, tagID)
 	if err != nil {
 		return fmt.Errorf("attach tag: %w", err)
 	}
-	// Increment counter
-	r.pool.Exec(ctx, `UPDATE tags SET article_count = article_count + 1 WHERE id = $1`, tagID)
+	// Only increment counter if a row was actually inserted
+	if ct.RowsAffected() > 0 {
+		r.pool.Exec(ctx, `UPDATE tags SET article_count = article_count + 1 WHERE id = $1`, tagID)
+	}
 	return nil
 }
 

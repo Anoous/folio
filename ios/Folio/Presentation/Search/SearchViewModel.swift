@@ -49,6 +49,19 @@ final class SearchViewModel {
 
         loadSearchHistory()
         setupDebounce()
+        rebuildIndex()
+    }
+
+    // MARK: - Index Management
+
+    /// Rebuild FTS5 index from all local articles.
+    func rebuildIndex() {
+        do {
+            let allArticles = try articleRepository.fetchAllForIndex()
+            try searchManager.rebuildAll(articles: allArticles)
+        } catch {
+            // Index rebuild failed — search will return empty until next rebuild
+        }
     }
 
     // MARK: - Debounce Setup

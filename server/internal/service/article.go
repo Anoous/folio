@@ -54,6 +54,13 @@ type SubmitURLResponse struct {
 }
 
 func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req SubmitURLRequest) (*SubmitURLResponse, error) {
+	// Check for duplicate URL before consuming quota
+	if exists, err := s.articleRepo.ExistsByUserAndURL(ctx, userID, req.URL); err != nil {
+		return nil, fmt.Errorf("check duplicate: %w", err)
+	} else if exists {
+		return nil, ErrDuplicateURL
+	}
+
 	// Check quota
 	if err := s.quotaService.CheckAndIncrement(ctx, userID); err != nil {
 		return nil, err
@@ -74,6 +81,8 @@ func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req Submi
 		WordCount:       req.WordCount,
 	})
 	if err != nil {
+		// Rollback quota on creation failure
+		_ = s.quotaService.DecrementQuota(ctx, userID)
 		return nil, fmt.Errorf("create article: %w", err)
 	}
 
@@ -152,7 +161,7 @@ func (s *ArticleService) Update(ctx context.Context, userID, articleID string, p
 	if article.UserID != userID {
 		return ErrForbidden
 	}
-	return s.articleRepo.Update(ctx, articleID, params)
+	return s.articleRepo.Update(ctx, articleID, userID, params)
 }
 
 func (s *ArticleService) Delete(ctx context.Context, userID, articleID string) error {
@@ -166,7 +175,7 @@ func (s *ArticleService) Delete(ctx context.Context, userID, articleID string) e
 	if article.UserID != userID {
 		return ErrForbidden
 	}
-	return s.articleRepo.Delete(ctx, articleID)
+	return s.articleRepo.Delete(ctx, articleID, userID)
 }
 
 func (s *ArticleService) Search(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error) {

@@ -73,7 +73,7 @@ final class OfflineQueueManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testProcessFailed_marksAsFailed() async throws {
+    func testProcessFailed_keepsStatusForRetry() async throws {
         let a = Article(url: "https://example.com/fail")
         a.status = .pending
         context.insert(a)
@@ -85,7 +85,8 @@ final class OfflineQueueManagerTests: XCTestCase {
         }
 
         await manager.processPendingArticles()
-        XCTAssertEqual(a.status, .failed)
+        // Transient failures keep original status for retry, not marked as failed
+        XCTAssertEqual(a.status, .pending)
     }
 
     @MainActor

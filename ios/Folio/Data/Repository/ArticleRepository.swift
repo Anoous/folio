@@ -26,7 +26,8 @@ final class ArticleRepository {
         return article
     }
 
-    /// Paginated fetch with optional filtering
+    /// Paginated fetch with optional filtering.
+    /// Filters are applied at the predicate level to ensure correct pagination.
     func fetchAll(
         category: Folio.Category? = nil,
         tags: [Tag] = [],
@@ -37,15 +38,20 @@ final class ArticleRepository {
         var descriptor = FetchDescriptor<Article>(
             sortBy: [SortDescriptor(\.createdAt, order: sortBy)]
         )
+
+        if let categoryID = category?.id {
+            descriptor.predicate = #Predicate<Article> { article in
+                article.category?.id == categoryID
+            }
+        }
+
         descriptor.fetchLimit = limit
         descriptor.fetchOffset = offset
 
         var articles = try context.fetch(descriptor)
 
-        if let category {
-            articles = articles.filter { $0.category?.id == category.id }
-        }
-
+        // Tag filtering must remain post-fetch because SwiftData #Predicate
+        // does not support relationship collection queries (contains/intersects).
         if !tags.isEmpty {
             let tagIDs = Set(tags.map(\.id))
             articles = articles.filter { article in
@@ -115,6 +121,14 @@ final class ArticleRepository {
         article.status = status
         article.updatedAt = Date()
         try context.save()
+    }
+
+    /// Fetch all articles (for search index rebuild)
+    func fetchAllForIndex() throws -> [Article] {
+        let descriptor = FetchDescriptor<Article>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor)
     }
 
     /// Count articles saved in the current calendar month

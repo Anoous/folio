@@ -6,8 +6,8 @@ final class SyncService {
     private let apiClient: APIClient
     private let context: ModelContext
 
-    private static let pollMaxAttempts = 30
-    private static let pollIntervalNanoseconds: UInt64 = 3_000_000_000
+    private static let pollMaxAttempts = 10
+    private static let pollIntervalNanoseconds: UInt64 = 5_000_000_000
 
     init(apiClient: APIClient = .shared, context: ModelContext) {
         self.apiClient = apiClient
@@ -45,10 +45,21 @@ final class SyncService {
                 Task {
                     await self.pollTask(taskId: taskId, articleLocalId: localID)
                 }
-            } catch APIError.quotaExceeded {
-                article.status = .failed
-                article.fetchError = "Monthly quota exceeded"
-                results[article.id] = false
+            } catch let error as APIError {
+                switch error {
+                case .serverMessage(let msg) where msg.contains("already saved"):
+                    // Server already has this URL — mark as synced
+                    article.syncState = .synced
+                    article.status = .processing
+                    results[article.id] = true
+                case .quotaExceeded:
+                    article.status = .failed
+                    article.fetchError = "Monthly quota exceeded"
+                    results[article.id] = false
+                default:
+                    // Keep pending for retry on next network event
+                    results[article.id] = false
+                }
             } catch {
                 // Keep pending for retry on next network event
                 results[article.id] = false
@@ -198,5 +209,63 @@ final class SyncService {
     func performFullSync() async {
         await syncCategories()
         await syncTags()
+        await syncArticles()
+    }
+
+    // MARK: - Article Sync
+
+    private func syncArticles() async {
+        do {
+            let response = try await apiClient.listArticles(page: 1, perPage: 50)
+            let articleRepo = ArticleRepository(context: context)
+            let tagRepo = TagRepository(context: context)
+            let categoryRepo = CategoryRepository(context: context)
+
+            for dto in response.data {
+                let article: Article
+                if let existing = try? articleRepo.fetchByServerID(dto.id) {
+                    existing.updateFromDTO(dto)
+                    article = existing
+                } else if let byURL = try? articleRepo.fetchByURL(dto.url) {
+                    byURL.updateFromDTO(dto)
+                    article = byURL
+                } else {
+                    let newArticle = Article.fromDTO(dto)
+                    context.insert(newArticle)
+                    article = newArticle
+                }
+
+                // Resolve category
+                if let categoryDTO = dto.category {
+                    if let localCategory = try? categoryRepo.fetchBySlug(categoryDTO.slug) {
+                        localCategory.updateFromDTO(categoryDTO)
+                        article.category = localCategory
+                    }
+                }
+
+                // Resolve tags
+                if let tagDTOs = dto.tags {
+                    var resolvedTags: [Tag] = []
+                    for tagDTO in tagDTOs {
+                        if let existing = try? tagRepo.fetchByServerID(tagDTO.id) {
+                            existing.updateFromDTO(tagDTO)
+                            resolvedTags.append(existing)
+                        } else if let byName = try? tagRepo.fetchByName(tagDTO.name) {
+                            byName.updateFromDTO(tagDTO)
+                            resolvedTags.append(byName)
+                        } else {
+                            let newTag = Tag.fromDTO(tagDTO)
+                            context.insert(newTag)
+                            resolvedTags.append(newTag)
+                        }
+                    }
+                    article.tags = resolvedTags
+                }
+            }
+
+            try? context.save()
+        } catch {
+            // Article sync failed — will retry on next refresh
+        }
     }
 }

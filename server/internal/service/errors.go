@@ -6,4 +6,5 @@ var (
 	ErrQuotaExceeded = errors.New("monthly quota exceeded")
 	ErrNotFound      = errors.New("not found")
 	ErrForbidden     = errors.New("forbidden")
+	ErrDuplicateURL  = errors.New("url already saved")
 )

@@ -34,7 +34,13 @@ class ShareViewController: UIViewController {
                     provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] item, _ in
                         if let text = item as? String {
                             Task { @MainActor in
-                                self?.saveURL(text)
+                                // Try to extract a URL from plain text
+                                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                                if let url = URL(string: trimmed), let scheme = url.scheme, scheme.hasPrefix("http") {
+                                    self?.saveURL(trimmed)
+                                } else {
+                                    self?.dismiss()
+                                }
                             }
                         }
                     }

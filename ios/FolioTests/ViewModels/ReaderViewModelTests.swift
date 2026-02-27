@@ -60,7 +60,8 @@ final class ReaderViewModelTests: XCTestCase {
     @MainActor
     func testMetaInfo_estimatedReadTime() throws {
         let article = Article(url: "https://example.com", title: "Test")
-        article.markdownContent = String(repeating: "字", count: 800) // ~2 min at 400 char/min
+        // 500 words at 250 words/min = 2 min
+        article.markdownContent = (1...500).map { "word\($0)" }.joined(separator: " ")
         context.insert(article)
 
         let vm = ReaderViewModel(article: article, context: context)

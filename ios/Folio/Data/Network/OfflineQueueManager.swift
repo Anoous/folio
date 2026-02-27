@@ -68,9 +68,8 @@ final class OfflineQueueManager {
                 let succeeded = results[article.id] ?? false
                 if succeeded {
                     article.status = .processing
-                } else if article.status != .clientReady {
-                    article.status = .failed
                 }
+                // Don't mark as failed on transient errors — keep status for retry
             }
         } else {
             for article in pending {

@@ -243,6 +243,7 @@ type mockCrawlArticleRepo struct {
 	setErrorFn         func(ctx context.Context, id string, errMsg string) error
 	updateCrawlCalls   []repository.CrawlResult
 	setErrorCalls      []struct{ ID, ErrMsg string }
+	updateStatusCalls  []struct{ ID string; Status domain.ArticleStatus }
 }
 
 func (m *mockCrawlArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, error) {
@@ -257,6 +258,11 @@ func (m *mockCrawlArticleRepo) UpdateCrawlResult(ctx context.Context, id string,
 	if m.updateCrawlFn != nil {
 		return m.updateCrawlFn(ctx, id, cr)
 	}
+	return nil
+}
+
+func (m *mockCrawlArticleRepo) UpdateStatus(ctx context.Context, id string, status domain.ArticleStatus) error {
+	m.updateStatusCalls = append(m.updateStatusCalls, struct{ ID string; Status domain.ArticleStatus }{id, status})
 	return nil
 }
 

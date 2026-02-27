@@ -22,31 +22,19 @@ type QuotaInfo struct {
 }
 
 func (s *QuotaService) CheckAndIncrement(ctx context.Context, userID string) error {
-	user, err := s.userRepo.GetByID(ctx, userID)
+	newCount, err := s.userRepo.AtomicResetAndIncrement(ctx, userID)
 	if err != nil {
 		return err
 	}
-	if user == nil {
-		return ErrNotFound
-	}
-
-	// Reset if new month
-	if user.QuotaResetAt != nil {
-		now := time.Now()
-		resetAt := *user.QuotaResetAt
-		if now.Year() != resetAt.Year() || now.Month() != resetAt.Month() {
-			if err := s.userRepo.ResetMonthCount(ctx, userID); err != nil {
-				return err
-			}
-			user.CurrentMonthCount = 0
-		}
-	}
-
-	if user.CurrentMonthCount >= user.MonthlyQuota {
+	if newCount < 0 {
 		return ErrQuotaExceeded
 	}
+	return nil
+}
 
-	return s.userRepo.IncrementMonthCount(ctx, userID)
+// DecrementQuota rolls back one quota unit (e.g. when article creation fails after quota was consumed).
+func (s *QuotaService) DecrementQuota(ctx context.Context, userID string) error {
+	return s.userRepo.DecrementMonthCount(ctx, userID)
 }
 
 func (s *QuotaService) GetQuotaInfo(ctx context.Context, userID string) (*QuotaInfo, error) {

@@ -5,21 +5,23 @@ import SwiftData
 
 extension Article {
     /// Update local article fields from a server DTO and mark as synced.
+    /// Only overwrites string fields when the server value is non-nil,
+    /// preserving client-extracted data if the server hasn't finished processing.
     func updateFromDTO(_ dto: ArticleDTO) {
         serverID = dto.id
         url = dto.url
-        title = dto.title
-        author = dto.author
-        siteName = dto.siteName
-        faviconURL = dto.faviconUrl
-        coverImageURL = dto.coverImageUrl
+        if let v = dto.title { title = v }
+        if let v = dto.author { author = v }
+        if let v = dto.siteName { siteName = v }
+        if let v = dto.faviconUrl { faviconURL = v }
+        if let v = dto.coverImageUrl { coverImageURL = v }
         if let content = dto.markdownContent, !content.isEmpty {
             markdownContent = content
             extractionSource = .server
         }
-        summary = dto.summary
-        keyPoints = dto.keyPoints ?? []
-        aiConfidence = dto.aiConfidence ?? 0
+        if let v = dto.summary { summary = v }
+        keyPoints = dto.keyPoints ?? keyPoints
+        aiConfidence = dto.aiConfidence ?? aiConfidence
         statusRaw = dto.status
         sourceTypeRaw = dto.sourceType
         fetchError = dto.fetchError
@@ -30,9 +32,9 @@ extension Article {
         if let serverDate = dto.lastReadAt {
             lastReadAt = lastReadAt.map { max($0, serverDate) } ?? serverDate
         }
-        publishedAt = dto.publishedAt
-        wordCount = dto.wordCount
-        language = dto.language
+        if let v = dto.publishedAt { publishedAt = v }
+        if dto.wordCount > 0 { wordCount = dto.wordCount }
+        if let v = dto.language { language = v }
         updatedAt = dto.updatedAt
         syncState = .synced
     }

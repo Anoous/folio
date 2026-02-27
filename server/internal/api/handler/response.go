@@ -26,6 +26,8 @@ func handleServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, "forbidden")
 	case errors.Is(err, service.ErrQuotaExceeded):
 		writeError(w, http.StatusTooManyRequests, "monthly quota exceeded")
+	case errors.Is(err, service.ErrDuplicateURL):
+		writeError(w, http.StatusConflict, "url already saved")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal error")
 	}

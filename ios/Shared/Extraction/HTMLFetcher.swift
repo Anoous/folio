@@ -24,6 +24,7 @@ struct HTMLFetcher {
         config.timeoutIntervalForRequest = Self.defaultTimeout
         config.timeoutIntervalForResource = Self.defaultTimeout
         let session = URLSession(configuration: config)
+        defer { session.finishTasksAndInvalidate() }
 
         let (data, response): (Data, URLResponse)
         do {

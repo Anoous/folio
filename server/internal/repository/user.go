@@ -109,3 +109,48 @@ func (r *UserRepo) ResetMonthCount(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+func (r *UserRepo) DecrementMonthCount(ctx context.Context, id string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE users SET current_month_count = GREATEST(current_month_count - 1, 0) WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("decrement month count: %w", err)
+	}
+	return nil
+}
+
+// AtomicResetAndIncrement resets the month count if needed and increments it
+// atomically. Returns the new count, or -1 if quota exceeded.
+func (r *UserRepo) AtomicResetAndIncrement(ctx context.Context, id string) (int, error) {
+	var newCount int
+	err := r.pool.QueryRow(ctx, `
+		UPDATE users SET
+			current_month_count = CASE
+				WHEN quota_reset_at IS NULL
+				     OR date_trunc('month', quota_reset_at) < date_trunc('month', NOW())
+				THEN 1
+				ELSE current_month_count + 1
+			END,
+			quota_reset_at = CASE
+				WHEN quota_reset_at IS NULL
+				     OR date_trunc('month', quota_reset_at) < date_trunc('month', NOW())
+				THEN NOW()
+				ELSE quota_reset_at
+			END
+		WHERE id = $1
+		  AND (
+			-- New month: always allow (reset to 1)
+			quota_reset_at IS NULL
+			OR date_trunc('month', quota_reset_at) < date_trunc('month', NOW())
+			-- Same month: check quota
+			OR current_month_count < monthly_quota
+		  )
+		RETURNING current_month_count`, id).Scan(&newCount)
+	if err == pgx.ErrNoRows {
+		return -1, nil // quota exceeded (WHERE clause didn't match)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("atomic reset and increment: %w", err)
+	}
+	return newCount, nil
+}

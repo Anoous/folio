@@ -39,9 +39,19 @@ final class AuthViewModel {
             let response = try await apiClient.refreshAuth()
             currentUser = response.user
             authState = .signedIn
+        } catch let error as APIError {
+            switch error {
+            case .unauthorized, .forbidden:
+                // Server explicitly rejected credentials — sign out
+                try? keychainManager.clearTokens()
+                authState = .signedOut
+            default:
+                // Network error or server unavailable — keep signed in with cached token
+                authState = .signedIn
+            }
         } catch {
-            try? keychainManager.clearTokens()
-            authState = .signedOut
+            // Network/other error — keep signed in with cached token
+            authState = .signedIn
         }
     }
 

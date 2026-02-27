@@ -284,6 +284,11 @@ final class APIClient {
             throw APIError.forbidden
         case 404:
             throw APIError.notFound
+        case 409:
+            if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
+                throw APIError.serverMessage(errorResponse.error)
+            }
+            throw APIError.serverMessage("Conflict")
         case 429:
             throw APIError.quotaExceeded
         default:
@@ -322,7 +327,8 @@ final class APIClient {
 
         let body = ["refresh_token": refresh]
 
-        guard let url = URL(string: "\(baseURL)/api/v1/auth/refresh") else {
+        guard let components = URLComponents(url: baseURL.appendingPathComponent("/api/v1/auth/refresh"), resolvingAgainstBaseURL: true),
+              let url = components.url else {
             throw APIError.invalidURL
         }
 

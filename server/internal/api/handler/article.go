@@ -81,6 +81,9 @@ func (h *ArticleHandler) HandleListArticles(w http.ResponseWriter, r *http.Reque
 	if perPage < 1 {
 		perPage = 20
 	}
+	if perPage > 100 {
+		perPage = 100
+	}
 
 	params := repository.ListArticlesParams{
 		UserID:  userID,
