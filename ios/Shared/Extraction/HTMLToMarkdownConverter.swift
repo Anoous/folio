@@ -84,8 +84,7 @@ struct HTMLToMarkdownConverter {
             return convertList(element, ordered: true)
 
         case "li":
-            let inner = convertElement(element).trimmedInline()
-            return inner
+            return convertElement(element).trimmedInline()
 
         case "blockquote":
             let inner = convertElement(element)
@@ -100,9 +99,6 @@ struct HTMLToMarkdownConverter {
 
         case "table":
             return convertTable(element)
-
-        case "div", "section", "article", "main", "span", "figure", "figcaption":
-            return convertElement(element)
 
         default:
             return convertElement(element)
@@ -151,11 +147,8 @@ struct HTMLToMarkdownConverter {
         let items = (try? element.select(":root > li")) ?? Elements()
         for (index, item) in items.array().enumerated() {
             let inner = convertElement(item).trimmedInline()
-            if ordered {
-                result += "\(index + 1). \(inner)\n"
-            } else {
-                result += "- \(inner)\n"
-            }
+            let bullet = ordered ? "\(index + 1)." : "-"
+            result += "\(bullet) \(inner)\n"
         }
         result += "\n"
         return result
@@ -210,17 +203,8 @@ struct HTMLToMarkdownConverter {
     // MARK: - Cleanup
 
     private func cleanMarkdown(_ text: String) -> String {
-        var result = text
-
-        // Collapse multiple blank lines to max 2 newlines
-        while result.contains("\n\n\n") {
-            result = result.replacingOccurrences(of: "\n\n\n", with: "\n\n")
-        }
-
-        // Trim leading/trailing whitespace
-        result = result.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return result
+        text.replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

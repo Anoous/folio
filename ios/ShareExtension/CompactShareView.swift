@@ -25,36 +25,21 @@ struct CompactShareView: View {
                     .font(Typography.listTitle)
 
             case .saved:
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 44))
-                    .foregroundStyle(Color.folio.success)
+                statusIcon("checkmark.circle.fill", color: Color.folio.success)
                 Text(String(localized: "share.saved", defaultValue: "Added to Folio"))
                     .font(Typography.listTitle)
                 Text(String(localized: "share.savedSubtitle", defaultValue: "AI will organize it in the background"))
                     .font(Typography.caption)
                     .foregroundStyle(Color.folio.textSecondary)
-                Button {
-                    if let url = URL(string: "folio://library") {
-                        openURL(url)
-                    }
-                    onDismiss()
-                } label: {
-                    Text(String(localized: "share.openApp", defaultValue: "Open Folio"))
-                        .font(Typography.caption)
-                        .foregroundStyle(Color.folio.accent)
-                }
+                openFolioButton
 
             case .duplicate:
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 44))
-                    .foregroundStyle(Color.folio.warning)
+                statusIcon("pin.fill", color: Color.folio.warning)
                 Text(String(localized: "share.duplicate", defaultValue: "Already saved"))
                     .font(Typography.listTitle)
 
             case .offline:
-                Image(systemName: "wifi.slash")
-                    .font(.system(size: 44))
-                    .foregroundStyle(Color.folio.textSecondary)
+                statusIcon("wifi.slash", color: Color.folio.textSecondary)
                 Text(String(localized: "share.offline", defaultValue: "Added to Folio"))
                     .font(Typography.listTitle)
                 Text(String(localized: "share.offlineSubtitle", defaultValue: "Content will be fetched when online"))
@@ -62,9 +47,7 @@ struct CompactShareView: View {
                     .foregroundStyle(Color.folio.textSecondary)
 
             case .quotaExceeded:
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 44))
-                    .foregroundStyle(Color.folio.error)
+                statusIcon("exclamationmark.triangle.fill", color: Color.folio.error)
                 Text(String(localized: "share.quotaExceeded", defaultValue: "Monthly limit reached"))
                     .font(Typography.listTitle)
                 Text(String(localized: "share.quotaExceededSubtitle", defaultValue: "Upgrade to Pro for unlimited saves"))
@@ -72,9 +55,7 @@ struct CompactShareView: View {
                     .foregroundStyle(Color.folio.textSecondary)
 
             case .quotaWarning(let remaining):
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 44))
-                    .foregroundStyle(Color.folio.success)
+                statusIcon("checkmark.circle.fill", color: Color.folio.success)
                 Text(String(localized: "share.saved", defaultValue: "Added to Folio"))
                     .font(Typography.listTitle)
                 HStack(spacing: Spacing.xxs) {
@@ -95,24 +76,32 @@ struct CompactShareView: View {
                     .foregroundStyle(Color.folio.textSecondary)
 
             case .extracted:
-                Image(systemName: "doc.richtext")
-                    .font(.system(size: 44))
-                    .foregroundStyle(Color.folio.success)
+                statusIcon("doc.richtext", color: Color.folio.success)
                 Text(String(localized: "share.extracted", defaultValue: "Article ready"))
                     .font(Typography.listTitle)
-                Button {
-                    if let url = URL(string: "folio://library") {
-                        openURL(url)
-                    }
-                    onDismiss()
-                } label: {
-                    Text(String(localized: "share.openApp", defaultValue: "Open Folio"))
-                        .font(Typography.caption)
-                        .foregroundStyle(Color.folio.accent)
-                }
+                openFolioButton
             }
         }
         .padding(Spacing.xl)
         .frame(maxWidth: .infinity)
+    }
+
+    private func statusIcon(_ name: String, color: Color) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 44))
+            .foregroundStyle(color)
+    }
+
+    private var openFolioButton: some View {
+        Button {
+            if let url = URL(string: "folio://library") {
+                openURL(url)
+            }
+            onDismiss()
+        } label: {
+            Text(String(localized: "share.openApp", defaultValue: "Open Folio"))
+                .font(Typography.caption)
+                .foregroundStyle(Color.folio.accent)
+        }
     }
 }

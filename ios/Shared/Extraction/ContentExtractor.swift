@@ -18,24 +18,20 @@ struct ContentExtractor {
             throw ExtractionError.invalidURL
         }
 
-        // Check memory before starting
         guard currentMemoryUsage() < Self.memoryLimitBytes else {
             throw ExtractionError.memoryLimitExceeded
         }
 
         return try await withThrowingTaskGroup(of: ExtractionResult.self) { group in
-            // Main extraction task
             group.addTask {
                 try await self.performExtraction(url: url)
             }
 
-            // Timeout task
             group.addTask {
                 try await Task.sleep(nanoseconds: UInt64(Self.totalTimeout * 1_000_000_000))
                 throw ExtractionError.timeout
             }
 
-            // Return first successful result or throw
             guard let result = try await group.next() else {
                 throw ExtractionError.timeout
             }
@@ -45,39 +41,21 @@ struct ContentExtractor {
     }
 
     private func performExtraction(url: URL) async throws -> ExtractionResult {
-        // Fetch HTML
-        let fetcher = HTMLFetcher()
         let html: String
-        do {
-            html = try await fetcher.fetch(url: url)
-        } catch {
-            throw ExtractionError.extractionFailed(error)
-        }
-
-        // Extract content using readability
-        let extractor = ReadabilityExtractor()
         let readability: ReadabilityResult
-        do {
-            readability = try extractor.extract(html: html, url: url)
-        } catch {
-            throw ExtractionError.extractionFailed(error)
-        }
-
-        // Convert HTML to Markdown
-        let converter = HTMLToMarkdownConverter()
         let markdown: String
+
         do {
-            markdown = try converter.convert(html: readability.contentHTML)
+            html = try await HTMLFetcher().fetch(url: url)
+            readability = try ReadabilityExtractor().extract(html: html, url: url)
+            markdown = try HTMLToMarkdownConverter().convert(html: readability.contentHTML)
         } catch {
             throw ExtractionError.extractionFailed(error)
         }
 
-        // Validate minimum content
         guard markdown.count >= Self.minimumContentLength else {
             throw ExtractionError.contentTooShort
         }
-
-        let wordCount = countWords(markdown)
 
         return ExtractionResult(
             title: readability.title,
@@ -85,7 +63,7 @@ struct ContentExtractor {
             siteName: readability.siteName,
             excerpt: readability.excerpt,
             markdownContent: markdown,
-            wordCount: wordCount,
+            wordCount: countWords(markdown),
             extractedAt: Date()
         )
     }

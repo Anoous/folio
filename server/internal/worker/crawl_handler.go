@@ -78,29 +78,13 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		// Fallback: check if article already has client-provided content
 		article, getErr := h.articleRepo.GetByID(ctx, p.ArticleID)
 		if getErr == nil && article != nil && article.MarkdownContent != nil && *article.MarkdownContent != "" {
-			// Client content available — mark crawl done and enqueue AI with client content
 			h.taskRepo.SetCrawlFinished(ctx, p.TaskID)
 
-			title := ""
-			if article.Title != nil {
-				title = *article.Title
-			}
-			source := ""
-			if article.SiteName != nil {
-				source = *article.SiteName
-			}
-			if source == "" {
-				source = "web"
-			}
-			author := ""
-			if article.Author != nil {
-				author = *article.Author
-			}
-
+			source := derefOrDefault(article.SiteName, "web")
 			aiTask := NewAIProcessTask(
 				p.ArticleID, p.TaskID, p.UserID,
-				title, *article.MarkdownContent,
-				source, author,
+				derefOrEmpty(article.Title), *article.MarkdownContent,
+				source, derefOrEmpty(article.Author),
 			)
 			if _, enqErr := h.asynqClient.EnqueueContext(ctx, aiTask); enqErr != nil {
 				return fmt.Errorf("enqueue ai task (client fallback): %w", enqErr)
@@ -108,13 +92,11 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 			return nil
 		}
 
-		// No client content — keep existing failure behavior
 		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
 		h.articleRepo.SetError(ctx, p.ArticleID, err.Error())
 		return fmt.Errorf("scrape failed: %w", err)
 	}
 
-	// Update article with crawl results
 	if err := h.articleRepo.UpdateCrawlResult(ctx, p.ArticleID, repository.CrawlResult{
 		Title:      result.Metadata.Title,
 		Author:     result.Metadata.Author,
@@ -128,10 +110,8 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("update crawl result: %w", err)
 	}
 
-	// Mark crawl finished
 	h.taskRepo.SetCrawlFinished(ctx, p.TaskID)
 
-	// Enqueue AI processing task
 	source := result.Metadata.SiteName
 	if source == "" {
 		source = "web"
@@ -153,6 +133,22 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 
 	return nil
+}
+
+// derefOrEmpty returns the dereferenced string or "" if the pointer is nil.
+func derefOrEmpty(s *string) string {
+	if s != nil {
+		return *s
+	}
+	return ""
+}
+
+// derefOrDefault returns the dereferenced string, or fallback if nil or empty.
+func derefOrDefault(s *string, fallback string) string {
+	if s != nil && *s != "" {
+		return *s
+	}
+	return fallback
 }
 
 var imageURLRegex = regexp.MustCompile(`!\[.*?\]\((https?://[^\s)]+)\)`)

@@ -28,11 +28,7 @@ extension Article {
         isArchived = dto.isArchived
         readProgress = max(readProgress, dto.readProgress)
         if let serverDate = dto.lastReadAt {
-            if let localDate = lastReadAt {
-                lastReadAt = max(localDate, serverDate)
-            } else {
-                lastReadAt = serverDate
-            }
+            lastReadAt = lastReadAt.map { max($0, serverDate) } ?? serverDate
         }
         publishedAt = dto.publishedAt
         wordCount = dto.wordCount

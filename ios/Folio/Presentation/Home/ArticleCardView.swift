@@ -77,14 +77,15 @@ struct ArticleCardView: View {
                 Spacer(minLength: 0)
             }
 
-            // Processing / Failed status bar
-            if article.status == .processing {
+            // Status bar
+            switch article.status {
+            case .processing:
                 statusInfoBar(
                     icon: "arrow.trianglehead.2.counterclockwise",
                     text: String(localized: "article.status.processing", defaultValue: "AI is analyzing this article..."),
                     color: Color.folio.warning
                 )
-            } else if article.status == .failed {
+            case .failed:
                 HStack(spacing: Spacing.xs) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.caption2)
@@ -108,19 +109,21 @@ struct ArticleCardView: View {
                     }
                 }
                 .padding(.top, Spacing.xxs)
-                .padding(.leading, Spacing.sm + 8) // align with content after badge
-            } else if article.status == .clientReady {
+                .padding(.leading, Spacing.sm + 8)
+            case .clientReady:
                 statusInfoBar(
                     icon: "doc.richtext",
                     text: String(localized: "article.status.clientReady", defaultValue: "Content ready, AI analyzing..."),
                     color: Color.folio.success
                 )
-            } else if article.status == .pending && article.syncState == .pendingUpload {
+            case .pending where article.syncState == .pendingUpload:
                 statusInfoBar(
                     icon: "arrow.up.icloud",
                     text: String(localized: "article.status.pendingUpload", defaultValue: "Waiting to upload..."),
                     color: Color.folio.textTertiary
                 )
+            default:
+                EmptyView()
             }
         }
         .padding(.vertical, Spacing.xs)

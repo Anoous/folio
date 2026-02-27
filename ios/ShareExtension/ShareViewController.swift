@@ -50,16 +50,10 @@ class ShareViewController: UIViewController {
     private func saveURL(_ urlString: String) {
         do {
             let schema = Schema([Article.self, Tag.self, Category.self])
-            let config: ModelConfiguration
-            if let _ = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.folio.app") {
-                config = ModelConfiguration(
-                    "Folio",
-                    schema: schema,
-                    groupContainer: .identifier("group.com.folio.app")
-                )
-            } else {
-                config = ModelConfiguration("Folio", schema: schema)
-            }
+            let hasAppGroup = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.folio.app") != nil
+            let config = hasAppGroup
+                ? ModelConfiguration("Folio", schema: schema, groupContainer: .identifier("group.com.folio.app"))
+                : ModelConfiguration("Folio", schema: schema)
             let container = try ModelContainer(for: schema, configurations: [config])
             let manager = SharedDataManager(context: container.mainContext)
 
@@ -121,23 +115,15 @@ class ShareViewController: UIViewController {
     }
 
     private func showState(_ state: ShareState) {
-        // Haptic feedback based on state
         switch state {
-        case .saved, .quotaWarning:
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.success)
-        case .extracted:
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.success)
+        case .saved, .quotaWarning, .extracted:
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
         case .duplicate:
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.warning)
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
         case .quotaExceeded:
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.error)
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
         case .offline:
-            let generator = UIImpactFeedbackGenerator(style: .light)
-            generator.impactOccurred()
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         case .saving, .extracting:
             break
         }

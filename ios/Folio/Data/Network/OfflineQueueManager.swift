@@ -63,36 +63,22 @@ final class OfflineQueueManager {
         guard let pending = try? context.fetch(descriptor), !pending.isEmpty else { return }
 
         if let processor = onProcessPending {
-            // M7: Call backend API
             let results = await processor(pending)
             for article in pending {
-                if let success = results[article.id] {
-                    if success {
-                        article.status = .processing
-                    } else {
-                        // Keep clientReady articles at clientReady on failure; mark pending as failed
-                        if article.status != .clientReady {
-                            article.status = .failed
-                        }
-                    }
-                } else {
-                    if article.status != .clientReady {
-                        article.status = .failed
-                    }
+                let succeeded = results[article.id] ?? false
+                if succeeded {
+                    article.status = .processing
+                } else if article.status != .clientReady {
+                    article.status = .failed
                 }
             }
         } else {
-            // Pre-M7: Mark as processing (placeholder)
             for article in pending {
                 article.status = .processing
             }
         }
 
-        article_save: do {
-            try context.save()
-        } catch {
-            // Save error, will retry on next network event
-        }
+        try? context.save()
 
         refreshPendingCount()
     }
