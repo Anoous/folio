@@ -61,7 +61,7 @@ func (m *mockArticleRepo) Delete(ctx context.Context, id string, userID string) 
 	return nil
 }
 
-func (m *mockArticleRepo) SearchByTitle(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error) {
+func (m *mockArticleRepo) Search(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error) {
 	if m.searchFn != nil {
 		return m.searchFn(ctx, userID, query, page, perPage)
 	}

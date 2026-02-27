@@ -73,6 +73,7 @@
 		860A1F57BC5A89FA11024E6E /* CompactShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A188A06C3CDE3BAF608F9539 /* CompactShareView.swift */; };
 		86C97AE5DD0FE6C736226A7D /* TableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F053C691B9E245B268D15251 /* TableView.swift */; };
 		8785B19FCABF8BD95A4B311A /* HTMLToMarkdownConverterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37A8DD2A2736DB0444C229C4 /* HTMLToMarkdownConverterTests.swift */; };
+		881BB78B428B2D07461619DD /* ArticleMerger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 474CF0D33CFF4F03AAAC3443 /* ArticleMerger.swift */; };
 		88244A394FF61FC79EB30654 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5ADE29C550B453BA853DDFD /* EmptyStateView.swift */; };
 		88AAD27FDC11814ECA361DCB /* ReadabilityExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 309C2FD401BBC90ECC2434FE /* ReadabilityExtractor.swift */; };
 		8E1A15EA32BD6A5B682A2C59 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = 0567FE10E5DD3099B4F90273 /* SwiftSoup */; };
@@ -198,6 +199,7 @@
 		4216C4C03920C144A6453AAA /* DateRelativeFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateRelativeFormatTests.swift; sourceTree = "<group>"; };
 		4262FBCFBF74F063C7B2307A /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		44D02ABED92A120F2F0EAE84 /* ContentExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentExtractorTests.swift; sourceTree = "<group>"; };
+		474CF0D33CFF4F03AAAC3443 /* ArticleMerger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleMerger.swift; sourceTree = "<group>"; };
 		495BDA963D79288EC295DA9B /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		4D21B5897AD7898900B99FAA /* CornerRadius.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CornerRadius.swift; sourceTree = "<group>"; };
 		4D34AADE7B610BF96EAEEC32 /* QuotaCheckTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaCheckTests.swift; sourceTree = "<group>"; };
@@ -635,6 +637,7 @@
 		D00CB4EF65C8C1AA0618DCAD /* Sync */ = {
 			isa = PBXGroup;
 			children = (
+				474CF0D33CFF4F03AAAC3443 /* ArticleMerger.swift */,
 				275619E05D7C8FE0DDE936F8 /* SyncService.swift */,
 			);
 			path = Sync;
@@ -950,6 +953,7 @@
 				EDF3F8A2FB9F7FAAD1566577 /* AppDelegate.swift in Sources */,
 				06562C0449E24B52CC26DA06 /* Article.swift in Sources */,
 				AF496B39DFC8253B5A33DD31 /* ArticleCardView.swift in Sources */,
+				881BB78B428B2D07461619DD /* ArticleMerger.swift in Sources */,
 				F5BE0ECDAAACF5B2E049067E /* ArticleMetaInfoView.swift in Sources */,
 				700EBAE0A4FF2CEB48DAEC19 /* ArticleRepository.swift in Sources */,
 				F342756FA9C74A480F5FE1C0 /* AuthViewModel.swift in Sources */,

@@ -214,11 +214,11 @@ func (r *ArticleRepo) UpdateCrawlResult(ctx context.Context, id string, cr Crawl
 			title = COALESCE(NULLIF($1, ''), title),
 			author = COALESCE(NULLIF($2, ''), author),
 			site_name = COALESCE(NULLIF($3, ''), site_name),
-			markdown_content = $4,
+			markdown_content = COALESCE(NULLIF($4, ''), markdown_content),
 			cover_image_url = COALESCE(NULLIF($5, ''), cover_image_url),
 			language = COALESCE(NULLIF($6, ''), language),
 			favicon_url = COALESCE(NULLIF($7, ''), favicon_url),
-			word_count = $8
+			word_count = CASE WHEN NULLIF($4, '') IS NOT NULL THEN $8 ELSE word_count END
 		WHERE id = $9`,
 		truncateUTF8(cr.Title, 500), truncateUTF8(cr.Author, 200), truncateUTF8(cr.SiteName, 200), cr.Markdown,
 		truncateUTF8(cr.CoverImage, 500), truncateUTF8(cr.Language, 10), truncateUTF8(cr.FaviconURL, 500), wordCount, id)
@@ -338,7 +338,7 @@ func (r *ArticleRepo) Delete(ctx context.Context, id string, userID string) erro
 	return nil
 }
 
-func (r *ArticleRepo) SearchByTitle(ctx context.Context, userID, query string, page, perPage int) (*ListArticlesResult, error) {
+func (r *ArticleRepo) Search(ctx context.Context, userID, query string, page, perPage int) (*ListArticlesResult, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -351,7 +351,9 @@ func (r *ArticleRepo) SearchByTitle(ctx context.Context, userID, query string, p
 
 	var total int
 	err := r.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM articles WHERE user_id = $1 AND title ILIKE $2`,
+		`SELECT COUNT(*) FROM articles WHERE user_id = $1 AND (
+			title ILIKE $2 OR summary ILIKE $2 OR author ILIKE $2 OR site_name ILIKE $2
+		)`,
 		userID, pattern,
 	).Scan(&total)
 	if err != nil {
@@ -360,8 +362,13 @@ func (r *ArticleRepo) SearchByTitle(ctx context.Context, userID, query string, p
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, user_id, url, title, summary, site_name, source_type, created_at
-		FROM articles WHERE user_id = $1 AND title ILIKE $2
-		ORDER BY created_at DESC LIMIT $3 OFFSET $4`,
+		FROM articles WHERE user_id = $1 AND (
+			title ILIKE $2 OR summary ILIKE $2 OR author ILIKE $2 OR site_name ILIKE $2
+		)
+		ORDER BY
+			CASE WHEN title ILIKE $2 THEN 0 ELSE 1 END,
+			created_at DESC
+		LIMIT $3 OFFSET $4`,
 		userID, pattern, perPage, offset)
 	if err != nil {
 		return nil, fmt.Errorf("search articles: %w", err)

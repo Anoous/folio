@@ -706,6 +706,60 @@ func TestProcessTask_ClientFallback_NoImageTask(t *testing.T) {
 	}
 }
 
+func TestProcessTask_ScrapeSuccess_EmptyMarkdown_PreservesClientContent(t *testing.T) {
+	// Scrape returns empty markdown but valid metadata —
+	// client-extracted markdown_content should be preserved.
+	scrapeResp := &client.ScrapeResponse{
+		Markdown: "", // empty
+		Metadata: client.ReaderMetadata{
+			Title:    "Scraped Title",
+			Author:   "Scraped Author",
+			SiteName: "Scraped Site",
+			OGImage:  "https://example.com/image.jpg",
+			Language: "en",
+			Favicon:  "https://example.com/favicon.ico",
+		},
+	}
+
+	mockReader := &mockScraper{
+		scrapeFn: func(ctx context.Context, url string) (*client.ScrapeResponse, error) {
+			return scrapeResp, nil
+		},
+	}
+	mockArtRepo := &mockCrawlArticleRepo{}
+	mockTaskRepo := &mockCrawlTaskRepo{}
+	mockEnq := &mockCrawlEnqueuer{}
+
+	h := newTestCrawlHandler(mockReader, mockArtRepo, mockTaskRepo, mockEnq, false)
+
+	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/article", "user-1")
+	err := h.ProcessTask(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ProcessTask returned error: %v", err)
+	}
+
+	// Verify UpdateCrawlResult was called with empty markdown.
+	// The SQL COALESCE(NULLIF($4, ''), markdown_content) guard preserves
+	// any existing client-extracted content when Reader returns empty markdown.
+	if len(mockArtRepo.updateCrawlCalls) != 1 {
+		t.Fatalf("UpdateCrawlResult calls = %d, want 1", len(mockArtRepo.updateCrawlCalls))
+	}
+	cr := mockArtRepo.updateCrawlCalls[0]
+	if cr.Markdown != "" {
+		t.Errorf("CrawlResult.Markdown = %q, want empty (DB guard preserves existing)", cr.Markdown)
+	}
+	// Metadata should still be passed through
+	if cr.Title != "Scraped Title" {
+		t.Errorf("CrawlResult.Title = %q, want %q", cr.Title, "Scraped Title")
+	}
+	if cr.Author != "Scraped Author" {
+		t.Errorf("CrawlResult.Author = %q, want %q", cr.Author, "Scraped Author")
+	}
+	if cr.Language != "en" {
+		t.Errorf("CrawlResult.Language = %q, want %q", cr.Language, "en")
+	}
+}
+
 func TestProcessTask_ScrapeSuccess_EmptySiteName_DefaultsToWeb(t *testing.T) {
 	// Scrape succeeds but SiteName is empty — source should default to "web"
 	scrapeResp := &client.ScrapeResponse{

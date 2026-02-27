@@ -16,7 +16,7 @@ type articleCreator interface {
 	ListByUser(ctx context.Context, p repository.ListArticlesParams) (*repository.ListArticlesResult, error)
 	Update(ctx context.Context, id string, userID string, p repository.UpdateArticleParams) error
 	Delete(ctx context.Context, id string, userID string) error
-	SearchByTitle(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error)
+	Search(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error)
 	ExistsByUserAndURL(ctx context.Context, userID, url string) (bool, error)
 }
 

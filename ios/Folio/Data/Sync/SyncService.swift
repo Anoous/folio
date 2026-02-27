@@ -114,34 +114,8 @@ final class SyncService {
 
             article.updateFromDTO(dto)
 
-            // Resolve category
-            if let categoryDTO = dto.category {
-                let categoryRepo = CategoryRepository(context: context)
-                if let localCategory = try categoryRepo.fetchBySlug(categoryDTO.slug) {
-                    localCategory.updateFromDTO(categoryDTO)
-                    article.category = localCategory
-                }
-            }
-
-            // Resolve tags
-            if let tagDTOs = dto.tags {
-                let tagRepo = TagRepository(context: context)
-                var resolvedTags: [Tag] = []
-                for tagDTO in tagDTOs {
-                    if let existing = try tagRepo.fetchByServerID(tagDTO.id) {
-                        existing.updateFromDTO(tagDTO)
-                        resolvedTags.append(existing)
-                    } else if let byName = try tagRepo.fetchByName(tagDTO.name) {
-                        byName.updateFromDTO(tagDTO)
-                        resolvedTags.append(byName)
-                    } else {
-                        let newTag = Tag.fromDTO(tagDTO)
-                        context.insert(newTag)
-                        resolvedTags.append(newTag)
-                    }
-                }
-                article.tags = resolvedTags
-            }
+            let merger = ArticleMerger(context: context)
+            try merger.resolveRelationships(for: article, from: dto)
 
             try context.save()
         } catch {
@@ -217,50 +191,10 @@ final class SyncService {
     private func syncArticles() async {
         do {
             let response = try await apiClient.listArticles(page: 1, perPage: 50)
-            let articleRepo = ArticleRepository(context: context)
-            let tagRepo = TagRepository(context: context)
-            let categoryRepo = CategoryRepository(context: context)
+            let merger = ArticleMerger(context: context)
 
             for dto in response.data {
-                let article: Article
-                if let existing = try? articleRepo.fetchByServerID(dto.id) {
-                    existing.updateFromDTO(dto)
-                    article = existing
-                } else if let byURL = try? articleRepo.fetchByURL(dto.url) {
-                    byURL.updateFromDTO(dto)
-                    article = byURL
-                } else {
-                    let newArticle = Article.fromDTO(dto)
-                    context.insert(newArticle)
-                    article = newArticle
-                }
-
-                // Resolve category
-                if let categoryDTO = dto.category {
-                    if let localCategory = try? categoryRepo.fetchBySlug(categoryDTO.slug) {
-                        localCategory.updateFromDTO(categoryDTO)
-                        article.category = localCategory
-                    }
-                }
-
-                // Resolve tags
-                if let tagDTOs = dto.tags {
-                    var resolvedTags: [Tag] = []
-                    for tagDTO in tagDTOs {
-                        if let existing = try? tagRepo.fetchByServerID(tagDTO.id) {
-                            existing.updateFromDTO(tagDTO)
-                            resolvedTags.append(existing)
-                        } else if let byName = try? tagRepo.fetchByName(tagDTO.name) {
-                            byName.updateFromDTO(tagDTO)
-                            resolvedTags.append(byName)
-                        } else {
-                            let newTag = Tag.fromDTO(tagDTO)
-                            context.insert(newTag)
-                            resolvedTags.append(newTag)
-                        }
-                    }
-                    article.tags = resolvedTags
-                }
+                try? merger.merge(dto: dto)
             }
 
             try? context.save()

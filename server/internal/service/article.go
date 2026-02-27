@@ -179,5 +179,5 @@ func (s *ArticleService) Delete(ctx context.Context, userID, articleID string) e
 }
 
 func (s *ArticleService) Search(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error) {
-	return s.articleRepo.SearchByTitle(ctx, userID, query, page, perPage)
+	return s.articleRepo.Search(ctx, userID, query, page, perPage)
 }

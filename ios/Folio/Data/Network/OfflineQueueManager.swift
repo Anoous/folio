@@ -71,11 +71,8 @@ final class OfflineQueueManager {
                 }
                 // Don't mark as failed on transient errors — keep status for retry
             }
-        } else {
-            for article in pending {
-                article.status = .processing
-            }
         }
+        // No else — without a processor, articles remain pending for next retry
 
         try? context.save()
 

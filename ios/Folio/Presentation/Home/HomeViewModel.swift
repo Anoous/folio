@@ -78,55 +78,11 @@ final class HomeViewModel {
     /// that are ready on the server but missing local markdown content.
     @discardableResult
     private func mergeServerArticles(_ dtos: [ArticleDTO]) -> [String] {
-        let articleRepo = ArticleRepository(context: context)
-        let tagRepo = TagRepository(context: context)
-        let categoryRepo = CategoryRepository(context: context)
+        let merger = ArticleMerger(context: context)
         var needsDetail: [String] = []
 
         for dto in dtos {
-            let article: Article
-
-            // Try to find existing by serverID
-            if let existing = try? articleRepo.fetchByServerID(dto.id) {
-                existing.updateFromDTO(dto)
-                article = existing
-            } else if let byURL = try? articleRepo.fetchByURL(dto.url) {
-                // Found by URL — link serverID and update
-                byURL.updateFromDTO(dto)
-                article = byURL
-            } else {
-                // New article from server
-                let newArticle = Article.fromDTO(dto)
-                context.insert(newArticle)
-                article = newArticle
-            }
-
-            // Resolve category
-            if let categoryDTO = dto.category {
-                if let localCategory = try? categoryRepo.fetchBySlug(categoryDTO.slug) {
-                    localCategory.updateFromDTO(categoryDTO)
-                    article.category = localCategory
-                }
-            }
-
-            // Resolve tags
-            if let tagDTOs = dto.tags {
-                var resolvedTags: [Tag] = []
-                for tagDTO in tagDTOs {
-                    if let existing = try? tagRepo.fetchByServerID(tagDTO.id) {
-                        existing.updateFromDTO(tagDTO)
-                        resolvedTags.append(existing)
-                    } else if let byName = try? tagRepo.fetchByName(tagDTO.name) {
-                        byName.updateFromDTO(tagDTO)
-                        resolvedTags.append(byName)
-                    } else {
-                        let newTag = Tag.fromDTO(tagDTO)
-                        context.insert(newTag)
-                        resolvedTags.append(newTag)
-                    }
-                }
-                article.tags = resolvedTags
-            }
+            guard let article = try? merger.merge(dto: dto) else { continue }
 
             // Article is ready on server but local content is missing
             if dto.status == "ready" && article.markdownContent == nil {
@@ -145,8 +101,7 @@ final class HomeViewModel {
         guard !serverIDs.isEmpty else { return }
 
         let articleRepo = ArticleRepository(context: context)
-        let tagRepo = TagRepository(context: context)
-        let categoryRepo = CategoryRepository(context: context)
+        let merger = ArticleMerger(context: context)
 
         for serverID in serverIDs {
             do {
@@ -154,31 +109,7 @@ final class HomeViewModel {
                 guard let article = try? articleRepo.fetchByServerID(serverID) else { continue }
 
                 article.updateFromDTO(dto)
-
-                if let categoryDTO = dto.category {
-                    if let localCategory = try? categoryRepo.fetchBySlug(categoryDTO.slug) {
-                        localCategory.updateFromDTO(categoryDTO)
-                        article.category = localCategory
-                    }
-                }
-
-                if let tagDTOs = dto.tags {
-                    var resolvedTags: [Tag] = []
-                    for tagDTO in tagDTOs {
-                        if let existing = try? tagRepo.fetchByServerID(tagDTO.id) {
-                            existing.updateFromDTO(tagDTO)
-                            resolvedTags.append(existing)
-                        } else if let byName = try? tagRepo.fetchByName(tagDTO.name) {
-                            byName.updateFromDTO(tagDTO)
-                            resolvedTags.append(byName)
-                        } else {
-                            let newTag = Tag.fromDTO(tagDTO)
-                            context.insert(newTag)
-                            resolvedTags.append(newTag)
-                        }
-                    }
-                    article.tags = resolvedTags
-                }
+                try merger.resolveRelationships(for: article, from: dto)
             } catch {
                 // Failed to fetch detail — will retry on next refresh
                 continue
@@ -282,7 +213,19 @@ final class HomeViewModel {
             Task {
                 do {
                     // Re-submit URL to server for processing
-                    let response = try await apiClient.submitArticle(url: article.url)
+                    let response: SubmitArticleResponse
+                    if article.extractionSource == .client {
+                        response = try await apiClient.submitArticle(
+                            url: article.url,
+                            title: article.title,
+                            author: article.author,
+                            siteName: article.siteName,
+                            markdownContent: article.markdownContent,
+                            wordCount: article.wordCount > 0 ? article.wordCount : nil
+                        )
+                    } else {
+                        response = try await apiClient.submitArticle(url: article.url)
+                    }
                     article.serverID = response.articleId
                     article.status = .processing
                 } catch {
