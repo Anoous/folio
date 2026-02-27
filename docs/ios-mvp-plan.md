@@ -21,7 +21,7 @@
 
 | | Agent iOS | Agent Backend |
 |---|-----------|---------------|
-| **技术栈** | Swift 5.9+ / SwiftUI / SwiftData / SQLite FTS5 / iOS 17+ | Go 1.22+ / chi / asynq / pgx / PostgreSQL 16+ / Python 3.12+ / FastAPI / Node.js / Docker |
+| **技术栈** | Swift 5.9+ / SwiftUI / SwiftData / SQLite FTS5 / iOS 17+ | Go 1.24+ / chi / asynq / pgx / PostgreSQL 16+ / Python 3.12+ / FastAPI / Node.js / Docker |
 | **工作目录** | `ios/` | `server/` |
 | **任务数** | 50 | 22 + 补充任务 |
 | **里程碑** | M0-E1/E6, M1-E1/E2, M2, M3, M4, M5, M7, M8(iOS部分) | M0-E2/E3/E4/E5, M1-E3, M6, M8-E2-T3 |
@@ -48,7 +48,7 @@
 | Go 后端 Domain/Service | `go test` 单元测试 | `cd server && go test ./internal/{pkg}/... -v -count=1` | 每个公开方法 100% 覆盖 |
 | Go 后端 Repository | `go test` + testcontainers（临时 PostgreSQL） | `cd server && go test ./internal/repository/... -v -count=1` | 每个 CRUD 方法 100% 覆盖 |
 | Go 后端 Handler | `go test` + `net/http/httptest` | `cd server && go test ./internal/api/... -v -count=1` | 每个接口正常 + 错误路径覆盖 |
-| Python AI 服务 | `pytest`（Mock Claude API） | `cd server/ai-service && pytest -v --tb=short` | 每个公开方法 100% 覆盖 |
+| Python AI 服务 | `pytest`（Mock DeepSeek/OpenAI API） | `cd server/ai-service && pytest -v --tb=short` | 每个公开方法 100% 覆盖 |
 | Node.js Reader 服务 | 编译检查 + 健康检查 | `cd server/reader-service && npm run build && npm test` | 端点可达性 |
 | 基础设施 / Docker | 健康检查脚本 | `cd server && bash scripts/healthcheck.sh` | 全部服务 200 OK |
 | 端到端集成 | Bash 集成测试脚本 | `cd server && bash scripts/e2e-test.sh` | 核心链路覆盖 |
@@ -633,7 +633,7 @@ cd server && go test ./internal/config/... -v -count=1 2>&1 | tail -10
 
 #### M0-E3-T1: 初始化 Python AI 服务项目
 
-**描述**：创建 FastAPI 项目。包含 `main.py` 入口、`/health` 端点。使用 `uvicorn` 启动，监听 8000 端口。创建 `requirements.txt`，包含：`fastapi`、`uvicorn[standard]`、`anthropic`、`redis`、`pydantic`。创建 `Dockerfile`（基于 `python:3.12-slim`）。
+**描述**：创建 FastAPI 项目。包含 `main.py` 入口、`/health` 端点。使用 `uvicorn` 启动，监听 8000 端口。创建 `requirements.txt`，包含：`fastapi`、`uvicorn[standard]`、`openai`、`redis`、`pydantic`。创建 `Dockerfile`（基于 `python:3.12-slim`）。
 
 **前置**：无
 

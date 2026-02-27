@@ -33,6 +33,7 @@
 | GET | `/health` | 否 | 200 | 健康检查 |
 | POST | `/api/v1/auth/apple` | 否 | 200 | Apple 登录 |
 | POST | `/api/v1/auth/refresh` | 否 | 200 | 刷新令牌 |
+| POST | `/api/v1/auth/dev` | 否 | 200 | 开发登录（仅 DEV_MODE） |
 | POST | `/api/v1/articles` | 是 | 202 | 提交 URL 收藏 |
 | GET | `/api/v1/articles` | 是 | 200 | 文章列表（分页、筛选） |
 | GET | `/api/v1/articles/search` | 是 | 200 | 搜索文章 |
@@ -131,6 +132,26 @@ POST /api/v1/auth/refresh
 
 ---
 
+## 2.5 开发登录（仅 DEV_MODE）
+
+```
+POST /api/v1/auth/dev
+```
+
+**鉴权**: 无
+
+**前提条件**: 服务端启动时 `DEV_MODE=true`。生产环境不注册此端点。
+
+### 请求
+
+无需请求体。
+
+### 响应 `200`
+
+与 Apple 登录响应结构相同。自动创建或查找开发用户，返回有效的 access_token 和 refresh_token。
+
+---
+
 ## 3. 提交 URL 收藏
 
 ```
@@ -207,7 +228,7 @@ GET /api/v1/articles
       "summary": "string | null",
       "cover_image_url": "string | null",
       "site_name": "string | null",
-      "source_type": "web | wechat | twitter | weibo | zhihu",
+      "source_type": "web | wechat | twitter | weibo | zhihu | newsletter | youtube",
       "category_id": "uuid | null",
       "word_count": 0,
       "is_favorite": false,
@@ -553,6 +574,7 @@ POST /api/v1/subscription/verify
 
 Worker: article:crawl
   → Reader 服务抓取 → 更新 article 内容字段
+  → 抓取失败但已有客户端内容 → 使用客户端内容继续
   → 入队 article:ai (default 队列)
   → 入队 article:images (low 队列)
 

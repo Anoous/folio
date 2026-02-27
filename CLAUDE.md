@@ -8,7 +8,7 @@ Folio (页集) is a local-first personal knowledge curation iOS app. Users share
 
 **Core flow**: Collect → Organize → Find (zero configuration)
 
-**Status**: MVP implementation complete — iOS app (61 source files), Go backend, Reader service, AI service, E2E test suite (17 test files), iOS unit tests (29 test files).
+**Status**: MVP implementation complete — iOS app (58 source files + 5 shared), Go backend, Reader service, AI service, E2E test suite (14 test files), iOS unit tests (35 test files).
 
 ## Repository Structure
 
@@ -26,17 +26,17 @@ folio/
 ├── ios/                           # iOS app
 │   ├── project.yml                # XcodeGen project definition
 │   ├── Folio.xcodeproj/
-│   ├── Folio/                     # Main app target (61 Swift files)
-│   ├── ShareExtension/            # Share Extension target
-│   ├── FolioTests/                # Unit tests (29 Swift files)
-│   └── Shared/                    # Shared code between app & extension
+│   ├── Folio/                     # Main app target (58 Swift files)
+│   ├── ShareExtension/            # Share Extension target (2 Swift files)
+│   ├── FolioTests/                # Unit tests (35 Swift files)
+│   └── Shared/                    # Shared code between app & extension (5 Swift files)
 └── server/
     ├── cmd/server/main.go         # Go API + Worker entry point
     ├── internal/                   # Go packages (api, service, repository, worker, client, config, domain)
     ├── migrations/                 # PostgreSQL migrations (001_init.up.sql)
     ├── reader-service/             # Node.js content scraping (TypeScript + Express)
     ├── ai-service/                 # Python AI analysis (FastAPI + DeepSeek)
-    ├── tests/e2e/                  # E2E test suite (Python pytest, 17 test files)
+    ├── tests/e2e/                  # E2E test suite (Python pytest, 14 test files)
     ├── scripts/
     │   ├── dev-start.sh            # One-command local dev startup
     │   ├── run_e2e.sh              # Full E2E test runner
@@ -72,15 +72,16 @@ Four-tier system:
 - `apple/swift-markdown` ≥ 0.5.0 — Markdown rendering
 - `kean/Nuke` ≥ 12.8.0 — Image loading (Nuke + NukeUI)
 - `kishikawakatsumi/KeychainAccess` ≥ 4.2.2 — Secure credential storage
+- `scinfu/SwiftSoup` ≥ 2.7.0 — HTML parsing for client-side content extraction
 
 **App structure**:
-- 3 tabs: Library (HomeView), Search (SearchView), Settings (SettingsView)
-- Onboarding flow → Dev Login button available in DEBUG builds
+- Single NavigationStack (no TabView): HomeView with inline `.searchable()` for search, SettingsView accessible via toolbar gear icon
+- Onboarding flow (4 pages + PermissionView) → Dev Login button available in DEBUG builds
 - `APIClient.defaultBaseURL` = `http://localhost:8080` in DEBUG, `https://api.folio.app` in RELEASE
 - OfflineQueueManager for pending articles, SyncService for server sync
 
 **Key iOS source paths**:
-- `ios/Folio/App/` — FolioApp.swift (entry), MainTabView.swift (tabs), AppDelegate.swift
+- `ios/Folio/App/` — FolioApp.swift (entry), MainTabView.swift (NavigationStack root), AppDelegate.swift
 - `ios/Folio/Presentation/` — Auth/, Home/, Reader/, Search/, Settings/, Onboarding/, Components/
 - `ios/Folio/Domain/Models/` — Article, Tag, Category, User value types
 - `ios/Folio/Data/SwiftData/` — DataManager.swift, SharedDataManager.swift
@@ -89,6 +90,7 @@ Four-tier system:
 - `ios/Folio/Data/Repository/` — Repository pattern abstractions
 - `ios/Folio/Data/KeyChain/` — KeyChainManager (token storage)
 - `ios/Folio/Data/Sync/` — SyncService (CloudKit + backend sync)
+- `ios/Shared/Extraction/` — ContentExtractor, HTMLFetcher, ReadabilityExtractor, HTMLToMarkdownConverter, ExtractionResult (shared between app & Share Extension)
 
 ### 2. Go Backend
 
@@ -117,7 +119,7 @@ Four-tier system:
 **Middleware**: JWT auth (`server/internal/api/middleware/auth.go`) — extracts userID into request context.
 
 **Worker tasks** (asynq, Redis-backed, `server/internal/worker/`):
-1. `article:crawl` — calls Reader service, stores markdown, enqueues AI task (Critical queue, 3 retries, 90s timeout)
+1. `article:crawl` — calls Reader service, stores markdown, enqueues AI task; falls back to client-extracted content if Reader fails (Critical queue, 3 retries, 90s timeout)
 2. `article:ai` — calls AI service, stores classification/tags/summary (Default queue, 3 retries, 60s timeout)
 3. `article:images` — rehosts images to R2 (Low queue, 2 retries, 5min timeout)
 
@@ -216,12 +218,12 @@ See `docs/local-deploy.md` for full details.
 
 ## Testing
 
-**iOS unit tests** (29 files in `ios/FolioTests/`):
+**iOS unit tests** (35 files in `ios/FolioTests/`):
 ```bash
 xcodebuild test -project ios/Folio.xcodeproj -scheme Folio -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
 ```
 
-**E2E tests** (17 test files in `server/tests/e2e/`, Python pytest):
+**E2E tests** (14 test files in `server/tests/e2e/`, Python pytest):
 ```bash
 cd server && ./scripts/run_e2e.sh
 ```
@@ -235,7 +237,7 @@ cd server && ./scripts/smoke_api_e2e.sh
 ## Key Design Decisions
 
 - **Local-first**: All user content stored on device; only AI processing content sent to server
-- **Offline-first save**: Share Extension writes URL + metadata to local SwiftData immediately, backend processing happens async when network available
+- **Offline-first save**: Share Extension writes URL + metadata to local SwiftData immediately, then attempts client-side content extraction (ContentExtractor pipeline); backend processing happens async when network available
 - **Single AI call**: Classification + tags + summary extracted in one DeepSeek API request for efficiency
 - **AI model**: DeepSeek Chat (deepseek-chat) for classification/summarization; confidence threshold at 70%
 - **Content sources prioritized**: P0 = blogs, WeChat public accounts, Twitter/X; P1 = Zhihu, Weibo; P2 = newsletters, YouTube

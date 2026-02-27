@@ -95,7 +95,7 @@
 | iOS 全文搜索 | SQLite FTS5 | 内置 | 高性能本地全文搜索，支持中文分词 |
 | iOS 同步 | CloudKit | iOS 17+ | iCloud 原生同步，用户无需额外账号 |
 | API 网关 | Caddy | 2.7+ | 自动 HTTPS，配置简洁，性能好 |
-| 后端 API | Go + chi | Go 1.22+ | 高性能，goroutine 并发模型天然适合异步任务编排，编译型语言部署简单 |
+| 后端 API | Go + chi | Go 1.24+ | 高性能，goroutine 并发模型天然适合异步任务编排，编译型语言部署简单 |
 | 任务队列 | asynq (Redis) | 0.24+ | Go 原生异步任务框架，基于 Redis，API 类似 BullMQ |
 | 抓取引擎 | @vakra-dev/reader | 0.1.2 | 多引擎级联抓取（HTTP→TLS→Browser），内置反爬突破、正文提取、Markdown 转换 |
 | AI 服务 | Python + FastAPI | Python 3.12+ | AI 生态成熟，OpenAI SDK 兼容 DeepSeek |
@@ -124,6 +124,17 @@
 │  ·SwiftData 写入 URL + 元数据  │
 │  ·状态标记为 "pending"         │
 │  ·即刻返回成功给用户            │
+└───────────────┬───────────────┘
+                │
+                ▼
+┌───────────────────────────────┐
+│  客户端内容提取（Share Extension）│
+│  ·HTMLFetcher 获取 HTML        │
+│  ·ReadabilityExtractor 提取正文│
+│  ·HTMLToMarkdownConverter 转换 │
+│  ·提取成功 → 状态 "clientReady"│
+│  ·提取失败 → 保持 "pending"    │
+│  ·超时限制 8 秒，内存限制 100MB │
 └───────────────┬───────────────┘
                 │ 有网络时
                 ▼
@@ -180,10 +191,10 @@
 │  │  (SwiftUI)   │  │ (ObservableObject)│  │
 │  │              │  │                  │  │
 │  │ ·HomeView    │  │ ·HomeViewModel   │  │
-│  │ ·SearchView  │  │ ·SearchViewModel │  │
+│  │  (含搜索)    │  │ ·SearchViewModel │  │
 │  │ ·ReaderView  │  │ ·ReaderViewModel │  │
-│  │ ·TagsView    │  │ ·ArticleDetail   │  │
-│  │ ·SettingsView│  │  ViewModel       │  │
+│  │ ·SettingsView│  │ ·AuthViewModel   │  │
+│  │ ·Onboarding  │  │                  │  │
 │  └──────────────┘  └────────┬─────────┘  │
 └─────────────────────────────┼────────────┘
                               │
@@ -221,7 +232,7 @@ Share Extension 是 Folio 最核心的入口，用户从任意 App 分享链接�
 | 约束项 | 限制 | 应对策略 |
 |--------|------|---------|
 | 内存限制 | 120MB | 轻量化 UI，不加载主 App 完整依赖 |
-| 执行时间 | 约 30 秒 | 仅做 URL 存储，抓取异步后台执行 |
+| 执行时间 | 约 30 秒 | URL 存储 + 客户端内容提取（8 秒超时），服务端抓取异步后台执行 |
 | 存储共享 | 需 App Group | 通过 App Group 共享 SwiftData 容器 |
 | 网络请求 | 允许但受限 | 本地先行保存，网络请求放入后台队列 |
 
@@ -233,13 +244,13 @@ Share Extension 是 Folio 最核心的入口，用户从任意 App 分享链接�
 │                                              │
 │  ┌──────────────────────────────────────┐    │
 │  │       ShareViewController            │    │
-│  │       (SLComposeServiceViewController)│    │
+│  │       (UIViewController)             │    │
 │  │                                      │    │
 │  │  ┌──────────────────────────────┐    │    │
 │  │  │  CompactShareView (SwiftUI)  │    │    │
 │  │  │  ·URL 预览（标题+favicon）    │    │    │
-│  │  │  ·快速标签选择（最近使用）     │    │    │
-│  │  │  ·保存按钮                   │    │    │
+│  │  │  ·保存状态指示（含提取进度）   │    │    │
+│  │  │  ·配额检查与警告              │    │    │
 │  │  └──────────────┬───────────────┘    │    │
 │  └─────────────────┼────────────────────┘    │
 │                    │                          │
@@ -250,11 +261,23 @@ Share Extension 是 Folio 最核心的入口，用户从任意 App 分享链接�
 │  │  ┌──────────────┐ ┌──────────────┐   │    │
 │  │  │  SwiftData   │ │  UserDefaults│   │    │
 │  │  │  共享容器     │ │  (App Group) │   │    │
-│  │  │              │ │  ·最近标签    │   │    │
-│  │  │  写入Article │ │  ·用量计数    │   │    │
-│  │  │  status=     │ │  ·用户偏好    │   │    │
+│  │  │              │ │  ·用量计数    │   │    │
+│  │  │  写入Article │ │  ·用户偏好    │   │    │
+│  │  │  status=     │ │              │   │    │
 │  │  │  "pending"   │ │              │   │    │
 │  │  └──────────────┘ └──────────────┘   │    │
+│  └──────────────────────────────────────┘    │
+│                    │                          │
+│  ┌─────────────────▼────────────────────┐    │
+│  │    ContentExtractor（客户端内容提取）   │    │
+│  │    (Shared/Extraction/)              │    │
+│  │                                      │    │
+│  │  HTMLFetcher → ReadabilityExtractor  │    │
+│  │  → HTMLToMarkdownConverter           │    │
+│  │                                      │    │
+│  │  ·8 秒超时，100MB 内存限制           │    │
+│  │  ·提取成功 → status="clientReady"    │    │
+│  │  ·提取失败 → 保持 "pending"          │    │
 │  └──────────────────────────────────────┘    │
 └──────────────────────────────────────────────┘
                     │
@@ -405,19 +428,24 @@ final class Article {
 
     // 内容
     var markdownContent: String?       // Markdown 正文
-    var summary: String?               // AI 一句话摘要（<=100字）
-    var keyPoints: [String]?           // AI 要点提取（3-5个）
+    var summary: String?               // AI 一句话摘要
+    var keyPoints: [String]            // AI 要点提取（3-5个）
+    var wordCount: Int                 // 字数统计
 
     // 分类和标签
     var category: Category?            // AI 自动分类
     @Relationship(inverse: \Tag.articles)
     var tags: [Tag]                    // AI 标签 + 用户标签
 
-    // 状态
-    var status: ArticleStatus          // pending/processing/ready/failed
+    // 状态（通过 Raw String 存储，计算属性提供类型安全访问）
+    var statusRaw: String              // pending/processing/ready/failed/clientReady
     var isFavorite: Bool = false
     var isArchived: Bool = false
     var readProgress: Double = 0.0     // 阅读进度 0.0-1.0
+    var aiConfidence: Double           // AI 分类置信度 0-1
+    var fetchError: String?            // 抓取失败错误信息
+    var retryCount: Int                // 重试次数
+    var language: String?              // 检测到的语言 (zh/en)
 
     // 时间
     var createdAt: Date
@@ -426,38 +454,46 @@ final class Article {
     var lastReadAt: Date?
 
     // 来源
-    var sourceType: SourceType         // web/wechat/twitter/weibo/zhihu
-    var originalHTML: String?          // 原始 HTML（备份，可选存储）
+    var sourceTypeRaw: String          // web/wechat/twitter/weibo/zhihu/newsletter/youtube
+
+    // 客户端内容提取
+    var extractionSourceRaw: String    // none/client/server
+    var clientExtractedAt: Date?       // 客户端提取完成时间
 
     // 同步
-    var syncState: SyncState = .local
+    var syncStateRaw: String           // pendingUpload/synced/pendingUpdate/conflict
     var serverID: String?              // 服务端 ID
-
-    init(url: String, status: ArticleStatus, createdAt: Date, userTags: [String] = []) {
-        self.id = UUID()
-        self.url = url
-        self.status = status
-        self.createdAt = createdAt
-        self.updatedAt = createdAt
-        self.tags = []
-        self.sourceType = SourceType.detect(from: url)
-    }
 }
 
 enum ArticleStatus: String, Codable {
-    case pending     // 等待抓取
-    case processing  // 抓取/AI处理中
-    case ready       // 处理完成
-    case failed      // 处理失败
+    case pending      // 等待抓取
+    case processing   // 抓取/AI处理中
+    case ready        // 处理完成
+    case failed       // 处理失败
+    case clientReady  // 客户端提取完成，等待服务端处理
+}
+
+enum ExtractionSource: String, Codable {
+    case none     // 未提取
+    case client   // 客户端提取
+    case server   // 服务端提取
 }
 
 enum SourceType: String, Codable {
-    case web      // 通用网页
-    case wechat   // 微信公众号
-    case twitter  // Twitter/X
-    case weibo    // 微博
-    case zhihu    // 知乎
-    case youtube  // YouTube
+    case web        // 通用网页
+    case wechat     // 微信公众号
+    case twitter    // Twitter/X
+    case weibo      // 微博
+    case zhihu      // 知乎
+    case newsletter // Newsletter
+    case youtube    // YouTube
+
+    var supportsClientExtraction: Bool {
+        switch self {
+        case .youtube: return false
+        default: return true
+        }
+    }
 
     static func detect(from url: String) -> SourceType {
         if url.contains("mp.weixin.qq.com") { return .wechat }
@@ -470,10 +506,10 @@ enum SourceType: String, Codable {
 }
 
 enum SyncState: String, Codable {
-    case local       // 仅本地
-    case synced      // 已同步
-    case modified    // 本地已修改待同步
-    case conflict    // 同步冲突
+    case pendingUpload  // 待上传
+    case synced         // 已同步
+    case pendingUpdate  // 待更新
+    case conflict       // 同步冲突
 }
 
 // MARK: - 标签模型
@@ -1549,21 +1585,24 @@ EXTRACT_TAGS_USER_PROMPT = """标题：{title}
 
 import json
 import hashlib
-from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI
 from app.prompts.combined import (
     COMBINED_ANALYSIS_SYSTEM_PROMPT,
     COMBINED_ANALYSIS_USER_PROMPT,
 )
 from app.cache import RedisCache
 
-client = AsyncAnthropic()
+client = AsyncOpenAI(
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
+    base_url="https://api.deepseek.com",
+)
 cache = RedisCache()
 
 
 class AIPipeline:
     """AI 内容分析 Pipeline"""
 
-    MODEL = "claude-sonnet-4-5-20250929"
+    MODEL = "deepseek-chat"
     MAX_CONTENT_LENGTH = 4000  # 最大输入字数
     CACHE_TTL = 7 * 24 * 3600  # 缓存 7 天
 
@@ -1606,16 +1645,19 @@ class AIPipeline:
             content=processed_content,
         )
 
-        response = await client.messages.create(
+        response = await client.chat.completions.create(
             model=self.MODEL,
-            max_tokens=1000,
-            temperature=0.1,  # 低温度确保输出稳定
-            system=COMBINED_ANALYSIS_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_message}],
+            max_tokens=1024,
+            temperature=0.3,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": COMBINED_ANALYSIS_SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
         )
 
         # Step 4: 解析和验证结果
-        result = self._parse_response(response.content[0].text)
+        result = self._parse_response(response.choices[0].message.content)
         validated = self._validate(result)
 
         # Step 5: 缓存结果
@@ -2393,7 +2435,7 @@ services:
   ai:
     build: ./ai-service
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - REDIS_URL=redis://redis:6379
     depends_on:
       - redis
