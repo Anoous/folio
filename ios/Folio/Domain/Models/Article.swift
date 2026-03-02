@@ -94,7 +94,7 @@ final class Article {
     var sourceTypeRaw: String
     var syncStateRaw: String
     var serverID: String?
-    var extractionSourceRaw: String
+    var extractionSourceRaw: String = ExtractionSource.none.rawValue
     var clientExtractedAt: Date?
 
     var status: ArticleStatus {

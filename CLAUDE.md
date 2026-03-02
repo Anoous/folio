@@ -220,7 +220,7 @@ See `docs/local-deploy.md` for full details.
 
 **iOS unit tests** (35 files in `ios/FolioTests/`):
 ```bash
-xcodebuild test -project ios/Folio.xcodeproj -scheme Folio -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+xcodebuild test -project ios/Folio.xcodeproj -scheme Folio -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
 **E2E tests** (14 test files in `server/tests/e2e/`, Python pytest):
