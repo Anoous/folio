@@ -53,6 +53,15 @@ func (r *CategoryRepo) GetByID(ctx context.Context, id string) (*domain.Category
 	return &c, nil
 }
 
+func (r *CategoryRepo) GetIDBySlug(ctx context.Context, slug string) (string, error) {
+	var id string
+	err := r.pool.QueryRow(ctx, `SELECT id FROM categories WHERE slug = $1`, slug).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("get category id by slug: %w", err)
+	}
+	return id, nil
+}
+
 func (r *CategoryRepo) GetBySlug(ctx context.Context, slug string) (*domain.Category, error) {
 	var c domain.Category
 	err := r.pool.QueryRow(ctx,

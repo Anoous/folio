@@ -238,12 +238,13 @@ func (m *mockScraper) Scrape(ctx context.Context, url string) (*client.ScrapeRes
 }
 
 type mockCrawlArticleRepo struct {
-	getByIDFn          func(ctx context.Context, id string) (*domain.Article, error)
-	updateCrawlFn      func(ctx context.Context, id string, cr repository.CrawlResult) error
-	setErrorFn         func(ctx context.Context, id string, errMsg string) error
-	updateCrawlCalls   []repository.CrawlResult
-	setErrorCalls      []struct{ ID, ErrMsg string }
-	updateStatusCalls  []struct{ ID string; Status domain.ArticleStatus }
+	getByIDFn           func(ctx context.Context, id string) (*domain.Article, error)
+	updateCrawlFn       func(ctx context.Context, id string, cr repository.CrawlResult) error
+	setErrorFn          func(ctx context.Context, id string, errMsg string) error
+	updateCrawlCalls    []repository.CrawlResult
+	updateAIResultCalls []repository.AIResult
+	setErrorCalls       []struct{ ID, ErrMsg string }
+	updateStatusCalls   []struct{ ID string; Status domain.ArticleStatus }
 }
 
 func (m *mockCrawlArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, error) {
@@ -258,6 +259,11 @@ func (m *mockCrawlArticleRepo) UpdateCrawlResult(ctx context.Context, id string,
 	if m.updateCrawlFn != nil {
 		return m.updateCrawlFn(ctx, id, cr)
 	}
+	return nil
+}
+
+func (m *mockCrawlArticleRepo) UpdateAIResult(ctx context.Context, id string, ai repository.AIResult) error {
+	m.updateAIResultCalls = append(m.updateAIResultCalls, ai)
 	return nil
 }
 
@@ -308,6 +314,50 @@ func (m *mockCrawlEnqueuer) EnqueueContext(ctx context.Context, task *asynq.Task
 	return &asynq.TaskInfo{}, nil
 }
 
+type mockContentCacheRepo struct {
+	getByURLFn func(ctx context.Context, url string) (*domain.ContentCache, error)
+	upsertFn   func(ctx context.Context, c *domain.ContentCache) error
+}
+
+func (m *mockContentCacheRepo) GetByURL(ctx context.Context, url string) (*domain.ContentCache, error) {
+	if m.getByURLFn != nil {
+		return m.getByURLFn(ctx, url)
+	}
+	return nil, nil
+}
+
+func (m *mockContentCacheRepo) Upsert(ctx context.Context, c *domain.ContentCache) error {
+	if m.upsertFn != nil {
+		return m.upsertFn(ctx, c)
+	}
+	return nil
+}
+
+type mockCrawlTagRepo struct {
+	createFn func(ctx context.Context, userID, name string, isAI bool) (*domain.Tag, error)
+	attachFn func(ctx context.Context, articleID, tagID string) error
+}
+
+func (m *mockCrawlTagRepo) Create(ctx context.Context, userID, name string, isAI bool) (*domain.Tag, error) {
+	if m.createFn != nil {
+		return m.createFn(ctx, userID, name, isAI)
+	}
+	return &domain.Tag{ID: "tag-" + name, Name: name}, nil
+}
+
+func (m *mockCrawlTagRepo) AttachToArticle(ctx context.Context, articleID, tagID string) error {
+	if m.attachFn != nil {
+		return m.attachFn(ctx, articleID, tagID)
+	}
+	return nil
+}
+
+type mockCrawlCategoryRepo struct{}
+
+func (m *mockCrawlCategoryRepo) GetIDBySlug(ctx context.Context, slug string) (string, error) {
+	return "cat-" + slug, nil
+}
+
 // newTestCrawlHandler creates a CrawlHandler with mock dependencies for testing.
 func newTestCrawlHandler(
 	scraper *mockScraper,
@@ -322,6 +372,9 @@ func newTestCrawlHandler(
 		taskRepo:     taskRepo,
 		asynqClient:  enqueuer,
 		enableImage:  enableImage,
+		cacheRepo:    &mockContentCacheRepo{},
+		tagRepo:      &mockCrawlTagRepo{},
+		categoryRepo: &mockCrawlCategoryRepo{},
 	}
 }
 
@@ -848,5 +901,179 @@ func TestProcessTask_ScrapeSuccess_WithImages_EnqueuesImageTask(t *testing.T) {
 	}
 	if len(imgPayload.ImageURLs) != 2 {
 		t.Errorf("image URLs count = %d, want 2", len(imgPayload.ImageURLs))
+	}
+}
+
+// --- Cache optimization tests ---
+
+func TestProcessTask_CacheHitFull_SkipsCrawlAndAI(t *testing.T) {
+	// Cache has full results (content + AI) → skip Reader + AI entirely
+	summary := "A cached summary"
+	markdown := "# Cached Article\n\nLong enough content for the cache hit to work properly in our test scenario here."
+	confidence := 0.85
+	catSlug := "tech"
+
+	mockReader := &mockScraper{
+		scrapeFn: func(ctx context.Context, url string) (*client.ScrapeResponse, error) {
+			t.Fatal("Reader should NOT be called on cache hit")
+			return nil, nil
+		},
+	}
+	mockArtRepo := &mockCrawlArticleRepo{}
+	mockTaskRepo := &mockCrawlTaskRepo{}
+	mockEnq := &mockCrawlEnqueuer{}
+	mockCache := &mockContentCacheRepo{
+		getByURLFn: func(ctx context.Context, url string) (*domain.ContentCache, error) {
+			return &domain.ContentCache{
+				URL:             url,
+				Title:           strPtr("Cached Title"),
+				Author:          strPtr("Cached Author"),
+				SiteName:        strPtr("Cached Site"),
+				MarkdownContent: &markdown,
+				WordCount:       42,
+				Language:        strPtr("en"),
+				CategorySlug:    &catSlug,
+				Summary:         &summary,
+				KeyPoints:       []string{"point1", "point2"},
+				AIConfidence:    &confidence,
+				AITagNames:      []string{"go", "backend"},
+			}, nil
+		},
+	}
+
+	h := &CrawlHandler{
+		readerClient: mockReader,
+		articleRepo:  mockArtRepo,
+		taskRepo:     mockTaskRepo,
+		asynqClient:  mockEnq,
+		cacheRepo:    mockCache,
+		tagRepo:      &mockCrawlTagRepo{},
+		categoryRepo: &mockCrawlCategoryRepo{},
+	}
+
+	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/cached", "user-1")
+	err := h.ProcessTask(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ProcessTask returned error: %v", err)
+	}
+
+	// Verify no AI task was enqueued (skipped)
+	if len(mockEnq.enqueuedTasks) != 0 {
+		t.Errorf("no tasks should be enqueued on full cache hit, got %d", len(mockEnq.enqueuedTasks))
+	}
+
+	// Verify article status was set to processing then crawl finished
+	if len(mockArtRepo.updateStatusCalls) < 1 {
+		t.Fatal("UpdateStatus should have been called")
+	}
+
+	// Verify task was marked finished (not failed)
+	if len(mockTaskRepo.setCrawlFinishedCalls) != 1 {
+		t.Errorf("SetCrawlFinished calls = %d, want 1", len(mockTaskRepo.setCrawlFinishedCalls))
+	}
+	if len(mockTaskRepo.setFailedCalls) != 0 {
+		t.Errorf("SetFailed should not be called on cache hit, got %d", len(mockTaskRepo.setFailedCalls))
+	}
+}
+
+func TestProcessTask_CacheMiss_ClientContent_SkipsReader(t *testing.T) {
+	// Cache misses, but article has client-extracted content → skip Reader, enqueue AI
+	mockReader := &mockScraper{
+		scrapeFn: func(ctx context.Context, url string) (*client.ScrapeResponse, error) {
+			t.Fatal("Reader should NOT be called when client content exists")
+			return nil, nil
+		},
+	}
+	clientMarkdown := "# Client Extracted\n\nSome content from the client extraction pipeline."
+	mockArtRepo := &mockCrawlArticleRepo{
+		getByIDFn: func(ctx context.Context, id string) (*domain.Article, error) {
+			return &domain.Article{
+				ID:              "art-1",
+				Title:           strPtr("Client Title"),
+				Author:          strPtr("Client Author"),
+				SiteName:        strPtr("Client Site"),
+				MarkdownContent: &clientMarkdown,
+			}, nil
+		},
+	}
+	mockTaskRepo := &mockCrawlTaskRepo{}
+	mockEnq := &mockCrawlEnqueuer{}
+
+	h := &CrawlHandler{
+		readerClient: mockReader,
+		articleRepo:  mockArtRepo,
+		taskRepo:     mockTaskRepo,
+		asynqClient:  mockEnq,
+		cacheRepo:    &mockContentCacheRepo{}, // cache miss (default nil)
+		tagRepo:      &mockCrawlTagRepo{},
+		categoryRepo: &mockCrawlCategoryRepo{},
+	}
+
+	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/client", "user-1")
+	err := h.ProcessTask(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ProcessTask returned error: %v", err)
+	}
+
+	// Verify AI task was enqueued
+	if len(mockEnq.enqueuedTasks) != 1 {
+		t.Fatalf("enqueued tasks = %d, want 1 (AI)", len(mockEnq.enqueuedTasks))
+	}
+	if mockEnq.enqueuedTasks[0].Type() != TypeAIProcess {
+		t.Errorf("enqueued task type = %q, want %q", mockEnq.enqueuedTasks[0].Type(), TypeAIProcess)
+	}
+
+	// Verify crawl was marked finished
+	if len(mockTaskRepo.setCrawlFinishedCalls) != 1 {
+		t.Errorf("SetCrawlFinished calls = %d, want 1", len(mockTaskRepo.setCrawlFinishedCalls))
+	}
+}
+
+func TestProcessTask_CacheMiss_NoClientContent_CallsReader(t *testing.T) {
+	// Cache misses, no client content → normal Reader flow (existing behavior)
+	readerCalled := false
+	mockReader := &mockScraper{
+		scrapeFn: func(ctx context.Context, url string) (*client.ScrapeResponse, error) {
+			readerCalled = true
+			return &client.ScrapeResponse{
+				Markdown: "# Reader Content\n\nExtracted by reader.",
+				Metadata: client.ReaderMetadata{
+					Title:    "Reader Title",
+					SiteName: "Reader Site",
+				},
+			}, nil
+		},
+	}
+	mockArtRepo := &mockCrawlArticleRepo{
+		getByIDFn: func(ctx context.Context, id string) (*domain.Article, error) {
+			return &domain.Article{ID: "art-1"}, nil // no markdown
+		},
+	}
+	mockTaskRepo := &mockCrawlTaskRepo{}
+	mockEnq := &mockCrawlEnqueuer{}
+
+	h := &CrawlHandler{
+		readerClient: mockReader,
+		articleRepo:  mockArtRepo,
+		taskRepo:     mockTaskRepo,
+		asynqClient:  mockEnq,
+		cacheRepo:    &mockContentCacheRepo{}, // cache miss
+		tagRepo:      &mockCrawlTagRepo{},
+		categoryRepo: &mockCrawlCategoryRepo{},
+	}
+
+	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/fresh", "user-1")
+	err := h.ProcessTask(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ProcessTask returned error: %v", err)
+	}
+
+	if !readerCalled {
+		t.Error("Reader should be called when cache misses and no client content")
+	}
+
+	// Verify AI task was enqueued
+	if len(mockEnq.enqueuedTasks) < 1 {
+		t.Fatal("AI task should be enqueued after Reader success")
 	}
 }
