@@ -118,10 +118,51 @@ final class SharedDataManagerTests: XCTestCase {
         let key = SharedDataManager.quotaKey()
 
         defaults.set(35, forKey: key)
-        defaults.set(50, forKey: "folio.monthlyQuota")
+        defaults.set(50, forKey: SharedDataManager.monthlyQuotaKey)
         XCTAssertTrue(SharedDataManager.canSave(isPro: false, userDefaults: defaults))
 
         defaults.set(51, forKey: key)
         XCTAssertFalse(SharedDataManager.canSave(isPro: false, userDefaults: defaults))
+    }
+
+    // MARK: - Cross-Module Contract Tests
+
+    /// 验证 syncQuotaFromServer 写入的 isPro key 与 ShareViewController 读取的 key 一致。
+    /// 这个测试守护两个模块之间的隐式契约：如果任一方改了 key，测试立即失败。
+    func testSyncQuotaFromServer_isProKeyMatchesShareExtensionReadPath() {
+        let defaults = UserDefaults(suiteName: "test.contract.\(UUID())")!
+
+        SharedDataManager.syncQuotaFromServer(
+            monthlyQuota: 30,
+            currentMonthCount: 0,
+            isPro: true,
+            userDefaults: defaults
+        )
+
+        // ShareViewController 通过 SharedDataManager.isProUserKey 读取（原为硬编码 "is_pro_user"）
+        let readBack = defaults.bool(forKey: SharedDataManager.isProUserKey)
+        XCTAssertTrue(readBack, "syncQuotaFromServer 写入的 isPro key 必须与 ShareExtension 读取路径一致")
+    }
+
+    /// 验证 syncQuotaFromServer 写入的 monthlyQuota key 与 canSave 读取的 key 一致。
+    func testSyncQuotaFromServer_quotaKeyMatchesCanSaveReadPath() {
+        let defaults = UserDefaults(suiteName: "test.contract.\(UUID())")!
+        let countKey = SharedDataManager.quotaKey()
+
+        SharedDataManager.syncQuotaFromServer(
+            monthlyQuota: 50,
+            currentMonthCount: 10,
+            isPro: false,
+            userDefaults: defaults
+        )
+
+        // canSave 内部读取 monthlyQuotaKey，应得到 syncQuotaFromServer 写入的 50
+        defaults.set(49, forKey: countKey)
+        XCTAssertTrue(SharedDataManager.canSave(isPro: false, userDefaults: defaults),
+            "49 < 50 应可保存")
+
+        defaults.set(50, forKey: countKey)
+        XCTAssertFalse(SharedDataManager.canSave(isPro: false, userDefaults: defaults),
+            "50 >= 50 应拒绝")
     }
 }

@@ -64,7 +64,7 @@ class ShareViewController: UIViewController {
             let manager = SharedDataManager(context: container.mainContext)
 
             // Check quota before saving
-            let isPro = UserDefaults.appGroup.bool(forKey: "is_pro_user")
+            let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
             guard SharedDataManager.canSave(isPro: isPro) else {
                 showState(.quotaExceeded)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
@@ -78,7 +78,8 @@ class ShareViewController: UIViewController {
 
             // Check if nearing quota limit for warning
             let currentCount = SharedDataManager.currentMonthCount()
-            let quota = SharedDataManager.freeMonthlyQuota
+            let storedQuota = UserDefaults.appGroup.integer(forKey: SharedDataManager.monthlyQuotaKey)
+            let quota = storedQuota > 0 ? storedQuota : SharedDataManager.freeMonthlyQuota
             if !isPro && currentCount >= Int(Double(quota) * 0.9) {
                 showState(.quotaWarning(remaining: quota - currentCount))
             } else {
