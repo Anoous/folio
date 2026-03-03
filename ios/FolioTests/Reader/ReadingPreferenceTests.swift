@@ -5,51 +5,51 @@ final class ReadingPreferenceTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.removeObject(forKey: "reader_fontSize")
-        UserDefaults.standard.removeObject(forKey: "reader_lineSpacing")
-        UserDefaults.standard.removeObject(forKey: "reader_theme")
-        UserDefaults.standard.removeObject(forKey: "reader_fontFamily")
+        UserDefaults.standard.removeObject(forKey: ReadingPreferenceKeys.fontSize)
+        UserDefaults.standard.removeObject(forKey: ReadingPreferenceKeys.lineSpacing)
+        UserDefaults.standard.removeObject(forKey: ReadingPreferenceKeys.theme)
+        UserDefaults.standard.removeObject(forKey: ReadingPreferenceKeys.fontFamily)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: "reader_fontSize")
-        UserDefaults.standard.removeObject(forKey: "reader_lineSpacing")
-        UserDefaults.standard.removeObject(forKey: "reader_theme")
-        UserDefaults.standard.removeObject(forKey: "reader_fontFamily")
+        UserDefaults.standard.removeObject(forKey: ReadingPreferenceKeys.fontSize)
+        UserDefaults.standard.removeObject(forKey: ReadingPreferenceKeys.lineSpacing)
+        UserDefaults.standard.removeObject(forKey: ReadingPreferenceKeys.theme)
+        UserDefaults.standard.removeObject(forKey: ReadingPreferenceKeys.fontFamily)
         super.tearDown()
     }
 
     func testDefaultFontSize() {
-        let fontSize = UserDefaults.standard.double(forKey: "reader_fontSize")
+        let fontSize = UserDefaults.standard.double(forKey: ReadingPreferenceKeys.fontSize)
         // Should be 0 (unset) which means default 17
         XCTAssertEqual(fontSize, 0, "Unset font size should be 0 (default applies 17)")
     }
 
     func testDefaultLineSpacing() {
-        let spacing = UserDefaults.standard.double(forKey: "reader_lineSpacing")
+        let spacing = UserDefaults.standard.double(forKey: ReadingPreferenceKeys.lineSpacing)
         XCTAssertEqual(spacing, 0, "Unset line spacing should be 0 (default applies 11.9)")
     }
 
     func testDefaultFont() {
-        let font = UserDefaults.standard.string(forKey: "reader_fontFamily")
+        let font = UserDefaults.standard.string(forKey: ReadingPreferenceKeys.fontFamily)
         XCTAssertNil(font, "Default font should be nil (system default)")
     }
 
     func testPersistFontSize() {
-        UserDefaults.standard.set(19.0, forKey: "reader_fontSize")
-        let stored = UserDefaults.standard.double(forKey: "reader_fontSize")
+        UserDefaults.standard.set(19.0, forKey: ReadingPreferenceKeys.fontSize)
+        let stored = UserDefaults.standard.double(forKey: ReadingPreferenceKeys.fontSize)
         XCTAssertEqual(stored, 19.0)
     }
 
     func testPersistLineSpacing() {
-        UserDefaults.standard.set(1.8, forKey: "reader_lineSpacing")
-        let stored = UserDefaults.standard.double(forKey: "reader_lineSpacing")
+        UserDefaults.standard.set(1.8, forKey: ReadingPreferenceKeys.lineSpacing)
+        let stored = UserDefaults.standard.double(forKey: ReadingPreferenceKeys.lineSpacing)
         XCTAssertEqual(stored, 1.8)
     }
 
     func testPersistTheme() {
-        UserDefaults.standard.set("dark", forKey: "reader_theme")
-        let stored = UserDefaults.standard.string(forKey: "reader_theme")
+        UserDefaults.standard.set("dark", forKey: ReadingPreferenceKeys.theme)
+        let stored = UserDefaults.standard.string(forKey: ReadingPreferenceKeys.theme)
         XCTAssertEqual(stored, "dark")
     }
 

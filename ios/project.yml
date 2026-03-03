@@ -37,6 +37,7 @@ targets:
         excludes:
           - "**/.DS_Store"
       - path: Shared/Extraction
+      - path: Shared/Constants
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.folio.app
@@ -82,6 +83,7 @@ targets:
       - path: Folio/Presentation/Components/ReadingFontFamily.swift
       - path: Folio/Utils/Extensions/Color+Folio.swift
       - path: Shared/Extraction
+      - path: Shared/Constants
     resources:
       - path: Folio/Resources/Assets.xcassets
     settings:

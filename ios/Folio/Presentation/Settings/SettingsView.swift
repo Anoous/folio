@@ -195,7 +195,7 @@ struct SettingsView: View {
             }
 
             Button("Reset Onboarding") {
-                UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+                UserDefaults.standard.set(false, forKey: AppConstants.onboardingCompletedKey)
             }
         }
     }

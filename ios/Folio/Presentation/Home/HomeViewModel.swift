@@ -85,7 +85,7 @@ final class HomeViewModel {
             guard let article = try? merger.merge(dto: dto) else { continue }
 
             // Article is ready on server but local content is missing
-            if dto.status == "ready" && article.markdownContent == nil {
+            if dto.status == ArticleStatus.ready.rawValue && article.markdownContent == nil {
                 needsDetail.append(dto.id)
             }
         }

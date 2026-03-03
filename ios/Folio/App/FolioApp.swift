@@ -7,7 +7,7 @@ struct FolioApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     let container: ModelContainer
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage(AppConstants.onboardingCompletedKey) private var hasCompletedOnboarding = false
     @State private var authViewModel = AuthViewModel()
     @State private var offlineQueueManager: OfflineQueueManager?
     @State private var syncService: SyncService?
@@ -15,11 +15,11 @@ struct FolioApp: App {
     init() {
         do {
             let config: ModelConfiguration
-            if let _ = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.folio.app") {
+            if let _ = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) {
                 config = ModelConfiguration(
                     "Folio",
                     schema: DataManager.schema,
-                    groupContainer: .identifier("group.com.folio.app")
+                    groupContainer: .identifier(AppConstants.appGroupIdentifier)
                 )
             } else {
                 config = ModelConfiguration("Folio", schema: DataManager.schema)

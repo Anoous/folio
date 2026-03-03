@@ -56,9 +56,9 @@ class ShareViewController: UIViewController {
     private func saveURL(_ urlString: String) {
         do {
             let schema = Schema([Article.self, Tag.self, Category.self])
-            let hasAppGroup = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.folio.app") != nil
+            let hasAppGroup = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) != nil
             let config = hasAppGroup
-                ? ModelConfiguration("Folio", schema: schema, groupContainer: .identifier("group.com.folio.app"))
+                ? ModelConfiguration("Folio", schema: schema, groupContainer: .identifier(AppConstants.appGroupIdentifier))
                 : ModelConfiguration("Folio", schema: schema)
             let container = try ModelContainer(for: schema, configurations: [config])
             let manager = SharedDataManager(context: container.mainContext)

@@ -2,7 +2,7 @@ import SwiftUI
 import AuthenticationServices
 
 struct OnboardingView: View {
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage(AppConstants.onboardingCompletedKey) private var hasCompletedOnboarding = false
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
     @Environment(\.colorScheme) private var colorScheme
     @State private var currentPage = 0

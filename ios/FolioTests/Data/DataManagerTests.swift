@@ -58,8 +58,13 @@ final class DataManagerTests: XCTestCase {
         let config = ModelConfiguration(
             "Folio",
             schema: DataManager.schema,
-            groupContainer: .identifier("group.com.folio.app")
+            groupContainer: .identifier(AppConstants.appGroupIdentifier)
         )
         XCTAssertNotNil(config)
+    }
+
+    func testAppGroupIdentifier_matchesEntitlement() {
+        let defaults = UserDefaults(suiteName: AppConstants.appGroupIdentifier)
+        XCTAssertNotNil(defaults, "App Group identifier must be valid")
     }
 }
