@@ -91,6 +91,8 @@ final class SharedDataManager {
 
     // MARK: - Quota
 
+    static let isProUserKey = "is_pro_user"
+    static let monthlyQuotaKey = "folio.monthlyQuota"
     static let freeMonthlyQuota = 30
 
     static func quotaKey(for date: Date = Date()) -> String {
@@ -111,7 +113,26 @@ final class SharedDataManager {
 
     static func canSave(isPro: Bool, userDefaults: UserDefaults = .appGroup) -> Bool {
         if isPro { return true }
-        return currentMonthCount(userDefaults: userDefaults) < freeMonthlyQuota
+        let quota = userDefaults.integer(forKey: monthlyQuotaKey)
+        let effectiveQuota = quota > 0 ? quota : freeMonthlyQuota
+        return currentMonthCount(userDefaults: userDefaults) < effectiveQuota
+    }
+
+    /// 将服务端配额写入 UserDefaults，供 Share Extension 读取。
+    /// 只在服务端计数 > 本地计数时覆盖，避免本地乐观计数被回退。
+    static func syncQuotaFromServer(
+        monthlyQuota: Int,
+        currentMonthCount: Int,
+        isPro: Bool,
+        userDefaults: UserDefaults = .appGroup
+    ) {
+        let key = quotaKey()
+        let localCount = userDefaults.integer(forKey: key)
+        if currentMonthCount > localCount {
+            userDefaults.set(currentMonthCount, forKey: key)
+        }
+        userDefaults.set(monthlyQuota, forKey: monthlyQuotaKey)
+        userDefaults.set(isPro, forKey: isProUserKey)
     }
 }
 

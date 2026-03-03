@@ -184,6 +184,24 @@ final class SyncService {
         await syncCategories()
         await syncTags()
         await syncArticles()
+        await syncUserQuota()
+    }
+
+    // MARK: - Quota Sync
+
+    private func syncUserQuota() async {
+        do {
+            let response = try await apiClient.refreshAuth()
+            let user = response.user
+            let isPro = user.subscription != "free"
+            SharedDataManager.syncQuotaFromServer(
+                monthlyQuota: user.monthlyQuota,
+                currentMonthCount: user.currentMonthCount,
+                isPro: isPro
+            )
+        } catch {
+            // 非关键操作，失败时保留本地计数
+        }
     }
 
     // MARK: - Article Sync

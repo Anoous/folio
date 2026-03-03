@@ -80,4 +80,48 @@ final class SharedDataManagerTests: XCTestCase {
         let article = try manager.saveArticle(url: "")
         XCTAssertEqual(article.url, "")
     }
+
+    // MARK: - Quota Sync Tests
+
+    func testSyncQuotaFromServer_updatesWhenServerCountIsHigher() {
+        let defaults = UserDefaults(suiteName: "test.quota.\(UUID())")!
+        let key = SharedDataManager.quotaKey()
+        defaults.set(5, forKey: key)
+
+        SharedDataManager.syncQuotaFromServer(
+            monthlyQuota: 30,
+            currentMonthCount: 12,
+            isPro: false,
+            userDefaults: defaults
+        )
+
+        XCTAssertEqual(defaults.integer(forKey: key), 12)
+    }
+
+    func testSyncQuotaFromServer_doesNotDecreaseLocalCount() {
+        let defaults = UserDefaults(suiteName: "test.quota.\(UUID())")!
+        let key = SharedDataManager.quotaKey()
+        defaults.set(15, forKey: key)
+
+        SharedDataManager.syncQuotaFromServer(
+            monthlyQuota: 30,
+            currentMonthCount: 10,
+            isPro: false,
+            userDefaults: defaults
+        )
+
+        XCTAssertEqual(defaults.integer(forKey: key), 15)
+    }
+
+    func testCanSave_usesServerQuotaWhenAvailable() {
+        let defaults = UserDefaults(suiteName: "test.quota.\(UUID())")!
+        let key = SharedDataManager.quotaKey()
+
+        defaults.set(35, forKey: key)
+        defaults.set(50, forKey: "folio.monthlyQuota")
+        XCTAssertTrue(SharedDataManager.canSave(isPro: false, userDefaults: defaults))
+
+        defaults.set(51, forKey: key)
+        XCTAssertFalse(SharedDataManager.canSave(isPro: false, userDefaults: defaults))
+    }
 }

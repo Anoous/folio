@@ -50,6 +50,15 @@ struct FolioApp: App {
             }
             .onChange(of: authViewModel.authState) { _, newValue in
                 if newValue == .signedIn, let manager = offlineQueueManager {
+                    // 将服务端配额同步到 UserDefaults，Share Extension 依赖此值
+                    if let user = authViewModel.currentUser {
+                        let isPro = user.subscription != "free"
+                        SharedDataManager.syncQuotaFromServer(
+                            monthlyQuota: user.monthlyQuota,
+                            currentMonthCount: user.currentMonthCount,
+                            isPro: isPro
+                        )
+                    }
                     let sync = SyncService(context: container.mainContext)
                     syncService = sync
                     manager.onProcessPending = { articles in
