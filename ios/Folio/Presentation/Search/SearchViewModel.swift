@@ -28,7 +28,7 @@ final class SearchViewModel {
     private let searchTextSubject = PassthroughSubject<String, Never>()
     private var cancellables = Set<AnyCancellable>()
 
-    private static let historyKey = "folio_search_history"
+    static let historyKey = "folio_search_history"
     private static let maxHistoryCount = 10
 
     // MARK: - Search Result Item

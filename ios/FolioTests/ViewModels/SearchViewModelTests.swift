@@ -12,11 +12,11 @@ final class SearchViewModelTests: XCTestCase {
         super.setUp()
         container = try! DataManager.createInMemoryContainer()
         context = container.mainContext
-        UserDefaults.standard.removeObject(forKey: "folio_search_history")
+        UserDefaults.standard.removeObject(forKey: SearchViewModel.historyKey)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: "folio_search_history")
+        UserDefaults.standard.removeObject(forKey: SearchViewModel.historyKey)
         container = nil
         context = nil
         super.tearDown()
