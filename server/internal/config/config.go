@@ -18,6 +18,7 @@ type Config struct {
 	R2BucketName string
 	R2PublicURL  string
 	DevMode      bool
+	AppMode      string // "api" | "worker" | "all" (default "all")
 }
 
 func Load() (*Config, error) {
@@ -44,6 +45,14 @@ func Load() (*Config, error) {
 	}
 	if len(cfg.JWTSecret) < 32 {
 		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters")
+	}
+
+	cfg.AppMode = os.Getenv("APP_MODE")
+	if cfg.AppMode == "" {
+		cfg.AppMode = "all"
+	}
+	if cfg.AppMode != "api" && cfg.AppMode != "worker" && cfg.AppMode != "all" {
+		return nil, fmt.Errorf("invalid APP_MODE %q: must be api, worker, or all", cfg.AppMode)
 	}
 
 	return cfg, nil
