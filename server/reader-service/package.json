@@ -10,7 +10,7 @@
     "test": "echo \"no tests yet\""
   },
   "dependencies": {
-    "@vakra-dev/reader": "file:/Users/mac/github/reader",
+    "@vakra-dev/reader": "file:./vendor/vakra-dev-reader-0.1.2.tgz",
     "express": "^4.21.2"
   },
   "devDependencies": {
