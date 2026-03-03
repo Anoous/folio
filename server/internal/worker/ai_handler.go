@@ -20,6 +20,7 @@ type AIHandler struct {
 	taskRepo     *repository.TaskRepo
 	categoryRepo *repository.CategoryRepo
 	tagRepo      *repository.TagRepo
+	cacheRepo    *repository.ContentCacheRepo
 }
 
 func NewAIHandler(
@@ -28,6 +29,7 @@ func NewAIHandler(
 	taskRepo *repository.TaskRepo,
 	categoryRepo *repository.CategoryRepo,
 	tagRepo *repository.TagRepo,
+	cacheRepo *repository.ContentCacheRepo,
 ) *AIHandler {
 	return &AIHandler{
 		aiClient:     aiClient,
@@ -35,6 +37,7 @@ func NewAIHandler(
 		taskRepo:     taskRepo,
 		categoryRepo: categoryRepo,
 		tagRepo:      tagRepo,
+		cacheRepo:    cacheRepo,
 	}
 }
 
@@ -103,6 +106,34 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		"article_id", p.ArticleID,
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
+
+	// Write to content cache for cross-user reuse
+	if h.cacheRepo != nil {
+		article, err := h.articleRepo.GetByID(ctx, p.ArticleID)
+		if err == nil && article != nil {
+			markdown := derefOrEmpty(article.MarkdownContent)
+			if domain.IsCacheWorthy(markdown, result.Confidence) {
+				now := time.Now()
+				h.cacheRepo.Upsert(ctx, &domain.ContentCache{
+					URL:             article.URL,
+					Title:           article.Title,
+					Author:          article.Author,
+					SiteName:        article.SiteName,
+					FaviconURL:      article.FaviconURL,
+					CoverImageURL:   article.CoverImageURL,
+					MarkdownContent: article.MarkdownContent,
+					WordCount:       article.WordCount,
+					Language:        article.Language,
+					CategorySlug:    &result.Category,
+					Summary:         &result.Summary,
+					KeyPoints:       result.KeyPoints,
+					AIConfidence:    &result.Confidence,
+					AITagNames:      result.Tags,
+					AIAnalyzedAt:    &now,
+				}) // Non-fatal: cache write failure doesn't affect the article
+			}
+		}
+	}
 
 	return nil
 }
