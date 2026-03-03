@@ -15,10 +15,10 @@ struct ReaderView: View {
     @State private var showsDeleteConfirmation = false
 
     // Reading preferences
-    @AppStorage("reader_fontSize") private var fontSize: Double = 17
-    @AppStorage("reader_lineSpacing") private var lineSpacing: Double = 11.9
-    @AppStorage("reader_theme") private var themeRawValue: String = ReadingTheme.system.rawValue
-    @AppStorage("reader_fontFamily") private var fontFamilyRawValue: String = ReadingFontFamily.notoSerif.rawValue
+    @AppStorage(ReadingPreferenceKeys.fontSize) private var fontSize: Double = 17
+    @AppStorage(ReadingPreferenceKeys.lineSpacing) private var lineSpacing: Double = 11.9
+    @AppStorage(ReadingPreferenceKeys.theme) private var themeRawValue: String = ReadingTheme.system.rawValue
+    @AppStorage(ReadingPreferenceKeys.fontFamily) private var fontFamilyRawValue: String = ReadingFontFamily.notoSerif.rawValue
 
     private var readingTheme: ReadingTheme {
         ReadingTheme(rawValue: themeRawValue) ?? .system

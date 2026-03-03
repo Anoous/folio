@@ -5,10 +5,10 @@ import SwiftUI
 struct ReadingPreferenceView: View {
     @Environment(\.dismiss) private var dismiss
 
-    @AppStorage("reader_fontSize") private var fontSize: Double = 17
-    @AppStorage("reader_lineSpacing") private var lineSpacing: Double = 11.9
-    @AppStorage("reader_theme") private var theme: String = ReadingTheme.system.rawValue
-    @AppStorage("reader_fontFamily") private var fontFamily: String = ReadingFontFamily.notoSerif.rawValue
+    @AppStorage(ReadingPreferenceKeys.fontSize) private var fontSize: Double = 17
+    @AppStorage(ReadingPreferenceKeys.lineSpacing) private var lineSpacing: Double = 11.9
+    @AppStorage(ReadingPreferenceKeys.theme) private var theme: String = ReadingTheme.system.rawValue
+    @AppStorage(ReadingPreferenceKeys.fontFamily) private var fontFamily: String = ReadingFontFamily.notoSerif.rawValue
 
     var body: some View {
         NavigationStack {
