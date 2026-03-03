@@ -52,6 +52,19 @@ struct HomeView: View {
         )
         .searchSuggestions {
             if !isSearchActive, let svm = searchViewModel {
+                // Synced article count hint
+                Text(String(
+                    format: NSLocalizedString(
+                        "search.syncedScope",
+                        value: "搜索 %d 篇已同步文章",
+                        comment: "Search scope hint showing how many articles are indexed"
+                    ),
+                    svm.syncedArticleCount
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .listRowSeparator(.hidden)
+
                 // Recent searches
                 if !svm.searchHistory.isEmpty {
                     Section {
@@ -152,6 +165,9 @@ struct HomeView: View {
         }
         .onChange(of: authViewModel?.isAuthenticated) { _, newValue in
             viewModel?.isAuthenticated = newValue ?? false
+        }
+        .onChange(of: articles) { _, _ in
+            searchViewModel?.refreshSyncedCount(context: modelContext)
         }
     }
 

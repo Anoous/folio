@@ -18,6 +18,7 @@ final class SearchViewModel {
     var resultCount: Int = 0
     var popularTags: [Tag] = []
     var searchHistory: [String] = []
+    var syncedArticleCount: Int = 0
 
     // MARK: - Dependencies
 
@@ -180,5 +181,16 @@ final class SearchViewModel {
         } catch {
             popularTags = []
         }
+    }
+
+    // MARK: - Synced Article Count
+
+    func refreshSyncedCount(context: ModelContext) {
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { article in
+                article.statusRaw == "ready" || article.statusRaw == "clientReady"
+            }
+        )
+        syncedArticleCount = (try? context.fetchCount(descriptor)) ?? 0
     }
 }
