@@ -7,7 +7,7 @@ struct FolioApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     let container: ModelContainer
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage(AppConstants.onboardingCompletedKey) private var hasCompletedOnboarding = false
     @State private var authViewModel = AuthViewModel()
     @State private var offlineQueueManager: OfflineQueueManager?
     @State private var syncService: SyncService?

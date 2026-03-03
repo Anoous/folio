@@ -7,4 +7,7 @@ enum AppConstants {
 
     /// Keychain service name
     static let keychainServiceName = "com.folio.app"
+
+    /// Onboarding 完成状态 key（UserDefaults.standard）
+    static let onboardingCompletedKey = "hasCompletedOnboarding"
 }
