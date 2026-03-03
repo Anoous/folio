@@ -186,9 +186,11 @@ final class SearchViewModel {
     // MARK: - Synced Article Count
 
     func refreshSyncedCount(context: ModelContext) {
+        let readyRaw = ArticleStatus.ready.rawValue
+        let clientReadyRaw = ArticleStatus.clientReady.rawValue
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate<Article> { article in
-                article.statusRaw == "ready" || article.statusRaw == "clientReady"
+                article.statusRaw == readyRaw || article.statusRaw == clientReadyRaw
             }
         )
         syncedArticleCount = (try? context.fetchCount(descriptor)) ?? 0
