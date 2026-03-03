@@ -138,6 +138,6 @@ final class SharedDataManager {
 
 extension UserDefaults {
     static var appGroup: UserDefaults {
-        UserDefaults(suiteName: "group.com.folio.app") ?? .standard
+        UserDefaults(suiteName: AppConstants.appGroupIdentifier) ?? .standard
     }
 }

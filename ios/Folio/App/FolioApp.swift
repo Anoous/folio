@@ -15,11 +15,11 @@ struct FolioApp: App {
     init() {
         do {
             let config: ModelConfiguration
-            if let _ = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.folio.app") {
+            if let _ = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) {
                 config = ModelConfiguration(
                     "Folio",
                     schema: DataManager.schema,
-                    groupContainer: .identifier("group.com.folio.app")
+                    groupContainer: .identifier(AppConstants.appGroupIdentifier)
                 )
             } else {
                 config = ModelConfiguration("Folio", schema: DataManager.schema)

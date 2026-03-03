@@ -21,7 +21,7 @@ final class DataManager {
         let config = ModelConfiguration(
             "Folio",
             schema: Self.schema,
-            groupContainer: .identifier("group.com.folio.app")
+            groupContainer: .identifier(AppConstants.appGroupIdentifier)
         )
         let container = try ModelContainer(for: Self.schema, configurations: [config])
         preloadCategories(in: container.mainContext)
