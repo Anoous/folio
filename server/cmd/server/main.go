@@ -2,8 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,22 +15,27 @@ import (
 	"folio-server/internal/api/handler"
 	"folio-server/internal/client"
 	"folio-server/internal/config"
+	"folio-server/internal/logger"
 	"folio-server/internal/repository"
 	"folio-server/internal/service"
 	"folio-server/internal/worker"
 )
 
 func main() {
+	logger.Init()
+
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	// Database
 	ctx := context.Background()
 	pool, err := repository.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
 
@@ -54,7 +58,8 @@ func main() {
 			cfg.R2BucketName, cfg.R2PublicURL,
 		)
 		if err != nil {
-			log.Fatalf("failed to create R2 client: %v", err)
+			slog.Error("failed to create R2 client", "error", err)
+			os.Exit(1)
 		}
 	}
 
@@ -116,25 +121,26 @@ func main() {
 
 	switch cfg.AppMode {
 	case "worker":
-		log.Println("Starting in WORKER mode...")
+		slog.Info("starting in worker mode")
 		if err := workerServer.Run(); err != nil {
-			log.Printf("worker server error: %v", err)
+			slog.Error("worker server error", "error", err)
 			return
 		}
 	case "api":
-		log.Println("Starting in API mode (no worker)...")
+		slog.Info("starting in api mode")
 		runHTTPServer(httpServer, cfg.Port, nil)
 	default: // "all"
-		log.Println("Starting in ALL mode (API + Worker)...")
+		slog.Info("starting in all mode")
 		go func() {
 			if err := workerServer.Run(); err != nil {
-				log.Fatalf("worker server error: %v", err)
+				slog.Error("worker server error", "error", err)
+				os.Exit(1)
 			}
 		}()
 		runHTTPServer(httpServer, cfg.Port, workerServer)
 	}
 
-	log.Println("Server stopped")
+	slog.Info("server stopped")
 }
 
 func runHTTPServer(server *http.Server, port string, workerServer *worker.WorkerServer) {
@@ -142,20 +148,21 @@ func runHTTPServer(server *http.Server, port string, workerServer *worker.Worker
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		fmt.Printf("Folio API server listening on :%s\n", port)
+		slog.Info("folio api server listening", "port", port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server failed: %v", err)
+			slog.Error("server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	<-done
-	log.Println("Shutting down...")
+	slog.Info("shutting down")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("HTTP server shutdown error: %v", err)
+		slog.Error("http server shutdown error", "error", err)
 	}
 	if workerServer != nil {
 		workerServer.Shutdown()

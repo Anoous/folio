@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/hibiken/asynq"
 
@@ -42,6 +44,8 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("unmarshal ai payload: %w", err)
 	}
 
+	start := time.Now()
+
 	// Mark AI started
 	if err := h.taskRepo.SetAIStarted(ctx, p.TaskID); err != nil {
 		return fmt.Errorf("set ai started: %w", err)
@@ -55,6 +59,10 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		Author:  p.Author,
 	})
 	if err != nil {
+		slog.Error("ai task failed",
+			"article_id", p.ArticleID,
+			"error", err,
+		)
 		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
 		h.articleRepo.SetError(ctx, p.ArticleID, err.Error())
 		h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusFailed)
@@ -69,6 +77,10 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		Confidence:   result.Confidence,
 		Language:     result.Language,
 	}); err != nil {
+		slog.Error("ai task failed to persist result",
+			"article_id", p.ArticleID,
+			"error", err,
+		)
 		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
 		return fmt.Errorf("update ai result: %w", err)
 	}
@@ -86,6 +98,11 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	if err := h.taskRepo.SetAIFinished(ctx, p.TaskID); err != nil {
 		return fmt.Errorf("set ai finished: %w", err)
 	}
+
+	slog.Info("ai task completed",
+		"article_id", p.ArticleID,
+		"duration_ms", time.Since(start).Milliseconds(),
+	)
 
 	return nil
 }

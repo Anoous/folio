@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
+	"time"
 
 	"github.com/hibiken/asynq"
 
@@ -68,6 +70,8 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("unmarshal crawl payload: %w", err)
 	}
 
+	start := time.Now()
+
 	// Mark crawl started
 	if err := h.taskRepo.SetCrawlStarted(ctx, p.TaskID); err != nil {
 		return fmt.Errorf("set crawl started: %w", err)
@@ -84,6 +88,10 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		// Fallback: check if article already has client-provided content
 		article, getErr := h.articleRepo.GetByID(ctx, p.ArticleID)
 		if getErr == nil && article != nil && article.MarkdownContent != nil && *article.MarkdownContent != "" {
+			slog.Info("crawl task using client-provided content fallback",
+				"article_id", p.ArticleID,
+				"duration_ms", time.Since(start).Milliseconds(),
+			)
 			h.taskRepo.SetCrawlFinished(ctx, p.TaskID)
 
 			source := derefOrDefault(article.SiteName, "web")
@@ -98,6 +106,10 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 			return nil
 		}
 
+		slog.Error("crawl task failed",
+			"article_id", p.ArticleID,
+			"error", err,
+		)
 		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
 		h.articleRepo.SetError(ctx, p.ArticleID, err.Error())
 		return fmt.Errorf("scrape failed: %w", err)
@@ -112,6 +124,10 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		Language:   result.Metadata.Language,
 		FaviconURL: result.Metadata.Favicon,
 	}); err != nil {
+		slog.Error("crawl task failed to persist result",
+			"article_id", p.ArticleID,
+			"error", err,
+		)
 		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
 		return fmt.Errorf("update crawl result: %w", err)
 	}
@@ -130,6 +146,11 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	if _, err := h.asynqClient.EnqueueContext(ctx, aiTask); err != nil {
 		return fmt.Errorf("enqueue ai task: %w", err)
 	}
+
+	slog.Info("crawl task completed",
+		"article_id", p.ArticleID,
+		"duration_ms", time.Since(start).Milliseconds(),
+	)
 
 	// Enqueue image upload task (extract image URLs from markdown)
 	imageURLs := extractImageURLs(result.Markdown)
