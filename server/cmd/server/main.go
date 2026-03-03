@@ -98,9 +98,12 @@ func main() {
 		SubscriptionHandler: subscriptionHandler,
 	})
 
+	// Content cache repository
+	contentCacheRepo := repository.NewContentCacheRepo(pool)
+
 	// Worker server
-	crawlHandler := worker.NewCrawlHandler(readerClient, articleRepo, taskRepo, asynqClient, r2Client != nil)
-	aiHandler := worker.NewAIHandler(aiClient, articleRepo, taskRepo, categoryRepo, tagRepo)
+	crawlHandler := worker.NewCrawlHandler(readerClient, articleRepo, taskRepo, asynqClient, r2Client != nil, contentCacheRepo, tagRepo, categoryRepo)
+	aiHandler := worker.NewAIHandler(aiClient, articleRepo, taskRepo, categoryRepo, tagRepo, contentCacheRepo)
 
 	var workerServer *worker.WorkerServer
 	if r2Client != nil {
