@@ -288,6 +288,18 @@
         }
       }
     },
+    "search.syncedScope" : {
+      "comment" : "Search scope hint showing how many articles are indexed",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "搜索 %d 篇已同步文章"
+          }
+        }
+      }
+    },
     "settings.title" : {
       "extractionState" : "manual",
       "localizations" : {
