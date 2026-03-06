@@ -55,6 +55,7 @@ type crawlTagRepo interface {
 
 type CrawlHandler struct {
 	readerClient scraper
+	jinaClient   scraper
 	articleRepo  crawlArticleRepo
 	taskRepo     crawlTaskRepo
 	asynqClient  crawlEnqueuer
@@ -65,6 +66,7 @@ type CrawlHandler struct {
 
 func NewCrawlHandler(
 	readerClient *client.ReaderClient,
+	jinaClient *client.JinaClient,
 	articleRepo *repository.ArticleRepo,
 	taskRepo *repository.TaskRepo,
 	asynqClient *asynq.Client,
@@ -74,6 +76,7 @@ func NewCrawlHandler(
 ) *CrawlHandler {
 	return &CrawlHandler{
 		readerClient: readerClient,
+		jinaClient:   jinaClient,
 		articleRepo:  articleRepo,
 		taskRepo:     taskRepo,
 		asynqClient:  asynqClient,
@@ -90,6 +93,7 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 
 	start := time.Now()
+	slog.Info("crawl task started", "article_id", p.ArticleID, "task_id", p.TaskID, "url", p.URL)
 
 	// Mark crawl started
 	if err := h.taskRepo.SetCrawlStarted(ctx, p.TaskID); err != nil {
@@ -135,6 +139,8 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		}
 	}
 
+	slog.Debug("cache miss, checking client content", "article_id", p.ArticleID)
+
 	// --- Optimization 2: Check client-extracted content ---
 	article, getErr := h.articleRepo.GetByID(ctx, p.ArticleID)
 	if getErr == nil && article != nil && article.MarkdownContent != nil && *article.MarkdownContent != "" {
@@ -155,16 +161,26 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return nil
 	}
 
-	// --- Normal path: call Reader ---
+	// --- Normal path: call Reader, fallback to Jina ---
+	slog.Debug("no client content, calling reader", "article_id", p.ArticleID)
 	result, err := h.readerClient.Scrape(ctx, p.URL)
 	if err != nil {
-		slog.Error("crawl task failed",
+		slog.Warn("reader failed, trying jina fallback",
 			"article_id", p.ArticleID,
+			"url", p.URL,
 			"error", err,
 		)
-		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
-		h.articleRepo.SetError(ctx, p.ArticleID, err.Error())
-		return fmt.Errorf("scrape failed: %w", err)
+		result, err = h.jinaClient.Scrape(ctx, p.URL)
+		if err != nil {
+			slog.Error("crawl task failed (reader + jina both failed)",
+				"article_id", p.ArticleID,
+				"error", err,
+			)
+			h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
+			h.articleRepo.SetError(ctx, p.ArticleID, err.Error())
+			return fmt.Errorf("scrape failed: %w", err)
+		}
+		slog.Info("jina fallback succeeded", "article_id", p.ArticleID, "url", p.URL, "duration_ms", time.Since(start).Milliseconds())
 	}
 
 	// Post-process Weibo content
@@ -213,6 +229,9 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 
 	slog.Info("crawl task completed",
 		"article_id", p.ArticleID,
+		"source", source,
+		"title", title,
+		"content_len", len(markdown),
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
 

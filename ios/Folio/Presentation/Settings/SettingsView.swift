@@ -2,21 +2,49 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
-    @Environment(OfflineQueueManager.self) private var offlineQueueManager: OfflineQueueManager?
+    @State private var showUpgradeAlert = false
 
     var body: some View {
         List {
             userProfileSection
             subscriptionSection
-            syncStatusSection
-            quotaSection
-            appInfoSection
             accountActionsSection
+            appInfoSection
             #if DEBUG
             devToolsSection
             #endif
         }
         .navigationTitle(String(localized: "settings.title", defaultValue: "Settings"))
+        .alert(
+            String(localized: "settings.upgrade.title", defaultValue: "Upgrade to Pro"),
+            isPresented: $showUpgradeAlert
+        ) {
+            Button(String(localized: "settings.upgrade.buy", defaultValue: "Subscribe — $9.99/year")) {
+                // Mock — in production this triggers StoreKit
+            }
+            Button(String(localized: "button.cancel", defaultValue: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "settings.upgrade.message", defaultValue: "Unlimited saves, priority AI processing, and more."))
+        }
+    }
+
+    // MARK: - Subscription
+
+    private var subscriptionSection: some View {
+        Section {
+            Button {
+                showUpgradeAlert = true
+            } label: {
+                HStack {
+                    Label(String(localized: "settings.upgrade.row", defaultValue: "Upgrade to Pro"), systemImage: "star.fill")
+                        .foregroundStyle(Color.folio.accent)
+                    Spacer()
+                    Text(String(localized: "settings.upgrade.price", defaultValue: "$9.99/yr"))
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.folio.textTertiary)
+                }
+            }
+        }
     }
 
     // MARK: - User Profile
@@ -40,10 +68,6 @@ struct SettingsView: View {
                                 .font(Typography.caption)
                                 .foregroundStyle(Color.folio.textSecondary)
                         }
-
-                        Text(user.subscription.capitalized)
-                            .font(Typography.tag)
-                            .foregroundStyle(Color.folio.accent)
                     }
                 }
                 .padding(.vertical, Spacing.xs)
@@ -60,129 +84,13 @@ struct SettingsView: View {
                             Text(String(localized: "settings.notSignedIn", defaultValue: "Not signed in"))
                                 .font(Typography.listTitle)
                                 .foregroundStyle(Color.folio.textSecondary)
-                            Text(String(localized: "settings.signInBenefits", defaultValue: "Sign in to sync, AI processing, and more"))
+                            Text(String(localized: "settings.signInBenefits", defaultValue: "Sign in to enable AI and sync"))
                                 .font(Typography.caption)
                                 .foregroundStyle(Color.folio.textTertiary)
                         }
                     }
                 }
                 .padding(.vertical, Spacing.xs)
-            }
-        }
-    }
-
-    // MARK: - Sync Status
-
-    @ViewBuilder
-    private var syncStatusSection: some View {
-        Section(String(localized: "settings.sync", defaultValue: "Sync")) {
-            HStack {
-                Label {
-                    Text(String(localized: "settings.network", defaultValue: "Network"))
-                } icon: {
-                    Image(systemName: offlineQueueManager?.isNetworkAvailable == true ? "wifi" : "wifi.slash")
-                        .foregroundStyle(offlineQueueManager?.isNetworkAvailable == true ? .green : .red)
-                }
-
-                Spacer()
-
-                Text(offlineQueueManager?.isNetworkAvailable == true
-                     ? String(localized: "settings.connected", defaultValue: "Connected")
-                     : String(localized: "settings.offline", defaultValue: "Offline"))
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textSecondary)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(offlineQueueManager?.isNetworkAvailable == true
-                ? String(localized: "settings.a11y.networkConnected", defaultValue: "Network: Connected")
-                : String(localized: "settings.a11y.networkOffline", defaultValue: "Network: Offline"))
-
-            HStack {
-                Label {
-                    Text(String(localized: "settings.pending", defaultValue: "Pending Articles"))
-                } icon: {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .foregroundStyle(Color.folio.accent)
-                }
-
-                Spacer()
-
-                Text("\(offlineQueueManager?.pendingCount ?? 0)")
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textSecondary)
-            }
-        }
-    }
-
-    // MARK: - Quota
-
-    @ViewBuilder
-    private var quotaSection: some View {
-        if let user = authViewModel?.currentUser {
-            Section(String(localized: "settings.quota", defaultValue: "Monthly Quota")) {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    HStack {
-                        Text(String(localized: "settings.articlesUsed", defaultValue: "Articles saved"))
-                            .font(Typography.body)
-                        Spacer()
-                        Text("\(user.currentMonthCount) / \(user.monthlyQuota)")
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.folio.textSecondary)
-                    }
-
-                    ProgressView(
-                        value: Double(user.currentMonthCount),
-                        total: Double(max(user.monthlyQuota, 1))
-                    )
-                    .tint(quotaColor(used: user.currentMonthCount, total: user.monthlyQuota))
-                }
-            }
-        }
-    }
-
-    private func quotaColor(used: Int, total: Int) -> Color {
-        let ratio = Double(used) / Double(max(total, 1))
-        if ratio >= 0.9 { return .red }
-        if ratio >= 0.7 { return .orange }
-        return Color.folio.accent
-    }
-
-    // MARK: - Subscription
-
-    @ViewBuilder
-    private var subscriptionSection: some View {
-        Section {
-            NavigationLink {
-                PaywallView()
-            } label: {
-                HStack(spacing: Spacing.sm) {
-                    Image(systemName: "sparkles")
-                        .font(.title3)
-                        .foregroundStyle(Color.folio.accent)
-
-                    VStack(alignment: .leading, spacing: Spacing.xxs) {
-                        Text(String(localized: "settings.upgradePro", defaultValue: "Upgrade to Pro"))
-                            .font(Typography.listTitle)
-                            .foregroundStyle(Color.folio.textPrimary)
-                        Text(String(localized: "settings.upgradeHint", defaultValue: "Unlimited saves, AI tags & summary, and more"))
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.folio.textSecondary)
-                    }
-                }
-                .padding(.vertical, Spacing.xxs)
-            }
-        }
-    }
-
-    // MARK: - App Info
-
-    private var appInfoSection: some View {
-        Section(String(localized: "settings.about", defaultValue: "About")) {
-            HStack {
-                Text(String(localized: "settings.version", defaultValue: "Version"))
-                Spacer()
-                Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
-                    .foregroundStyle(Color.folio.textSecondary)
             }
         }
     }
@@ -204,6 +112,19 @@ struct SettingsView: View {
                 } label: {
                     Label(String(localized: "settings.signIn", defaultValue: "Sign In"), systemImage: "person.badge.plus")
                 }
+            }
+        }
+    }
+
+    // MARK: - App Info
+
+    private var appInfoSection: some View {
+        Section {
+            HStack {
+                Text(String(localized: "settings.version", defaultValue: "Version"))
+                Spacer()
+                Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
+                    .foregroundStyle(Color.folio.textSecondary)
             }
         }
     }

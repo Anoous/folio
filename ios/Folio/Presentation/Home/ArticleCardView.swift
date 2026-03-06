@@ -1,6 +1,4 @@
 import SwiftUI
-import Nuke
-import NukeUI
 
 struct ArticleCardView: View {
     let article: Article
@@ -8,43 +6,22 @@ struct ArticleCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: Spacing.sm) {
-                // Status badge
+            HStack(alignment: .top, spacing: Spacing.xs) {
                 statusBadge
 
-                // Thumbnail
-                if let coverURL = article.coverImageURL, let url = URL(string: coverURL) {
-                    LazyImage(url: url) { state in
-                        if let image = state.image {
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } else {
-                            Color.folio.separator
-                        }
-                    }
-                    .frame(width: 60, height: 60)
-                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
-                }
-
-                // Content
                 VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    // Title
                     Text(article.displayTitle)
                         .font(Typography.listTitle)
                         .foregroundStyle(Color.folio.textPrimary)
                         .lineLimit(2)
 
-                    // Summary (hide if same as title)
-                    if let summary = article.displaySummary,
-                       summary != article.displayTitle {
+                    if let summary = article.displaySummary {
                         Text(summary)
-                            .font(Typography.body)
+                            .font(Typography.caption)
                             .foregroundStyle(Color.folio.textSecondary)
-                            .lineLimit(2)
+                            .lineLimit(1)
                     }
 
-                    // Source + time
                     HStack(spacing: Spacing.xxs) {
                         sourceIcon
                         if let siteName = article.siteName {
@@ -52,37 +29,23 @@ struct ArticleCardView: View {
                                 .font(Typography.caption)
                                 .foregroundStyle(Color.folio.textTertiary)
                         }
-                        Text("·")
+                        Text("\u{00B7}")
                             .foregroundStyle(Color.folio.textTertiary)
                         Text(article.createdAt.relativeFormatted())
                             .font(Typography.caption)
                             .foregroundStyle(Color.folio.textTertiary)
-                    }
-
-                    // Tags (max 3)
-                    if !article.tags.isEmpty {
-                        HStack(spacing: Spacing.xxs) {
-                            ForEach(article.tags.prefix(3)) { tag in
-                                TagChip(text: tag.name)
-                            }
-                            if article.tags.count > 3 {
-                                Text("+\(article.tags.count - 3)")
-                                    .font(Typography.tag)
-                                    .foregroundStyle(Color.folio.textTertiary)
-                            }
-                        }
                     }
                 }
 
                 Spacer(minLength: 0)
             }
 
-            // Status bar
+            // Status bar for non-ready states
             switch article.status {
             case .processing:
                 statusInfoBar(
                     icon: "arrow.trianglehead.2.counterclockwise",
-                    text: String(localized: "article.status.processing", defaultValue: "AI is analyzing this article..."),
+                    text: String(localized: "article.status.processing", defaultValue: "AI is analyzing..."),
                     color: Color.folio.warning
                 )
             case .failed:
@@ -94,9 +57,7 @@ struct ArticleCardView: View {
                         .font(Typography.caption)
                         .foregroundStyle(Color.folio.error)
                         .lineLimit(1)
-
                     Spacer()
-
                     if let onRetry {
                         Button {
                             onRetry()
@@ -109,7 +70,6 @@ struct ArticleCardView: View {
                     }
                 }
                 .padding(.top, Spacing.xxs)
-                .padding(.leading, Spacing.sm + 8)
             case .clientReady:
                 statusInfoBar(
                     icon: "doc.richtext",
@@ -127,8 +87,6 @@ struct ArticleCardView: View {
             }
         }
         .padding(.vertical, Spacing.xs)
-        .padding(.horizontal, Spacing.screenPadding)
-        .background(Color.folio.cardBackground)
     }
 
     private func statusInfoBar(icon: String, text: String, color: Color) -> some View {
@@ -143,7 +101,6 @@ struct ArticleCardView: View {
             Spacer()
         }
         .padding(.top, Spacing.xxs)
-        .padding(.leading, Spacing.sm + 8)
     }
 
     @ViewBuilder
@@ -180,14 +137,13 @@ struct ArticleCardView: View {
     VStack(spacing: 0) {
         ArticleCardView(article: {
             let a = Article(url: "https://example.com", title: "SwiftUI Best Practices for 2025", sourceType: .web)
-            a.summary = "A comprehensive guide to building modern iOS applications with SwiftUI."
             a.siteName = "Swift Blog"
+            a.summary = "A comprehensive guide to modern SwiftUI patterns and architecture decisions."
             return a
         }())
         Divider()
         ArticleCardView(article: {
-            let a = Article(url: "https://mp.weixin.qq.com/s/abc", title: "深入理解 Swift 并发模型", sourceType: .wechat)
-            a.summary = "本文详细介绍了 Swift 的 async/await 并发编程模型。"
+            let a = Article(url: "https://mp.weixin.qq.com/s/abc", title: "Deep Dive into Swift Concurrency", sourceType: .wechat)
             a.siteName = "SwiftGG"
             a.statusRaw = ArticleStatus.processing.rawValue
             return a

@@ -1,94 +1,86 @@
 import SwiftUI
 
 struct InsightCard: View {
-    let insight: MockInsight
-    var onDismiss: () -> Void = {}
-    var onRead: () -> Void = {}
+    let onDismiss: () -> Void
+
+    private let mockRecallText = String(
+        localized: "insight.recallText",
+        defaultValue: "3 weeks ago you saved a pricing strategy insight from \"Growth Hacking Weekly\"."
+    )
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            // Header
-            HStack(spacing: Spacing.xxs) {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            // Header row
+            HStack(alignment: .top, spacing: Spacing.xs) {
                 Image(systemName: "lightbulb.fill")
-                    .font(.caption)
-                    .foregroundStyle(.yellow)
-                Text(String(localized: "insight.header", defaultValue: "Knowledge Recall"))
-                    .font(Typography.tag)
-                    .foregroundStyle(Color.folio.textSecondary)
-                Spacer()
-                Text(insight.timeAgo)
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textTertiary)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.folio.warning)
+
+                Text(mockRecallText)
+                    .font(Typography.body)
+                    .foregroundStyle(Color.folio.textPrimary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+
+                Button {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        onDismiss()
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption2)
+                        .foregroundStyle(Color.folio.textTertiary)
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
             }
 
-            // Insight quote
-            Text(insight.quote)
-                .font(Typography.body)
-                .foregroundStyle(Color.folio.textPrimary)
-                .lineSpacing(4)
-                .fixedSize(horizontal: false, vertical: true)
-
-            // Article reference
-            Text(insight.articleTitle)
-                .font(Typography.caption)
-                .foregroundStyle(Color.folio.link)
-                .lineLimit(1)
-
             // Action buttons
-            HStack(spacing: Spacing.sm) {
+            HStack(spacing: Spacing.md) {
                 Button {
-                    onDismiss()
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        onDismiss()
+                    }
                 } label: {
                     Text(String(localized: "insight.gotIt", defaultValue: "Got it"))
                         .font(Typography.tag)
                         .foregroundStyle(Color.folio.textSecondary)
-                        .padding(.horizontal, Spacing.sm)
-                        .padding(.vertical, Spacing.xxs)
-                        .background(Color.folio.cardBackground)
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(Color.folio.separator, lineWidth: 1))
                 }
+                .buttonStyle(.plain)
+
+                Text("\u{00B7}")
+                    .foregroundStyle(Color.folio.textTertiary)
 
                 Button {
-                    onRead()
+                    // Mock action — in production this would navigate to the article
                 } label: {
                     Text(String(localized: "insight.readAgain", defaultValue: "Read again"))
                         .font(Typography.tag)
                         .foregroundStyle(Color.folio.accent)
-                        .padding(.horizontal, Spacing.sm)
-                        .padding(.vertical, Spacing.xxs)
-                        .background(Color.folio.accent.opacity(0.1))
-                        .clipShape(Capsule())
                 }
-
-                Spacer()
+                .buttonStyle(.plain)
             }
+            .padding(.leading, Spacing.lg)
         }
-        .padding(Spacing.sm)
-        .background(
+        .padding(Spacing.md)
+        .background(Color.folio.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
+        .overlay(
             RoundedRectangle(cornerRadius: CornerRadius.medium)
-                .fill(Color.folio.cardBackground)
-                .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+                .stroke(Color.folio.separator, lineWidth: 0.5)
         )
+        .padding(.horizontal, Spacing.screenPadding)
+        .padding(.vertical, Spacing.xs)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets())
     }
 }
 
-// MARK: - Mock Data
-
-struct MockInsight: Identifiable {
-    let id = UUID()
-    let quote: String
-    let articleTitle: String
-    let timeAgo: String
-
-    static let sample = MockInsight(
-        quote: String(localized: "insight.mock.quote", defaultValue: "The best pricing strategy for indie apps: anchor to the annual price, then show the monthly price as comparison. Annual plans convert 3x better."),
-        articleTitle: String(localized: "insight.mock.article", defaultValue: "Indie App Pricing Strategies in 2026"),
-        timeAgo: String(localized: "insight.mock.time", defaultValue: "Saved 3 weeks ago")
-    )
-}
-
 #Preview {
-    InsightCard(insight: .sample)
-        .padding()
+    List {
+        InsightCard(onDismiss: {})
+    }
+    .listStyle(.plain)
 }

@@ -16,19 +16,6 @@
     "[%@]" : {
 
     },
-    "%@" : {
-
-    },
-    "%@ / %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ / %2$@"
-          }
-        }
-      }
-    },
     "%@." : {
 
     },
@@ -41,10 +28,13 @@
     "•" : {
 
     },
-    "+%@" : {
+    "✦" : {
 
     },
-    "✦" : {
+    "✨" : {
+
+    },
+    "0:00 / %@" : {
 
     },
     "A" : {
@@ -202,6 +192,30 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重试"
+          }
+        }
+      }
+    },
+    "digest.duration" : {
+      "comment" : "Digest audio duration in minutes",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%d min"
+          }
+        }
+      }
+    },
+    "digest.summary" : {
+      "comment" : "Daily digest summary text",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Today you saved %d articles about Swift concurrency, iOS architecture, and testing patterns."
           }
         }
       }
@@ -545,17 +559,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "同步中..."
-          }
-        }
-      }
-    },
-    "paywall.subscribe" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Subscribe to %@"
           }
         }
       }
@@ -1084,6 +1087,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索 %d 篇已同步文章"
+          }
+        }
+      }
+    },
+    "search.topicCount" : {
+      "comment" : "Number of articles in topic",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%d articles"
           }
         }
       }

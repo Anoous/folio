@@ -102,7 +102,8 @@ func main() {
 	contentCacheRepo := repository.NewContentCacheRepo(pool)
 
 	// Worker server
-	crawlHandler := worker.NewCrawlHandler(readerClient, articleRepo, taskRepo, asynqClient, r2Client != nil, contentCacheRepo, tagRepo)
+	jinaClient := client.NewJinaClient(cfg.JinaAPIKey)
+	crawlHandler := worker.NewCrawlHandler(readerClient, jinaClient, articleRepo, taskRepo, asynqClient, r2Client != nil, contentCacheRepo, tagRepo)
 	aiHandler := worker.NewAIHandler(aiClient, articleRepo, taskRepo, categoryRepo, tagRepo, contentCacheRepo)
 
 	var workerServer *worker.WorkerServer

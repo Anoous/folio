@@ -549,6 +549,13 @@ func (m *mockCrawlTagRepo) AttachToArticle(ctx context.Context, articleID, tagID
 	return nil
 }
 
+// failingScraper is a scraper that always returns an error.
+var failingScraper = &mockScraper{
+	scrapeFn: func(ctx context.Context, url string) (*client.ScrapeResponse, error) {
+		return nil, errors.New("fallback not available")
+	},
+}
+
 // newTestCrawlHandler creates a CrawlHandler with mock dependencies for testing.
 func newTestCrawlHandler(
 	scraper *mockScraper,
@@ -559,6 +566,7 @@ func newTestCrawlHandler(
 ) *CrawlHandler {
 	return &CrawlHandler{
 		readerClient: scraper,
+		jinaClient:   failingScraper,
 		articleRepo:  articleRepo,
 		taskRepo:     taskRepo,
 		asynqClient:  enqueuer,
@@ -1133,6 +1141,7 @@ func TestProcessTask_CacheHitFull_SkipsCrawlAndAI(t *testing.T) {
 
 	h := &CrawlHandler{
 		readerClient: mockReader,
+		jinaClient:   failingScraper,
 		articleRepo:  mockArtRepo,
 		taskRepo:     mockTaskRepo,
 		asynqClient:  mockEnq,
@@ -1190,6 +1199,7 @@ func TestProcessTask_CacheMiss_ClientContent_SkipsReader(t *testing.T) {
 
 	h := &CrawlHandler{
 		readerClient: mockReader,
+		jinaClient:   failingScraper,
 		articleRepo:  mockArtRepo,
 		taskRepo:     mockTaskRepo,
 		asynqClient:  mockEnq,
@@ -1242,6 +1252,7 @@ func TestProcessTask_CacheMiss_NoClientContent_CallsReader(t *testing.T) {
 
 	h := &CrawlHandler{
 		readerClient: mockReader,
+		jinaClient:   failingScraper,
 		articleRepo:  mockArtRepo,
 		taskRepo:     mockTaskRepo,
 		asynqClient:  mockEnq,
