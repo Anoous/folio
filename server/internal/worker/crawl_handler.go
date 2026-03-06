@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -52,11 +53,6 @@ type crawlTagRepo interface {
 	AttachToArticle(ctx context.Context, articleID, tagID string) error
 }
 
-// crawlCategoryRepo abstracts category lookup for resolving cached category_slug.
-type crawlCategoryRepo interface {
-	GetIDBySlug(ctx context.Context, slug string) (string, error)
-}
-
 type CrawlHandler struct {
 	readerClient scraper
 	articleRepo  crawlArticleRepo
@@ -65,7 +61,6 @@ type CrawlHandler struct {
 	enableImage  bool
 	cacheRepo    crawlContentCacheRepo
 	tagRepo      crawlTagRepo
-	categoryRepo crawlCategoryRepo
 }
 
 func NewCrawlHandler(
@@ -76,7 +71,6 @@ func NewCrawlHandler(
 	enableImage bool,
 	cacheRepo *repository.ContentCacheRepo,
 	tagRepo *repository.TagRepo,
-	categoryRepo *repository.CategoryRepo,
 ) *CrawlHandler {
 	return &CrawlHandler{
 		readerClient: readerClient,
@@ -86,7 +80,6 @@ func NewCrawlHandler(
 		enableImage:  enableImage,
 		cacheRepo:    cacheRepo,
 		tagRepo:      tagRepo,
-		categoryRepo: categoryRepo,
 	}
 }
 
@@ -174,11 +167,23 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("scrape failed: %w", err)
 	}
 
+	// Post-process Weibo content
+	title := result.Metadata.Title
+	markdown := result.Markdown
+	if isWeiboURL(p.URL) {
+		markdown = cleanWeiboMarkdown(markdown)
+		if isGenericWeiboTitle(title) {
+			if extracted := extractTitleFromMarkdown(markdown); extracted != "" {
+				title = extracted
+			}
+		}
+	}
+
 	if err := h.articleRepo.UpdateCrawlResult(ctx, p.ArticleID, repository.CrawlResult{
-		Title:      result.Metadata.Title,
+		Title:      title,
 		Author:     result.Metadata.Author,
 		SiteName:   result.Metadata.SiteName,
-		Markdown:   result.Markdown,
+		Markdown:   markdown,
 		CoverImage: result.Metadata.OGImage,
 		Language:   result.Metadata.Language,
 		FaviconURL: result.Metadata.Favicon,
@@ -199,7 +204,7 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 	aiTask := NewAIProcessTask(
 		p.ArticleID, p.TaskID, p.UserID,
-		result.Metadata.Title, result.Markdown,
+		title, markdown,
 		source, result.Metadata.Author,
 	)
 	if _, err := h.asynqClient.EnqueueContext(ctx, aiTask); err != nil {
@@ -284,6 +289,91 @@ func derefOrDefault(s *string, fallback string) string {
 		return *s
 	}
 	return fallback
+}
+
+// --- Weibo content cleaning ---
+
+// isWeiboURL checks if the URL belongs to Weibo.
+func isWeiboURL(url string) bool {
+	return strings.Contains(url, "weibo.com") || strings.Contains(url, "weibo.cn")
+}
+
+// Generic useless titles from Weibo HTML <title>.
+var weiboGenericTitles = []string{
+	"微博正文",
+	"Sina Visitor System",
+	"微博",
+}
+
+// isGenericWeiboTitle returns true if the title is a known useless Weibo default.
+func isGenericWeiboTitle(title string) bool {
+	t := strings.TrimSpace(title)
+	for _, g := range weiboGenericTitles {
+		if strings.Contains(t, g) {
+			return true
+		}
+	}
+	return t == ""
+}
+
+// extractTitleFromMarkdown extracts the first non-empty, non-link line from markdown as a title.
+// Falls back to the first 80 characters of content if nothing suitable found.
+func extractTitleFromMarkdown(md string) string {
+	lines := strings.Split(md, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Skip lines that are only links or images
+		if strings.HasPrefix(line, "![") || strings.HasPrefix(line, "[![") {
+			continue
+		}
+		// Strip markdown heading markers
+		cleaned := strings.TrimLeft(line, "# ")
+		// Skip lines that are only URLs
+		if strings.HasPrefix(cleaned, "http://") || strings.HasPrefix(cleaned, "https://") || strings.HasPrefix(cleaned, "//") {
+			continue
+		}
+		// Remove inline markdown links but keep text: [text](url) → text
+		cleaned = mdLinkTextRegex.ReplaceAllString(cleaned, "$1")
+		cleaned = strings.TrimSpace(cleaned)
+		if cleaned == "" {
+			continue
+		}
+		// Truncate to reasonable title length
+		if len([]rune(cleaned)) > 80 {
+			runes := []rune(cleaned)
+			cleaned = string(runes[:80]) + "…"
+		}
+		return cleaned
+	}
+	return ""
+}
+
+// Regex patterns for Weibo markdown cleaning.
+var (
+	// Matches markdown links to weibo search/hashtag pages: [#topic#](//s.weibo.com/...)
+	weiboHashtagLinkRegex = regexp.MustCompile(`\[#([^#\]]+)#\]\([^)]*(?:s\.weibo\.com|weibo\.com/p/)[^)]*\)`)
+	// Matches markdown links to weibo user profiles: [@user](//weibo.com/u/...)
+	weiboMentionLinkRegex = regexp.MustCompile(`\[@([^\]]+)\]\([^)]*weibo\.com[^)]*\)`)
+	// Matches bare weibo URLs (protocol-relative or absolute)
+	weiboBareLinkRegex = regexp.MustCompile(`(?:https?:)?//[^\s)]*(?:s\.weibo\.com|weibo\.com/p/)[^\s)]*`)
+	// Extract link text from markdown links: [text](url)
+	mdLinkTextRegex = regexp.MustCompile(`\[([^\]]*)\]\([^)]+\)`)
+)
+
+// cleanWeiboMarkdown removes Weibo-specific noise from markdown content.
+func cleanWeiboMarkdown(md string) string {
+	// Replace hashtag links with plain hashtag text: [#topic#](url) → #topic#
+	result := weiboHashtagLinkRegex.ReplaceAllString(md, "#$1#")
+	// Replace @mention links with plain @mention: [@user](url) → @user
+	result = weiboMentionLinkRegex.ReplaceAllString(result, "@$1")
+	// Remove remaining bare weibo search/hashtag URLs
+	result = weiboBareLinkRegex.ReplaceAllString(result, "")
+	// Clean up extra whitespace from removals
+	result = strings.ReplaceAll(result, "  ", " ")
+	return strings.TrimSpace(result)
 }
 
 var imageURLRegex = regexp.MustCompile(`!\[.*?\]\((https?://[^\s)]+)\)`)

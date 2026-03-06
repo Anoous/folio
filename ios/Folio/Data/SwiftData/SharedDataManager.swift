@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 
 enum SharedDataError: Error {
@@ -22,6 +23,7 @@ final class SharedDataManager {
             predicate: #Predicate { $0.url == url }
         )
         if try context.fetchCount(descriptor) > 0 {
+            FolioLogger.data.debug("duplicate URL rejected: \(url)")
             throw SharedDataError.duplicateURL
         }
 
@@ -29,6 +31,7 @@ final class SharedDataManager {
         let article = Article(url: url, sourceType: sourceType)
         context.insert(article)
         try context.save()
+        FolioLogger.data.info("article saved: \(url)")
         return article
     }
 
@@ -87,6 +90,7 @@ final class SharedDataManager {
 
         article.updatedAt = Date()
         try context.save()
+        FolioLogger.data.info("extraction updated: wordCount=\(result.wordCount), title=\(result.title ?? "nil")")
     }
 
     // MARK: - Quota

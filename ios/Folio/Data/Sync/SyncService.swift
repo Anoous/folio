@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 
 @MainActor
@@ -38,6 +39,7 @@ final class SyncService {
                 article.serverID = response.articleId
                 article.syncState = .synced
                 results[article.id] = true
+                FolioLogger.sync.info("article submitted: \(article.url)")
 
                 // Start background polling for this article
                 let localID = article.id
@@ -53,15 +55,16 @@ final class SyncService {
                     article.status = .processing
                     results[article.id] = true
                 case .quotaExceeded:
+                    FolioLogger.sync.info("quota exceeded for article: \(article.url)")
                     article.status = .failed
                     article.fetchError = "Monthly quota exceeded"
                     results[article.id] = false
                 default:
-                    // Keep pending for retry on next network event
+                    FolioLogger.sync.error("submit failed: \(error) — \(article.url)")
                     results[article.id] = false
                 }
             } catch {
-                // Keep pending for retry on next network event
+                FolioLogger.sync.error("submit failed: \(error) — \(article.url)")
                 results[article.id] = false
             }
         }
@@ -81,11 +84,13 @@ final class SyncService {
 
                 switch task.status {
                 case "done":
+                    FolioLogger.sync.info("task done: \(taskId)")
                     if let articleId = task.articleId {
                         await fetchAndUpdateArticle(serverID: articleId, localID: articleLocalId)
                     }
                     return
                 case "failed":
+                    FolioLogger.sync.error("task failed: \(taskId) — \(task.errorMessage ?? "unknown")")
                     updateArticleStatus(localID: articleLocalId, status: .failed, error: task.errorMessage)
                     return
                 case "queued", "crawling", "ai_processing":
@@ -94,12 +99,12 @@ final class SyncService {
                     continue
                 }
             } catch {
-                // Network error during polling — continue retrying
+                FolioLogger.sync.debug("poll network error: \(error) — task \(taskId)")
                 continue
             }
         }
 
-        // Timed out — mark as failed
+        FolioLogger.sync.error("task polling timed out: \(taskId)")
         updateArticleStatus(localID: articleLocalId, status: .failed, error: "Processing timed out")
     }
 
@@ -119,7 +124,7 @@ final class SyncService {
 
             try context.save()
         } catch {
-            // Failed to fetch/update — article retains its current state
+            FolioLogger.sync.error("fetch article detail failed: \(serverID) — \(error)")
         }
     }
 
@@ -150,7 +155,7 @@ final class SyncService {
 
             try context.save()
         } catch {
-            // Category sync failed — non-critical, will retry on next sign-in
+            FolioLogger.sync.error("category sync failed: \(error)")
         }
     }
 
@@ -174,17 +179,19 @@ final class SyncService {
 
             try context.save()
         } catch {
-            // Tag sync failed — non-critical
+            FolioLogger.sync.error("tag sync failed: \(error)")
         }
     }
 
     // MARK: - Full Sync
 
     func performFullSync() async {
+        FolioLogger.sync.info("starting full sync")
         await syncCategories()
         await syncTags()
         await syncArticles()
         await syncUserQuota()
+        FolioLogger.sync.info("full sync completed")
     }
 
     // MARK: - Quota Sync
@@ -200,7 +207,7 @@ final class SyncService {
                 isPro: isPro
             )
         } catch {
-            // 非关键操作，失败时保留本地计数
+            FolioLogger.sync.error("quota sync failed: \(error)")
         }
     }
 
@@ -217,7 +224,7 @@ final class SyncService {
 
             try? context.save()
         } catch {
-            // Article sync failed — will retry on next refresh
+            FolioLogger.sync.error("article sync failed: \(error)")
         }
     }
 }

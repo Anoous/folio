@@ -10,6 +10,7 @@ Features:
 from fastapi import FastAPI
 from pydantic import BaseModel
 import hashlib
+import re
 import uvicorn
 
 
@@ -42,12 +43,21 @@ CATEGORY_RULES = [
     ("youtube.com", "lifestyle", "Lifestyle"),
 ]
 
-TAG_POOL = [
-    ["mock", "integration", "local"],
-    ["web", "article", "saved"],
-    ["reading", "bookmark", "content"],
-    ["analysis", "ai", "processed"],
-]
+# Stop words excluded from tag extraction
+_STOP_WORDS = {
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "can", "to", "of", "in", "for",
+    "on", "with", "at", "by", "from", "as", "into", "about", "between",
+    "through", "after", "before", "and", "but", "or", "not", "no", "so",
+    "if", "than", "too", "very", "just", "how", "what", "why", "when",
+    "where", "who", "which", "that", "this", "these", "those", "it", "its",
+    "my", "your", "his", "her", "our", "their", "all", "each", "every",
+    "up", "out", "new", "old", "use", "using", "used",
+    # Common Chinese particles
+    "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一",
+    "一个", "上", "也", "而", "到", "说", "要", "会", "对", "与",
+}
 
 
 def _pick_category(source: str) -> tuple[str, str]:
@@ -59,11 +69,38 @@ def _pick_category(source: str) -> tuple[str, str]:
     return "tech", "Technology"
 
 
-def _pick_tags(source: str) -> list[str]:
-    """Deterministic tag set based on source URL hash."""
-    h = int(hashlib.md5(source.encode()).hexdigest(), 16)
-    idx = h % len(TAG_POOL)
-    return TAG_POOL[idx]
+def _extract_tags(title: str, content: str = "") -> list[str]:
+    """Extract meaningful keywords from title as tags (3-5 tags)."""
+    text = title
+    # Also take first sentence of content if title is short
+    if len(title) < 20 and content:
+        first_line = content.split("\n")[0].strip("# ").strip()
+        text = f"{title} {first_line}"
+
+    # Remove markdown syntax
+    text = re.sub(r"\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"[#*`~>\[\](){}|]", " ", text)
+
+    # Split into words (handles both English and Chinese by splitting on non-alphanumeric)
+    words = re.findall(r"[A-Za-z][A-Za-z0-9+#.]{1,}", text)  # English words (2+ chars)
+    # Also extract Chinese segments (2+ chars)
+    zh_segments = re.findall(r"[\u4e00-\u9fff]{2,4}", text)
+
+    tags = []
+    seen = set()
+    for w in words + zh_segments:
+        lower = w.lower()
+        if lower in _STOP_WORDS or lower in seen or len(lower) < 2:
+            continue
+        seen.add(lower)
+        tags.append(w if w[0].isupper() or not w.isascii() else w.lower())
+        if len(tags) >= 5:
+            break
+
+    # Fallback: at least return the category-like tag
+    if len(tags) < 2:
+        tags.append("article")
+    return tags[:5]
 
 
 @app.get("/health")
@@ -71,17 +108,30 @@ def health():
     return {"status": "ok"}
 
 
+def _clean_for_summary(text: str) -> str:
+    """Remove URLs, markdown links, and noise from content before summarizing."""
+    # Remove markdown links but keep text: [text](url) → text
+    text = re.sub(r"\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    # Remove bare URLs (http/https/protocol-relative)
+    text = re.sub(r"(?:https?:)?//[^\s)]+", "", text)
+    # Remove markdown image syntax
+    text = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", text)
+    # Collapse whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
 @app.post("/api/analyze")
 def analyze(req: AnalyzeRequest):
     title = (req.title or "").strip() or "Untitled"
-    summary = (req.content or "").strip()
+    summary = _clean_for_summary((req.content or "").strip())
     if len(summary) > 120:
         summary = summary[:120] + "..."
     if not summary:
         summary = "Mock summary generated for local integration."
 
     cat_slug, cat_name = _pick_category(req.source)
-    tags = _pick_tags(req.source)
+    tags = _extract_tags(title, req.content)
 
     return {
         "category": cat_slug,

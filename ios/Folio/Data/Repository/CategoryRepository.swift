@@ -8,7 +8,6 @@ final class CategoryRepository {
         self.context = context
     }
 
-    /// Fetch all categories
     func fetchAll() throws -> [Folio.Category] {
         let descriptor = FetchDescriptor<Folio.Category>(
             sortBy: [SortDescriptor(\.sortOrder)]

@@ -15,19 +15,6 @@ final class DataManager {
 
     static let schema = Schema(modelTypes)
 
-    /// Create a shared ModelContainer using App Group for main app and Share Extension
-    @MainActor
-    func createSharedContainer() throws -> ModelContainer {
-        let config = ModelConfiguration(
-            "Folio",
-            schema: Self.schema,
-            groupContainer: .identifier(AppConstants.appGroupIdentifier)
-        )
-        let container = try ModelContainer(for: Self.schema, configurations: [config])
-        preloadCategories(in: container.mainContext)
-        return container
-    }
-
     /// Create an in-memory ModelContainer for previews and testing
     @MainActor
     static func createInMemoryContainer() throws -> ModelContainer {

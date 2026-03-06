@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 import SwiftUI
 
@@ -41,12 +42,7 @@ final class HomeViewModel {
     }
 
     func markAsRead(_ article: Article) {
-        if article.readProgress == 0 {
-            article.readProgress = 0.01
-        }
-        article.lastReadAt = Date()
-        article.updatedAt = Date()
-        try? context.save()
+        article.markAsRead(in: context)
     }
 
     // MARK: - Server Refresh
@@ -65,6 +61,7 @@ final class HomeViewModel {
             let needsDetail = mergeServerArticles(response.data)
             await fetchMissingContent(needsDetail)
         } catch {
+            FolioLogger.sync.error("refreshFromServer failed: \(error)")
             syncError = error.localizedDescription
         }
 
@@ -122,65 +119,17 @@ final class HomeViewModel {
     // MARK: - Article Actions
 
     func toggleFavorite(_ article: Article) {
-        let previousValue = article.isFavorite
-        article.isFavorite.toggle()
-        article.updatedAt = Date()
-        try? context.save()
-
-        if article.isFavorite {
-            showToastMessage(String(localized: "home.article.favorited", defaultValue: "Added to favorites"), icon: "heart.fill")
-        } else {
-            showToastMessage(String(localized: "home.article.unfavorited", defaultValue: "Removed from favorites"), icon: "heart")
-        }
-
-        if isAuthenticated, let serverID = article.serverID {
-            Task {
-                do {
-                    try await apiClient.updateArticle(
-                        id: serverID,
-                        request: UpdateArticleRequest(isFavorite: article.isFavorite)
-                    )
-                    article.syncState = .synced
-                } catch {
-                    // Rollback on failure
-                    article.isFavorite = previousValue
-                    article.syncState = .pendingUpdate
-                    try? context.save()
-                    showToastMessage(String(localized: "home.article.syncFailed", defaultValue: "Sync failed, will retry"), icon: "exclamationmark.icloud")
-                }
-            }
-        }
+        article.toggleFavoriteWithSync(
+            context: context, apiClient: apiClient,
+            isAuthenticated: isAuthenticated, showToast: showToastMessage
+        )
     }
 
     func archiveArticle(_ article: Article) {
-        let previousValue = article.isArchived
-        article.isArchived.toggle()
-        article.updatedAt = Date()
-        try? context.save()
-
-        if article.isArchived {
-            showToastMessage(String(localized: "home.article.archived", defaultValue: "Archived"), icon: "archivebox.fill")
-        } else {
-            showToastMessage(String(localized: "home.article.unarchived", defaultValue: "Unarchived"), icon: "archivebox")
-        }
-
-        if isAuthenticated, let serverID = article.serverID {
-            Task {
-                do {
-                    try await apiClient.updateArticle(
-                        id: serverID,
-                        request: UpdateArticleRequest(isArchived: article.isArchived)
-                    )
-                    article.syncState = .synced
-                } catch {
-                    // Rollback on failure
-                    article.isArchived = previousValue
-                    article.syncState = .pendingUpdate
-                    try? context.save()
-                    showToastMessage(String(localized: "home.article.syncFailed", defaultValue: "Sync failed, will retry"), icon: "exclamationmark.icloud")
-                }
-            }
-        }
+        article.toggleArchiveWithSync(
+            context: context, apiClient: apiClient,
+            isAuthenticated: isAuthenticated, showToast: showToastMessage
+        )
     }
 
     func deleteArticle(_ article: Article) {
@@ -229,6 +178,7 @@ final class HomeViewModel {
                     article.serverID = response.articleId
                     article.status = .processing
                 } catch {
+                    FolioLogger.sync.error("retryArticle failed: \(error) — \(article.url)")
                     article.status = .failed
                     article.fetchError = error.localizedDescription
                 }

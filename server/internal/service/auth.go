@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"sync"
@@ -72,6 +73,7 @@ func (s *AuthService) LoginWithApple(ctx context.Context, req AppleAuthRequest) 
 	// Parse and verify the Apple identity token
 	appleUserID, err := s.verifyAppleToken(req.IdentityToken)
 	if err != nil {
+		slog.Info("apple login: token verification failed", "error", err)
 		return nil, fmt.Errorf("invalid apple token: %w", err)
 	}
 
@@ -81,6 +83,7 @@ func (s *AuthService) LoginWithApple(ctx context.Context, req AppleAuthRequest) 
 		return nil, fmt.Errorf("lookup user: %w", err)
 	}
 
+	isNew := user == nil
 	if user == nil {
 		user, err = s.userRepo.Create(ctx, repository.CreateUserParams{
 			AppleID:  appleUserID,
@@ -92,6 +95,7 @@ func (s *AuthService) LoginWithApple(ctx context.Context, req AppleAuthRequest) 
 		}
 	}
 
+	slog.Info("apple login succeeded", "user_id", user.ID, "new_user", isNew)
 	return s.issueTokenPair(user)
 }
 
@@ -120,6 +124,7 @@ func (s *AuthService) DevLogin(ctx context.Context, alias string) (*AuthResponse
 			return nil, fmt.Errorf("create dev user: %w", err)
 		}
 	}
+	slog.Info("dev login succeeded", "user_id", user.ID)
 	return s.issueTokenPair(user)
 }
 
@@ -132,9 +137,11 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*A
 		return s.jwtSecret, nil
 	})
 	if err != nil || !token.Valid {
+		slog.Debug("token refresh: invalid token", "error", err)
 		return nil, ErrForbidden
 	}
 	if claims.TokenType != "refresh" {
+		slog.Debug("token refresh: wrong token type", "type", claims.TokenType)
 		return nil, ErrForbidden
 	}
 
@@ -143,9 +150,11 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*A
 		return nil, err
 	}
 	if user == nil {
+		slog.Info("token refresh: user not found", "user_id", claims.UserID)
 		return nil, ErrNotFound
 	}
 
+	slog.Debug("token refreshed", "user_id", user.ID)
 	return s.issueTokenPair(user)
 }
 

@@ -47,18 +47,6 @@ struct StatusBadge: View {
                 .accessibilityLabel(Text(String(localized: "status.clientReady", defaultValue: "Content ready")))
         }
     }
-
-    /// User-facing description of the status
-    var statusText: String {
-        switch status {
-        case .unread: return String(localized: "status.unread", defaultValue: "Unread")
-        case .processing: return String(localized: "status.processingText", defaultValue: "AI is analyzing...")
-        case .failed: return String(localized: "status.failedText", defaultValue: "Processing failed")
-        case .offline: return String(localized: "status.offlineText", defaultValue: "Saved offline")
-        case .pendingSync: return String(localized: "status.pendingSyncText", defaultValue: "Waiting to sync")
-        case .clientReady: return String(localized: "status.clientReadyText", defaultValue: "Content ready, AI analyzing...")
-        }
-    }
 }
 
 #Preview {

@@ -1,5 +1,6 @@
 import Foundation
 import AuthenticationServices
+import os
 
 enum AuthState: Equatable {
     case unknown
@@ -39,18 +40,19 @@ final class AuthViewModel {
             let response = try await apiClient.refreshAuth()
             currentUser = response.user
             authState = .signedIn
+            FolioLogger.auth.info("existing auth validated")
         } catch let error as APIError {
             switch error {
             case .unauthorized, .forbidden:
-                // Server explicitly rejected credentials — sign out
+                FolioLogger.auth.info("existing auth rejected: \(error)")
                 try? keychainManager.clearTokens()
                 authState = .signedOut
             default:
-                // Network error or server unavailable — keep signed in with cached token
+                FolioLogger.auth.debug("auth check network error, keeping signed in: \(error)")
                 authState = .signedIn
             }
         } catch {
-            // Network/other error — keep signed in with cached token
+            FolioLogger.auth.debug("auth check error, keeping signed in: \(error)")
             authState = .signedIn
         }
     }
@@ -86,7 +88,9 @@ final class AuthViewModel {
                 )
                 currentUser = response.user
                 authState = .signedIn
+                FolioLogger.auth.info("Apple sign-in succeeded")
             } catch {
+                FolioLogger.auth.error("Apple sign-in failed: \(error)")
                 errorMessage = String(localized: "auth.error.network", defaultValue: "Could not connect to the server. Please check your network and try again.")
             }
 
@@ -108,7 +112,9 @@ final class AuthViewModel {
             let response = try await apiClient.loginDev()
             currentUser = response.user
             authState = .signedIn
+            FolioLogger.auth.info("dev login succeeded")
         } catch {
+            FolioLogger.auth.error("dev login failed: \(error)")
             errorMessage = "Dev login failed: \(error.localizedDescription)"
         }
     }
@@ -117,6 +123,7 @@ final class AuthViewModel {
     // MARK: - Sign Out
 
     func signOut() {
+        FolioLogger.auth.info("user signed out")
         try? keychainManager.clearTokens()
         currentUser = nil
         authState = .signedOut

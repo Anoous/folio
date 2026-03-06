@@ -63,7 +63,7 @@ func (h *ArticleHandler) HandleSubmitURL(w http.ResponseWriter, r *http.Request)
 
 	resp, err := h.articleService.SubmitURL(r.Context(), userID, req)
 	if err != nil {
-		handleServiceError(w, err)
+		handleServiceError(w, r, err)
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *ArticleHandler) HandleListArticles(w http.ResponseWriter, r *http.Reque
 
 	result, err := h.articleService.ListByUser(r.Context(), params)
 	if err != nil {
-		handleServiceError(w, err)
+		handleServiceError(w, r, err)
 		return
 	}
 
@@ -125,7 +125,7 @@ func (h *ArticleHandler) HandleGetArticle(w http.ResponseWriter, r *http.Request
 
 	article, err := h.articleService.GetByID(r.Context(), userID, articleID)
 	if err != nil {
-		handleServiceError(w, err)
+		handleServiceError(w, r, err)
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *ArticleHandler) HandleUpdateArticle(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := h.articleService.Update(r.Context(), userID, articleID, params); err != nil {
-		handleServiceError(w, err)
+		handleServiceError(w, r, err)
 		return
 	}
 
@@ -155,7 +155,7 @@ func (h *ArticleHandler) HandleDeleteArticle(w http.ResponseWriter, r *http.Requ
 	articleID := chi.URLParam(r, "id")
 
 	if err := h.articleService.Delete(r.Context(), userID, articleID); err != nil {
-		handleServiceError(w, err)
+		handleServiceError(w, r, err)
 		return
 	}
 

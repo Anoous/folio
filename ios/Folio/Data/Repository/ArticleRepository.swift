@@ -8,7 +8,6 @@ final class ArticleRepository {
         self.context = context
     }
 
-    /// Create a pending article from a URL
     func save(url: String, tags: [String] = [], note: String? = nil) throws -> Article {
         let sourceType = SourceType.detect(from: url)
         let article = Article(url: url, sourceType: sourceType)
@@ -62,7 +61,6 @@ final class ArticleRepository {
         return articles
     }
 
-    /// Fetch article by ID
     func fetchByID(_ id: UUID) throws -> Article? {
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate { $0.id == id }
@@ -70,13 +68,11 @@ final class ArticleRepository {
         return try context.fetch(descriptor).first
     }
 
-    /// Update article (saves context)
     func update(_ article: Article) throws {
         article.updatedAt = Date()
         try context.save()
     }
 
-    /// Delete article
     func delete(_ article: Article) throws {
         context.delete(article)
         try context.save()
@@ -92,7 +88,6 @@ final class ArticleRepository {
         return try context.fetch(descriptor)
     }
 
-    /// Fetch article by server ID
     func fetchByServerID(_ serverID: String) throws -> Article? {
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate { $0.serverID == serverID }
@@ -100,7 +95,6 @@ final class ArticleRepository {
         return try context.fetch(descriptor).first
     }
 
-    /// Fetch article by URL
     func fetchByURL(_ url: String) throws -> Article? {
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate { $0.url == url }
@@ -108,7 +102,6 @@ final class ArticleRepository {
         return try context.fetch(descriptor).first
     }
 
-    /// Check if a URL already exists
     func existsByURL(_ url: String) throws -> Bool {
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate { $0.url == url }

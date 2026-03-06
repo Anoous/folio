@@ -117,7 +117,7 @@ struct ReaderView: View {
                     .padding(.top, Spacing.xs)
 
                     // AI Summary
-                    if let summary = article.summary {
+                    if let summary = article.displaySummary {
                         aiSummarySection(summary: summary)
                             .padding(.top, Spacing.lg)
                     }
@@ -148,6 +148,13 @@ struct ReaderView: View {
                         .padding(.vertical, Spacing.xl)
                     } else {
                         contentUnavailableView
+                    }
+
+                    // Related articles (F11 demo)
+                    if article.markdownContent != nil {
+                        Divider()
+                            .padding(.top, Spacing.lg)
+                        RelatedArticlesSection()
                     }
 
                     Spacer(minLength: Spacing.xl)

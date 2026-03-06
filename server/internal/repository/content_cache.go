@@ -54,6 +54,11 @@ func (r *ContentCacheRepo) Upsert(ctx context.Context, c *domain.ContentCache) e
 	keyPointsJSON, _ := json.Marshal(c.KeyPoints)
 	now := time.Now()
 
+	crawledAt := now
+	if c.CrawledAt != nil {
+		crawledAt = *c.CrawledAt
+	}
+
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO content_cache (
 			url, title, author, site_name, favicon_url, cover_image_url,
@@ -86,7 +91,7 @@ func (r *ContentCacheRepo) Upsert(ctx context.Context, c *domain.ContentCache) e
 		derefStr(c.MarkdownContent), c.WordCount, derefStr(c.Language),
 		derefStr(c.CategorySlug), derefStr(c.Summary), keyPointsJSON,
 		c.AIConfidence, c.AITagNames,
-		nilOrTime(c.CrawledAt, now), c.AIAnalyzedAt,
+		crawledAt, c.AIAnalyzedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert content cache: %w", err)
@@ -101,9 +106,3 @@ func derefStr(s *string) string {
 	return ""
 }
 
-func nilOrTime(t *time.Time, fallback time.Time) time.Time {
-	if t != nil {
-		return *t
-	}
-	return fallback
-}

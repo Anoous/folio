@@ -7,6 +7,7 @@ struct SettingsView: View {
     var body: some View {
         List {
             userProfileSection
+            subscriptionSection
             syncStatusSection
             quotaSection
             appInfoSection
@@ -144,6 +145,33 @@ struct SettingsView: View {
         if ratio >= 0.9 { return .red }
         if ratio >= 0.7 { return .orange }
         return Color.folio.accent
+    }
+
+    // MARK: - Subscription
+
+    @ViewBuilder
+    private var subscriptionSection: some View {
+        Section {
+            NavigationLink {
+                PaywallView()
+            } label: {
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: "sparkles")
+                        .font(.title3)
+                        .foregroundStyle(Color.folio.accent)
+
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        Text(String(localized: "settings.upgradePro", defaultValue: "Upgrade to Pro"))
+                            .font(Typography.listTitle)
+                            .foregroundStyle(Color.folio.textPrimary)
+                        Text(String(localized: "settings.upgradeHint", defaultValue: "Unlimited saves, AI tags & summary, and more"))
+                            .font(Typography.caption)
+                            .foregroundStyle(Color.folio.textSecondary)
+                    }
+                }
+                .padding(.vertical, Spacing.xxs)
+            }
+        }
     }
 
     // MARK: - App Info

@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 import SwiftUI
 
@@ -65,7 +66,9 @@ final class ReaderViewModel {
             article.updateFromDTO(dto)
             try? context.save()
             calculateWordCount()
+            FolioLogger.network.info("reader: content fetched for \(serverID)")
         } catch {
+            FolioLogger.network.error("reader: fetch content failed — \(serverID) — \(error)")
             contentLoadError = error.localizedDescription
         }
 
@@ -75,12 +78,7 @@ final class ReaderViewModel {
     // MARK: - Mark as Read
 
     func markAsRead() {
-        if article.readProgress == 0 {
-            article.readProgress = 0.01
-        }
-        article.lastReadAt = Date()
-        article.updatedAt = Date()
-        try? context.save()
+        article.markAsRead(in: context)
     }
 
     // MARK: - Reading Progress (local only)
@@ -97,65 +95,19 @@ final class ReaderViewModel {
     // MARK: - Favorite
 
     func toggleFavorite() {
-        let previousValue = article.isFavorite
-        article.isFavorite.toggle()
-        article.updatedAt = Date()
-        try? context.save()
-
-        if article.isFavorite {
-            showToastMessage(String(localized: "home.article.favorited", defaultValue: "Added to favorites"), icon: "heart.fill")
-        } else {
-            showToastMessage(String(localized: "home.article.unfavorited", defaultValue: "Removed from favorites"), icon: "heart")
-        }
-
-        if isAuthenticated, let serverID = article.serverID {
-            Task {
-                do {
-                    try await apiClient.updateArticle(
-                        id: serverID,
-                        request: UpdateArticleRequest(isFavorite: article.isFavorite)
-                    )
-                    article.syncState = .synced
-                } catch {
-                    article.isFavorite = previousValue
-                    article.syncState = .pendingUpdate
-                    try? context.save()
-                    showToastMessage(String(localized: "home.article.syncFailed", defaultValue: "Sync failed, will retry"), icon: "exclamationmark.icloud")
-                }
-            }
-        }
+        article.toggleFavoriteWithSync(
+            context: context, apiClient: apiClient,
+            isAuthenticated: isAuthenticated, showToast: showToastMessage
+        )
     }
 
     // MARK: - Archive
 
     func archiveArticle() {
-        let previousValue = article.isArchived
-        article.isArchived.toggle()
-        article.updatedAt = Date()
-        try? context.save()
-
-        if article.isArchived {
-            showToastMessage(String(localized: "home.article.archived", defaultValue: "Archived"), icon: "archivebox.fill")
-        } else {
-            showToastMessage(String(localized: "home.article.unarchived", defaultValue: "Unarchived"), icon: "archivebox")
-        }
-
-        if isAuthenticated, let serverID = article.serverID {
-            Task {
-                do {
-                    try await apiClient.updateArticle(
-                        id: serverID,
-                        request: UpdateArticleRequest(isArchived: article.isArchived)
-                    )
-                    article.syncState = .synced
-                } catch {
-                    article.isArchived = previousValue
-                    article.syncState = .pendingUpdate
-                    try? context.save()
-                    showToastMessage(String(localized: "home.article.syncFailed", defaultValue: "Sync failed, will retry"), icon: "exclamationmark.icloud")
-                }
-            }
-        }
+        article.toggleArchiveWithSync(
+            context: context, apiClient: apiClient,
+            isAuthenticated: isAuthenticated, showToast: showToastMessage
+        )
     }
 
     // MARK: - Delete

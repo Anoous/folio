@@ -75,18 +75,6 @@ func (r *TagRepo) AttachToArticle(ctx context.Context, articleID, tagID string) 
 	return nil
 }
 
-func (r *TagRepo) DetachFromArticle(ctx context.Context, articleID, tagID string) error {
-	ct, err := r.pool.Exec(ctx,
-		`DELETE FROM article_tags WHERE article_id = $1 AND tag_id = $2`, articleID, tagID)
-	if err != nil {
-		return fmt.Errorf("detach tag: %w", err)
-	}
-	if ct.RowsAffected() > 0 {
-		r.pool.Exec(ctx, `UPDATE tags SET article_count = GREATEST(article_count - 1, 0) WHERE id = $1`, tagID)
-	}
-	return nil
-}
-
 func (r *TagRepo) GetByArticle(ctx context.Context, articleID string) ([]domain.Tag, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT t.id, t.name, t.user_id, t.is_ai_generated, t.article_count, t.created_at

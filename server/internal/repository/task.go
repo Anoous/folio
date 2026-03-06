@@ -60,14 +60,6 @@ func (r *TaskRepo) GetByID(ctx context.Context, id string) (*domain.CrawlTask, e
 	return &t, nil
 }
 
-func (r *TaskRepo) UpdateStatus(ctx context.Context, id string, status domain.TaskStatus) error {
-	_, err := r.pool.Exec(ctx, `UPDATE crawl_tasks SET status = $1 WHERE id = $2`, status, id)
-	if err != nil {
-		return fmt.Errorf("update task status: %w", err)
-	}
-	return nil
-}
-
 func (r *TaskRepo) SetCrawlStarted(ctx context.Context, id string) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE crawl_tasks SET status = 'crawling', crawl_started_at = NOW() WHERE id = $1`, id)

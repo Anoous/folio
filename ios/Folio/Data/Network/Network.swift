@@ -1,5 +1,6 @@
 // MARK: - Network Layer
 import Foundation
+import os
 
 // MARK: - APIError
 
@@ -235,6 +236,8 @@ final class APIClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = method
 
+        FolioLogger.network.debug("\(method) \(path)")
+
         if requiresAuth, let token = keychainManager.accessToken {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -268,6 +271,7 @@ final class APIClient {
                 throw APIError.decodingFailed(error.localizedDescription)
             }
         case 401:
+            FolioLogger.network.info("401 unauthorized, attempting refresh — \(path)")
             if !isRetryAfterRefresh {
                 try await performTokenRefresh()
                 return try await request(
@@ -292,6 +296,7 @@ final class APIClient {
         case 429:
             throw APIError.quotaExceeded
         default:
+            FolioLogger.network.error("HTTP \(httpResponse.statusCode) — \(method) \(path)")
             if httpResponse.statusCode >= 500 {
                 throw APIError.serverError(httpResponse.statusCode)
             }
@@ -347,17 +352,20 @@ final class APIClient {
         }
 
         guard let httpResponse = response as? HTTPURLResponse else {
+            FolioLogger.network.error("token refresh: invalid response")
             try? keychainManager.clearTokens()
             throw APIError.unauthorized
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
+            FolioLogger.network.error("token refresh failed: HTTP \(httpResponse.statusCode)")
             try? keychainManager.clearTokens()
             throw APIError.unauthorized
         }
 
         let authResponse = try decoder.decode(AuthResponse.self, from: data)
         try keychainManager.saveTokens(access: authResponse.accessToken, refresh: authResponse.refreshToken)
+        FolioLogger.network.info("token refresh succeeded")
     }
 
     // MARK: - Auth

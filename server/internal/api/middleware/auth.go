@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -18,18 +19,21 @@ func JWTAuth(authService *service.AuthService) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
+				slog.Debug("auth: missing authorization header", "path", r.URL.Path)
 				writeAuthError(w, "missing authorization header")
 				return
 			}
 
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 			if token == authHeader {
+				slog.Debug("auth: invalid authorization format", "path", r.URL.Path)
 				writeAuthError(w, "invalid authorization format")
 				return
 			}
 
 			userID, err := authService.ValidateAccessToken(token)
 			if err != nil {
+				slog.Debug("auth: token validation failed", "path", r.URL.Path, "error", err)
 				writeAuthError(w, "invalid or expired token")
 				return
 			}

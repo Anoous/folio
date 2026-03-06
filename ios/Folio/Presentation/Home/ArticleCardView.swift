@@ -36,8 +36,8 @@ struct ArticleCardView: View {
                         .lineLimit(2)
 
                     // Summary (hide if same as title)
-                    if let summary = article.summary,
-                       summary != article.title {
+                    if let summary = article.displaySummary,
+                       summary != article.displayTitle {
                         Text(summary)
                             .font(Typography.body)
                             .foregroundStyle(Color.folio.textSecondary)
@@ -169,33 +169,10 @@ struct ArticleCardView: View {
     }
 
     private var sourceIcon: some View {
-        Group {
-            switch article.sourceType {
-            case .wechat:
-                Image(systemName: "message.fill")
-                    .accessibilityLabel("WeChat")
-            case .twitter:
-                Image(systemName: "bird")
-                    .accessibilityLabel("Twitter")
-            case .weibo:
-                Image(systemName: "globe.asia.australia")
-                    .accessibilityLabel("Weibo")
-            case .zhihu:
-                Image(systemName: "questionmark.circle")
-                    .accessibilityLabel("Zhihu")
-            case .youtube:
-                Image(systemName: "play.rectangle.fill")
-                    .accessibilityLabel("YouTube")
-            case .newsletter:
-                Image(systemName: "envelope.fill")
-                    .accessibilityLabel("Newsletter")
-            case .web:
-                Image(systemName: "globe")
-                    .accessibilityLabel("Web")
-            }
-        }
-        .font(.caption2)
-        .foregroundStyle(Color.folio.textTertiary)
+        Image(systemName: article.sourceType.iconName)
+            .font(.caption2)
+            .foregroundStyle(Color.folio.textTertiary)
+            .accessibilityLabel(article.sourceType.displayName)
     }
 }
 

@@ -117,6 +117,38 @@ final class Article {
         set { extractionSourceRaw = newValue.rawValue }
     }
 
+    /// Summary with markdown syntax stripped for display in cards and AI summary sections.
+    var displaySummary: String? {
+        guard let summary, !summary.isEmpty else { return nil }
+        return Self.stripMarkdown(summary)
+    }
+
+    /// Strips markdown syntax to produce plain text.
+    static func stripMarkdown(_ text: String) -> String {
+        var s = text
+        // Remove images: ![alt](url)
+        s = s.replacingOccurrences(of: #"!\[[^\]]*\]\([^)]*\)?"#, with: "", options: .regularExpression)
+        // Replace complete links with text: [text](url) → text
+        s = s.replacingOccurrences(of: #"\[([^\]]*)\]\([^)]+\)"#, with: "$1", options: .regularExpression)
+        // Handle truncated/incomplete links: [text](url... → text
+        s = s.replacingOccurrences(of: #"\[([^\]]*)\]\([^)]*$"#, with: "$1", options: .regularExpression)
+        // Remove leftover brackets: - [text] or standalone [text]
+        s = s.replacingOccurrences(of: #"\[([^\]]*)\]"#, with: "$1", options: .regularExpression)
+        // Remove heading markers
+        s = s.replacingOccurrences(of: #"(?m)^#{1,6}\s+"#, with: "", options: .regularExpression)
+        // Remove bold/italic markers
+        s = s.replacingOccurrences(of: #"\*{1,3}([^*]+)\*{1,3}"#, with: "$1", options: .regularExpression)
+        // Remove inline code backticks
+        s = s.replacingOccurrences(of: #"`([^`]+)`"#, with: "$1", options: .regularExpression)
+        // Remove bare URLs (http/https/protocol-relative)
+        s = s.replacingOccurrences(of: #"(?:https?:)?//[^\s)>]+"#, with: "", options: .regularExpression)
+        // Remove markdown list markers
+        s = s.replacingOccurrences(of: #"(?m)^\s*[-*+]\s+"#, with: "", options: .regularExpression)
+        // Collapse whitespace and newlines
+        s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        return s.trimmingCharacters(in: .whitespaces)
+    }
+
     /// User-friendly title: uses title if available, otherwise extracts a readable form from URL.
     var displayTitle: String {
         if let title, !title.isEmpty {
@@ -175,5 +207,33 @@ final class Article {
         self.serverID = nil
         self.extractionSourceRaw = ExtractionSource.none.rawValue
         self.clientExtractedAt = nil
+    }
+}
+
+// MARK: - SourceType Display
+
+extension SourceType {
+    var iconName: String {
+        switch self {
+        case .wechat: "message.fill"
+        case .twitter: "bird"
+        case .weibo: "globe.asia.australia"
+        case .zhihu: "questionmark.circle"
+        case .youtube: "play.rectangle.fill"
+        case .newsletter: "envelope.fill"
+        case .web: "globe"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .wechat: "WeChat"
+        case .twitter: "Twitter"
+        case .weibo: "Weibo"
+        case .zhihu: "Zhihu"
+        case .youtube: "YouTube"
+        case .newsletter: "Newsletter"
+        case .web: "Web"
+        }
     }
 }

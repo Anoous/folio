@@ -8,7 +8,6 @@ final class TagRepository {
         self.context = context
     }
 
-    /// Fetch all tags
     func fetchAll(sortBy: SortOrder = .forward) throws -> [Tag] {
         let descriptor = FetchDescriptor<Tag>(
             sortBy: [SortDescriptor(\.name, order: sortBy)]
@@ -39,7 +38,6 @@ final class TagRepository {
         return tag
     }
 
-    /// Fetch tag by server ID
     func fetchByServerID(_ serverID: String) throws -> Tag? {
         let descriptor = FetchDescriptor<Tag>(
             predicate: #Predicate { $0.serverID == serverID }
@@ -47,7 +45,6 @@ final class TagRepository {
         return try context.fetch(descriptor).first
     }
 
-    /// Fetch tag by name
     func fetchByName(_ name: String) throws -> Tag? {
         let descriptor = FetchDescriptor<Tag>(
             predicate: #Predicate { $0.name == name }
@@ -55,7 +52,6 @@ final class TagRepository {
         return try context.fetch(descriptor).first
     }
 
-    /// Delete a tag
     func delete(_ tag: Tag) throws {
         context.delete(tag)
         try context.save()

@@ -29,7 +29,7 @@ func (h *AuthHandler) HandleAppleLogin(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.authService.LoginWithApple(r.Context(), req)
 	if err != nil {
-		handleServiceError(w, err)
+		handleServiceError(w, r, err)
 		return
 	}
 
@@ -50,7 +50,7 @@ func (h *AuthHandler) HandleDevLogin(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.authService.DevLogin(r.Context(), alias)
 	if err != nil {
-		handleServiceError(w, err)
+		handleServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -72,7 +72,7 @@ func (h *AuthHandler) HandleRefreshToken(w http.ResponseWriter, r *http.Request)
 
 	resp, err := h.authService.RefreshToken(r.Context(), req.RefreshToken)
 	if err != nil {
-		handleServiceError(w, err)
+		handleServiceError(w, r, err)
 		return
 	}
 

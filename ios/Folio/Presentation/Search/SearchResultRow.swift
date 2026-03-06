@@ -115,25 +115,9 @@ struct SearchResultRow: View {
     // MARK: - Source Icon
 
     private var sourceIcon: some View {
-        Group {
-            switch item.article.sourceType {
-            case .wechat:
-                Image(systemName: "message.fill")
-            case .twitter:
-                Image(systemName: "bird")
-            case .weibo:
-                Image(systemName: "globe.asia.australia")
-            case .zhihu:
-                Image(systemName: "questionmark.circle")
-            case .youtube:
-                Image(systemName: "play.rectangle.fill")
-            case .newsletter:
-                Image(systemName: "envelope.fill")
-            case .web:
-                Image(systemName: "globe")
-            }
-        }
-        .font(.caption2)
-        .foregroundStyle(Color.folio.textTertiary)
+        Image(systemName: item.article.sourceType.iconName)
+            .font(.caption2)
+            .foregroundStyle(Color.folio.textTertiary)
+            .accessibilityLabel(item.article.sourceType.displayName)
     }
 }

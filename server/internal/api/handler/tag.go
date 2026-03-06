@@ -23,7 +23,7 @@ func (h *TagHandler) HandleListTags(w http.ResponseWriter, r *http.Request) {
 
 	tags, err := h.tagService.ListByUser(r.Context(), userID)
 	if err != nil {
-		handleServiceError(w, err)
+		handleServiceError(w, r, err)
 		return
 	}
 
@@ -55,7 +55,7 @@ func (h *TagHandler) HandleCreateTag(w http.ResponseWriter, r *http.Request) {
 
 	tag, err := h.tagService.Create(r.Context(), userID, req.Name)
 	if err != nil {
-		handleServiceError(w, err)
+		handleServiceError(w, r, err)
 		return
 	}
 
@@ -67,7 +67,7 @@ func (h *TagHandler) HandleDeleteTag(w http.ResponseWriter, r *http.Request) {
 	tagID := chi.URLParam(r, "id")
 
 	if err := h.tagService.Delete(r.Context(), userID, tagID); err != nil {
-		handleServiceError(w, err)
+		handleServiceError(w, r, err)
 		return
 	}
 

@@ -16,6 +16,7 @@ struct HomeView: View {
     @State private var showDeleteConfirmation = false
     @State private var showShareSheet = false
     @State private var shareItems: [Any]? = nil
+    @State private var showInsightCard = true
 
     private var isSearchActive: Bool {
         !searchText.trimmingCharacters(in: .whitespaces).isEmpty
@@ -42,7 +43,19 @@ struct HomeView: View {
                 .accessibilityLabel(String(localized: "tab.settings", defaultValue: "Settings"))
             }
             ToolbarItem(placement: .topBarTrailing) {
-                addButton
+                HStack(spacing: Spacing.xs) {
+                    NavigationLink(value: "topics") {
+                        Image(systemName: "rectangle.stack")
+                    }
+                    .accessibilityLabel(String(localized: "home.topics", defaultValue: "Topics"))
+
+                    NavigationLink(value: "askai") {
+                        Image(systemName: "brain.head.profile")
+                    }
+                    .accessibilityLabel(String(localized: "home.askai", defaultValue: "Ask AI"))
+
+                    addButton
+                }
             }
         }
         .searchable(
@@ -124,8 +137,17 @@ struct HomeView: View {
             }
         }
         .navigationDestination(for: String.self) { destination in
-            if destination == "settings" {
+            switch destination {
+            case "settings":
                 SettingsView()
+            case "topics":
+                TopicsView()
+            case "askai":
+                AskAIView()
+            case "digest":
+                DailyDigestView()
+            default:
+                EmptyView()
             }
         }
         .toast(isPresented: Binding(
@@ -161,6 +183,7 @@ struct HomeView: View {
                 let svm = SearchViewModel(searchManager: manager, context: modelContext)
                 searchViewModel = svm
                 svm.loadPopularTags()
+                svm.refreshSyncedCount(context: modelContext)
             }
         }
         .onChange(of: authViewModel?.isAuthenticated) { _, newValue in
@@ -222,7 +245,9 @@ struct HomeView: View {
                     .listRowInsets(EdgeInsets())
                 }
             } header: {
-                Text("\(svm.resultCount) " + String(localized: "search.results", defaultValue: "results"))
+                Text("\(svm.resultCount) " + (svm.resultCount == 1
+                    ? String(localized: "search.result", defaultValue: "result")
+                    : String(localized: "search.results", defaultValue: "results")))
                     .font(Typography.caption)
                     .foregroundStyle(Color.folio.textTertiary)
             }
@@ -296,6 +321,43 @@ struct HomeView: View {
 
             List {
                 statusBanners
+
+                // Knowledge Awakening card (F14 demo)
+                if showInsightCard {
+                    InsightCard(
+                        insight: .sample,
+                        onDismiss: { withAnimation { showInsightCard = false } },
+                        onRead: {}
+                    )
+                    .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.screenPadding, bottom: Spacing.xs, trailing: Spacing.screenPadding))
+                    .listRowSeparator(.hidden)
+                }
+
+                // Daily Digest entry card (F10 demo)
+                NavigationLink(value: "digest") {
+                    HStack(spacing: Spacing.sm) {
+                        Image(systemName: "headphones")
+                            .font(.title3)
+                            .foregroundStyle(Color.folio.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(localized: "home.digest.title", defaultValue: "Today's Digest"))
+                                .font(Typography.listTitle)
+                                .foregroundStyle(Color.folio.textPrimary)
+                            Text(String(localized: "home.digest.subtitle", defaultValue: "5 min audio summary of your latest saves"))
+                                .font(Typography.caption)
+                                .foregroundStyle(Color.folio.textSecondary)
+                        }
+                        Spacer()
+                        Image(systemName: "play.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(Color.folio.accent)
+                    }
+                    .padding(Spacing.sm)
+                    .background(Color.folio.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
+                }
+                .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.screenPadding, bottom: Spacing.xs, trailing: Spacing.screenPadding))
+                .listRowSeparator(.hidden)
 
                 if let vm = viewModel {
                     articleSections(vm: vm)

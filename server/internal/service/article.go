@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/hibiken/asynq"
 
@@ -58,6 +59,7 @@ func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req Submi
 	if exists, err := s.articleRepo.ExistsByUserAndURL(ctx, userID, req.URL); err != nil {
 		return nil, fmt.Errorf("check duplicate: %w", err)
 	} else if exists {
+		slog.Debug("duplicate URL rejected", "user_id", userID, "url", req.URL)
 		return nil, ErrDuplicateURL
 	}
 
@@ -89,7 +91,7 @@ func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req Submi
 	// Attach user-provided tags
 	for _, tagID := range req.TagIDs {
 		if err := s.tagRepo.AttachToArticle(ctx, article.ID, tagID); err != nil {
-			// Non-fatal: log and continue
+			slog.Error("failed to attach tag", "article_id", article.ID, "tag_id", tagID, "error", err)
 			continue
 		}
 	}
@@ -110,6 +112,8 @@ func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req Submi
 	if _, err := s.asynqClient.EnqueueContext(ctx, crawlTask); err != nil {
 		return nil, fmt.Errorf("enqueue crawl: %w", err)
 	}
+
+	slog.Info("article submitted", "article_id", article.ID, "task_id", task.ID, "url", req.URL)
 
 	return &SubmitURLResponse{
 		ArticleID: article.ID,

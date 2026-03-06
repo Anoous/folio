@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 import SwiftUI
 import Combine
@@ -60,8 +61,9 @@ final class SearchViewModel {
         do {
             let allArticles = try articleRepository.fetchAllForIndex()
             try searchManager.rebuildAll(articles: allArticles)
+            FolioLogger.data.info("search index rebuilt: \(allArticles.count) articles")
         } catch {
-            // Index rebuild failed — search will return empty until next rebuild
+            FolioLogger.data.error("search index rebuild failed: \(error)")
         }
     }
 
@@ -121,6 +123,7 @@ final class SearchViewModel {
             resultCount = items.count
             showsEmptyState = items.isEmpty
         } catch {
+            FolioLogger.data.error("search failed: \(error)")
             results = []
             resultCount = 0
             showsEmptyState = false
@@ -145,11 +148,6 @@ final class SearchViewModel {
         }
 
         searchHistory = history
-        persistHistory()
-    }
-
-    func deleteHistoryItem(_ query: String) {
-        searchHistory.removeAll { $0 == query }
         persistHistory()
     }
 

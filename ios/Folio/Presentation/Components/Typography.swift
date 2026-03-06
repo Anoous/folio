@@ -74,31 +74,3 @@ enum Typography {
         }
     }
 }
-
-// MARK: - View Modifiers
-
-struct TypographyModifier: ViewModifier {
-    let font: Font
-    let lineSpacing: CGFloat?
-
-    func body(content: Content) -> some View {
-        if let lineSpacing {
-            content
-                .font(font)
-                .lineSpacing(lineSpacing)
-        } else {
-            content
-                .font(font)
-        }
-    }
-}
-
-extension View {
-    func typography(_ font: Font, lineSpacing: CGFloat? = nil) -> some View {
-        modifier(TypographyModifier(font: font, lineSpacing: lineSpacing))
-    }
-
-    func articleBodyStyle() -> some View {
-        modifier(TypographyModifier(font: Typography.articleBody, lineSpacing: Typography.articleBodyLineSpacing))
-    }
-}

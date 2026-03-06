@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 enum ExtractionError: Error {
     case invalidURL
@@ -14,11 +15,15 @@ struct ContentExtractor {
     static let memoryLimitBytes: UInt64 = 100 * 1024 * 1024 // 100MB
 
     func extract(url: URL) async throws -> ExtractionResult {
+        FolioLogger.data.info("extraction started: \(url.absoluteString)")
+
         guard url.scheme == "http" || url.scheme == "https" else {
+            FolioLogger.data.error("extraction: invalid URL scheme — \(url.absoluteString)")
             throw ExtractionError.invalidURL
         }
 
         guard currentMemoryUsage() < Self.memoryLimitBytes else {
+            FolioLogger.data.error("extraction: memory limit exceeded — \(self.currentMemoryUsage()) bytes")
             throw ExtractionError.memoryLimitExceeded
         }
 
@@ -47,15 +52,23 @@ struct ContentExtractor {
 
         do {
             html = try await HTMLFetcher().fetch(url: url)
+            FolioLogger.data.debug("extraction: HTML fetched — \(html.count) chars")
             readability = try ReadabilityExtractor().extract(html: html, url: url)
+            FolioLogger.data.debug("extraction: readability done — title=\(readability.title ?? "nil")")
             markdown = try HTMLToMarkdownConverter().convert(html: readability.contentHTML)
+            FolioLogger.data.debug("extraction: markdown converted — \(markdown.count) chars")
         } catch {
+            FolioLogger.data.error("extraction failed at pipeline: \(error)")
             throw ExtractionError.extractionFailed(error)
         }
 
         guard markdown.count >= Self.minimumContentLength else {
+            FolioLogger.data.error("extraction: content too short — \(markdown.count) chars < \(Self.minimumContentLength)")
             throw ExtractionError.contentTooShort
         }
+
+        let wordCount = countWords(markdown)
+        FolioLogger.data.info("extraction completed: \(wordCount) words, title=\(readability.title ?? "nil")")
 
         return ExtractionResult(
             title: readability.title,
@@ -63,7 +76,7 @@ struct ContentExtractor {
             siteName: readability.siteName,
             excerpt: readability.excerpt,
             markdownContent: markdown,
-            wordCount: countWords(markdown),
+            wordCount: wordCount,
             extractedAt: Date()
         )
     }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/hibiken/asynq"
@@ -224,6 +225,202 @@ func TestNewCrawlTask_PayloadRoundTrip(t *testing.T) {
 	}
 }
 
+// --- Weibo content cleaning tests ---
+
+func TestIsWeiboURL(t *testing.T) {
+	tests := []struct {
+		url  string
+		want bool
+	}{
+		{"https://weibo.com/1234567890/post123", true},
+		{"https://m.weibo.cn/detail/123456", true},
+		{"https://s.weibo.com/weibo?q=test", true},
+		{"https://example.com/article", false},
+		{"https://go.dev/blog/post", false},
+	}
+	for _, tt := range tests {
+		if got := isWeiboURL(tt.url); got != tt.want {
+			t.Errorf("isWeiboURL(%q) = %v, want %v", tt.url, got, tt.want)
+		}
+	}
+}
+
+func TestIsGenericWeiboTitle(t *testing.T) {
+	tests := []struct {
+		title string
+		want  bool
+	}{
+		{"微博正文 - 微博", true},
+		{"微博正文", true},
+		{"Sina Visitor System", true},
+		{"微博", true},
+		{"", true},
+		{"   ", true},
+		{"张三的技术分享", false},
+		{"Go语言最佳实践", false},
+	}
+	for _, tt := range tests {
+		if got := isGenericWeiboTitle(tt.title); got != tt.want {
+			t.Errorf("isGenericWeiboTitle(%q) = %v, want %v", tt.title, got, tt.want)
+		}
+	}
+}
+
+func TestExtractTitleFromMarkdown(t *testing.T) {
+	tests := []struct {
+		name string
+		md   string
+		want string
+	}{
+		{
+			name: "first text line",
+			md:   "这是一条微博内容，分享技术心得\n\n更多详情请看下文",
+			want: "这是一条微博内容，分享技术心得",
+		},
+		{
+			name: "skip image lines",
+			md:   "![photo](https://img.weibo.com/pic.jpg)\n这是正文内容",
+			want: "这是正文内容",
+		},
+		{
+			name: "strip heading markers",
+			md:   "# 标题文本\n\n内容",
+			want: "标题文本",
+		},
+		{
+			name: "skip bare URLs",
+			md:   "https://example.com\n实际内容在这里",
+			want: "实际内容在这里",
+		},
+		{
+			name: "extract text from markdown links",
+			md:   "[#Go语言#](//s.weibo.com/weibo?q=Go) 今天分享一个技巧",
+			want: "#Go语言# 今天分享一个技巧",
+		},
+		{
+			name: "empty markdown",
+			md:   "",
+			want: "",
+		},
+		{
+			name: "only images",
+			md:   "![a](https://img.com/a.jpg)\n![b](https://img.com/b.jpg)",
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractTitleFromMarkdown(tt.md)
+			if got != tt.want {
+				t.Errorf("extractTitleFromMarkdown() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCleanWeiboMarkdown(t *testing.T) {
+	tests := []struct {
+		name string
+		md   string
+		want string
+	}{
+		{
+			name: "hashtag links to plain text",
+			md:   `[#Go语言#](//s.weibo.com/weibo?q=%23Go%E8%AF%AD%E8%A8%80%23) 今天学了新知识`,
+			want: `#Go语言# 今天学了新知识`,
+		},
+		{
+			name: "mention links to plain text",
+			md:   `[@张三](//weibo.com/u/1234567) 你怎么看？`,
+			want: `@张三 你怎么看？`,
+		},
+		{
+			name: "bare weibo search URLs removed",
+			md:   `查看更多 //s.weibo.com/weibo?q=test 相关内容`,
+			want: `查看更多 相关内容`,
+		},
+		{
+			name: "combined noise",
+			md:   "[#技术#](//s.weibo.com/weibo?q=%23%E6%8A%80%E6%9C%AF%23) [@李四](//weibo.com/u/999) 分享内容 //s.weibo.com/weibo?q=other",
+			want: "#技术# @李四 分享内容",
+		},
+		{
+			name: "no weibo noise passes through",
+			md:   "# Normal Article\n\nSome content [link](https://example.com).",
+			want: "# Normal Article\n\nSome content [link](https://example.com).",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := cleanWeiboMarkdown(tt.md)
+			if got != tt.want {
+				t.Errorf("cleanWeiboMarkdown() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestProcessTask_WeiboURL_CleansContentAndTitle(t *testing.T) {
+	weiboMarkdown := "[#Go语言#](//s.weibo.com/weibo?q=%23Go%23) 今天分享一个Go的最佳实践 [@技术博主](//weibo.com/u/123)"
+	scrapeResp := &client.ScrapeResponse{
+		Markdown: weiboMarkdown,
+		Metadata: client.ReaderMetadata{
+			Title:    "微博正文 - 微博",
+			SiteName: "微博",
+		},
+	}
+
+	mockReader := &mockScraper{
+		scrapeFn: func(ctx context.Context, url string) (*client.ScrapeResponse, error) {
+			return scrapeResp, nil
+		},
+	}
+	mockArtRepo := &mockCrawlArticleRepo{}
+	mockTaskRepo := &mockCrawlTaskRepo{}
+	mockEnq := &mockCrawlEnqueuer{}
+
+	h := newTestCrawlHandler(mockReader, mockArtRepo, mockTaskRepo, mockEnq, false)
+
+	task := newCrawlAsynqTask("art-1", "task-1", "https://weibo.com/1234567890/post123", "user-1")
+	err := h.ProcessTask(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ProcessTask returned error: %v", err)
+	}
+
+	// Verify title was extracted from content (not the generic "微博正文 - 微博")
+	if len(mockArtRepo.updateCrawlCalls) != 1 {
+		t.Fatalf("UpdateCrawlResult calls = %d, want 1", len(mockArtRepo.updateCrawlCalls))
+	}
+	cr := mockArtRepo.updateCrawlCalls[0]
+	if cr.Title == "微博正文 - 微博" {
+		t.Errorf("Title should not be the generic Weibo title, got %q", cr.Title)
+	}
+	if cr.Title == "" {
+		t.Error("Title should not be empty after extraction")
+	}
+
+	// Verify markdown was cleaned (no weibo search links)
+	if strings.Contains(cr.Markdown, "s.weibo.com") {
+		t.Errorf("Markdown should not contain weibo search URLs, got %q", cr.Markdown)
+	}
+	if strings.Contains(cr.Markdown, "weibo.com/u/") {
+		t.Errorf("Markdown should not contain weibo user profile URLs, got %q", cr.Markdown)
+	}
+
+	// Verify AI task uses cleaned content
+	if len(mockEnq.enqueuedTasks) < 1 {
+		t.Fatal("AI task should be enqueued")
+	}
+	var aiPayload AIProcessPayload
+	json.Unmarshal(mockEnq.enqueuedTasks[0].Payload(), &aiPayload)
+	if strings.Contains(aiPayload.Markdown, "s.weibo.com") {
+		t.Errorf("AI payload markdown should not contain weibo URLs")
+	}
+	if aiPayload.Title == "微博正文 - 微博" {
+		t.Errorf("AI payload title should not be generic Weibo title")
+	}
+}
+
 // --- Mock implementations for CrawlHandler integration tests ---
 
 type mockScraper struct {
@@ -352,12 +549,6 @@ func (m *mockCrawlTagRepo) AttachToArticle(ctx context.Context, articleID, tagID
 	return nil
 }
 
-type mockCrawlCategoryRepo struct{}
-
-func (m *mockCrawlCategoryRepo) GetIDBySlug(ctx context.Context, slug string) (string, error) {
-	return "cat-" + slug, nil
-}
-
 // newTestCrawlHandler creates a CrawlHandler with mock dependencies for testing.
 func newTestCrawlHandler(
 	scraper *mockScraper,
@@ -374,7 +565,6 @@ func newTestCrawlHandler(
 		enableImage:  enableImage,
 		cacheRepo:    &mockContentCacheRepo{},
 		tagRepo:      &mockCrawlTagRepo{},
-		categoryRepo: &mockCrawlCategoryRepo{},
 	}
 }
 
@@ -948,7 +1138,6 @@ func TestProcessTask_CacheHitFull_SkipsCrawlAndAI(t *testing.T) {
 		asynqClient:  mockEnq,
 		cacheRepo:    mockCache,
 		tagRepo:      &mockCrawlTagRepo{},
-		categoryRepo: &mockCrawlCategoryRepo{},
 	}
 
 	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/cached", "user-1")
@@ -1006,7 +1195,6 @@ func TestProcessTask_CacheMiss_ClientContent_SkipsReader(t *testing.T) {
 		asynqClient:  mockEnq,
 		cacheRepo:    &mockContentCacheRepo{}, // cache miss (default nil)
 		tagRepo:      &mockCrawlTagRepo{},
-		categoryRepo: &mockCrawlCategoryRepo{},
 	}
 
 	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/client", "user-1")
@@ -1059,7 +1247,6 @@ func TestProcessTask_CacheMiss_NoClientContent_CallsReader(t *testing.T) {
 		asynqClient:  mockEnq,
 		cacheRepo:    &mockContentCacheRepo{}, // cache miss
 		tagRepo:      &mockCrawlTagRepo{},
-		categoryRepo: &mockCrawlCategoryRepo{},
 	}
 
 	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/fresh", "user-1")

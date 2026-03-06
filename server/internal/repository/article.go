@@ -95,12 +95,6 @@ type ListArticlesResult struct {
 }
 
 func (r *ArticleRepo) ListByUser(ctx context.Context, p ListArticlesParams) (*ListArticlesResult, error) {
-	if p.Page < 1 {
-		p.Page = 1
-	}
-	if p.PerPage < 1 || p.PerPage > 100 {
-		p.PerPage = 20
-	}
 	offset := (p.Page - 1) * p.PerPage
 
 	// Count
@@ -339,12 +333,6 @@ func (r *ArticleRepo) Delete(ctx context.Context, id string, userID string) erro
 }
 
 func (r *ArticleRepo) Search(ctx context.Context, userID, query string, page, perPage int) (*ListArticlesResult, error) {
-	if page < 1 {
-		page = 1
-	}
-	if perPage < 1 || perPage > 100 {
-		perPage = 20
-	}
 	offset := (page - 1) * perPage
 	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
 	pattern := "%" + escaped + "%"

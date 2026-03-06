@@ -2,6 +2,7 @@ import UIKit
 import SwiftUI
 import UniformTypeIdentifiers
 import SwiftData
+import os
 
 class ShareViewController: UIViewController {
     private var hostingController: UIHostingController<CompactShareView>?
@@ -66,6 +67,7 @@ class ShareViewController: UIViewController {
             // Check quota before saving
             let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
             guard SharedDataManager.canSave(isPro: isPro) else {
+                FolioLogger.data.info("share: quota exceeded")
                 showState(.quotaExceeded)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
                     self?.dismiss()
@@ -75,6 +77,7 @@ class ShareViewController: UIViewController {
 
             let article = try manager.saveArticle(url: urlString)
             SharedDataManager.incrementQuota()
+            FolioLogger.data.info("share: article saved — \(urlString)")
 
             // Check if nearing quota limit for warning
             let currentCount = SharedDataManager.currentMonthCount()
@@ -95,9 +98,10 @@ class ShareViewController: UIViewController {
                         guard let url = URL(string: articleURL) else { return }
                         let result = try await ContentExtractor().extract(url: url)
                         try manager.updateWithExtraction(result, for: article)
+                        FolioLogger.data.info("share: extraction succeeded — \(articleURL)")
                         self.showState(.extracted)
                     } catch {
-                        // Extraction failed — stay with saved state, server will process
+                        FolioLogger.data.error("share: extraction failed — \(error)")
                         self.showState(.saved)
                     }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
@@ -111,8 +115,10 @@ class ShareViewController: UIViewController {
                 return
             }
         } catch SharedDataError.duplicateURL {
+            FolioLogger.data.info("share: duplicate URL — \(urlString)")
             showState(.duplicate)
         } catch {
+            FolioLogger.data.error("share: save failed — \(error)")
             showState(.offline)
         }
 

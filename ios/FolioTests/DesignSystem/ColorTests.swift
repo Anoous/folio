@@ -20,10 +20,6 @@ final class ColorTests: XCTestCase {
             .folio.error,
             .folio.tagBackground,
             .folio.tagText,
-            .folio.highlightYellow,
-            .folio.highlightGreen,
-            .folio.highlightBlue,
-            .folio.highlightRed,
             .folio.codeBackground,
         ]
         for color in colors {
@@ -59,15 +55,4 @@ final class ColorTests: XCTestCase {
         XCTAssertEqual(resolved.blue, 78.0 / 255.0, accuracy: 0.01)
     }
 
-    func testHighlightColors() {
-        let highlights: [Color] = [
-            .folio.highlightYellow,
-            .folio.highlightGreen,
-            .folio.highlightBlue,
-            .folio.highlightRed,
-        ]
-        for highlight in highlights {
-            XCTAssertNotNil(highlight)
-        }
-    }
 }

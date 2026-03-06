@@ -90,17 +90,6 @@ final class SearchViewModelTests: XCTestCase {
         XCTAssertTrue(vm.searchHistory.isEmpty)
     }
 
-    @MainActor
-    func testDeleteSingleHistory() throws {
-        let fts = try FTS5SearchManager(inMemory: true)
-        let vm = SearchViewModel(searchManager: fts, context: context)
-        vm.saveToHistory("keep")
-        vm.saveToHistory("delete")
-
-        vm.deleteHistoryItem("delete")
-        XCTAssertFalse(vm.searchHistory.contains("delete"))
-        XCTAssertTrue(vm.searchHistory.contains("keep"))
-    }
 
     @MainActor
     func testPopularTags_shows8() throws {

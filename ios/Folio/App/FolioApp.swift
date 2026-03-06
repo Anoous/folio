@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import os
 
 @main
 struct FolioApp: App {
@@ -15,7 +16,7 @@ struct FolioApp: App {
     init() {
         do {
             let config: ModelConfiguration
-            if let _ = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) {
+            if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) != nil {
                 config = ModelConfiguration(
                     "Folio",
                     schema: DataManager.schema,
@@ -27,7 +28,9 @@ struct FolioApp: App {
             container = try ModelContainer(for: DataManager.schema, configurations: [config])
             DataManager.shared.preloadCategories(in: container.mainContext)
             _offlineQueueManager = State(initialValue: OfflineQueueManager(context: container.mainContext))
+            FolioLogger.data.info("app started, ModelContainer initialized")
         } catch {
+            FolioLogger.data.fault("ModelContainer creation failed: \(error)")
             fatalError("Failed to create ModelContainer: \(error)")
         }
     }
@@ -36,7 +39,9 @@ struct FolioApp: App {
         WindowGroup {
             Group {
                 if hasCompletedOnboarding {
-                    MainTabView()
+                    NavigationStack {
+                        HomeView()
+                    }
                 } else {
                     OnboardingView {
                         hasCompletedOnboarding = true

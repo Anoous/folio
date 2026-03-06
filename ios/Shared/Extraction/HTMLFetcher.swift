@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 enum HTMLFetchError: Error {
     case invalidURL
@@ -30,6 +31,7 @@ struct HTMLFetcher {
         do {
             (data, response) = try await session.data(from: url)
         } catch {
+            FolioLogger.data.error("HTMLFetcher: network error — \(error)")
             throw HTMLFetchError.networkError(error)
         }
 
@@ -38,6 +40,7 @@ struct HTMLFetcher {
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
+            FolioLogger.data.error("HTMLFetcher: HTTP \(httpResponse.statusCode) — \(url.absoluteString)")
             throw HTMLFetchError.httpError(httpResponse.statusCode)
         }
 
@@ -45,12 +48,14 @@ struct HTMLFetcher {
         if let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") {
             let lowered = contentType.lowercased()
             guard lowered.contains("text/html") || lowered.contains("text/xml") || lowered.contains("application/xhtml") else {
+                FolioLogger.data.error("HTMLFetcher: invalid content-type \(contentType) — \(url.absoluteString)")
                 throw HTMLFetchError.invalidContentType(contentType)
             }
         }
 
         // Size check
         guard data.count <= Self.maxResponseSize else {
+            FolioLogger.data.error("HTMLFetcher: response too large \(data.count) bytes — \(url.absoluteString)")
             throw HTMLFetchError.responseTooLarge(data.count)
         }
 

@@ -211,6 +211,7 @@ export JWT_SECRET="dev-jwt-secret-change-in-production"
 export READER_URL="http://localhost:3000"
 export AI_SERVICE_URL="http://localhost:8000"
 export DEV_MODE="true"
+export LOG_LEVEL="debug"
 export PORT="8080"
 
 go run ./cmd/server &

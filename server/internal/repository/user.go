@@ -92,24 +92,6 @@ func (r *UserRepo) Create(ctx context.Context, p CreateUserParams) (*domain.User
 	return &u, nil
 }
 
-func (r *UserRepo) IncrementMonthCount(ctx context.Context, id string) error {
-	_, err := r.pool.Exec(ctx,
-		`UPDATE users SET current_month_count = current_month_count + 1 WHERE id = $1`, id)
-	if err != nil {
-		return fmt.Errorf("increment month count: %w", err)
-	}
-	return nil
-}
-
-func (r *UserRepo) ResetMonthCount(ctx context.Context, id string) error {
-	_, err := r.pool.Exec(ctx,
-		`UPDATE users SET current_month_count = 0, quota_reset_at = NOW() WHERE id = $1`, id)
-	if err != nil {
-		return fmt.Errorf("reset month count: %w", err)
-	}
-	return nil
-}
-
 func (r *UserRepo) DecrementMonthCount(ctx context.Context, id string) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE users SET current_month_count = GREATEST(current_month_count - 1, 0) WHERE id = $1`, id)

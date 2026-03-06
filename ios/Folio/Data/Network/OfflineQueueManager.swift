@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import os
 import SwiftData
 import BackgroundTasks
 import Combine
@@ -36,6 +37,9 @@ final class OfflineQueueManager {
                 guard let self else { return }
                 let wasAvailable = self.isNetworkAvailable
                 self.isNetworkAvailable = path.status == .satisfied
+                if wasAvailable != self.isNetworkAvailable {
+                    FolioLogger.network.info("network status changed: \(self.isNetworkAvailable ? "available" : "unavailable")")
+                }
                 if !wasAvailable && self.isNetworkAvailable {
                     await self.processPendingArticles()
                 }
@@ -60,7 +64,12 @@ final class OfflineQueueManager {
             predicate: #Predicate { $0.statusRaw == pendingRaw || $0.statusRaw == clientReadyRaw },
             sortBy: [SortDescriptor(\.createdAt)]
         )
-        guard let pending = try? context.fetch(descriptor), !pending.isEmpty else { return }
+        guard let pending = try? context.fetch(descriptor), !pending.isEmpty else {
+            FolioLogger.network.debug("no pending articles to process")
+            return
+        }
+
+        FolioLogger.network.info("processing \(pending.count) pending article(s)")
 
         if let processor = onProcessPending {
             let results = await processor(pending)
