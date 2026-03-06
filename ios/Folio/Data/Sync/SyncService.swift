@@ -3,12 +3,19 @@ import os
 import SwiftData
 
 @MainActor
+@Observable
 final class SyncService {
     private let apiClient: APIClient
     private let context: ModelContext
 
     private static let pollMaxAttempts = 10
     private static let pollIntervalNanoseconds: UInt64 = 5_000_000_000
+    private static let lastSyncedAtKey = "com.folio.lastSyncedAt"
+
+    private var lastSyncedAt: Date? {
+        get { UserDefaults.standard.object(forKey: Self.lastSyncedAtKey) as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: Self.lastSyncedAtKey) }
+    }
 
     init(apiClient: APIClient = .shared, context: ModelContext) {
         self.apiClient = apiClient
@@ -194,6 +201,13 @@ final class SyncService {
         FolioLogger.sync.info("full sync completed")
     }
 
+    // MARK: - Incremental Sync (public entry point)
+
+    func incrementalSync() async {
+        await incrementalSyncArticles()
+        await fetchProcessingArticles()
+    }
+
     // MARK: - Quota Sync
 
     private func syncUserQuota() async {
@@ -214,17 +228,96 @@ final class SyncService {
     // MARK: - Article Sync
 
     private func syncArticles() async {
-        do {
-            let response = try await apiClient.listArticles(page: 1, perPage: 50)
-            let merger = ArticleMerger(context: context)
-
-            for dto in response.data {
-                try? merger.merge(dto: dto)
-            }
-
-            try? context.save()
-        } catch {
-            FolioLogger.sync.error("article sync failed: \(error)")
+        if lastSyncedAt == nil {
+            await fullSyncArticles()
+        } else {
+            await incrementalSyncArticles()
         }
+    }
+
+    private func fullSyncArticles() async {
+        FolioLogger.sync.info("starting full article sync")
+        let merger = ArticleMerger(context: context)
+        var page = 1
+        let perPage = 50
+
+        do {
+            while true {
+                let response = try await apiClient.listArticles(page: page, perPage: perPage)
+                for dto in response.data {
+                    try? merger.merge(dto: dto)
+                }
+                try? context.save()
+
+                let fetched = (page - 1) * perPage + response.data.count
+                if fetched >= response.pagination.total {
+                    break
+                }
+                page += 1
+            }
+            lastSyncedAt = Date()
+            FolioLogger.sync.info("full article sync completed")
+        } catch {
+            FolioLogger.sync.error("full article sync failed: \(error)")
+        }
+    }
+
+    private func incrementalSyncArticles() async {
+        guard let since = lastSyncedAt else {
+            await fullSyncArticles()
+            return
+        }
+        FolioLogger.sync.debug("incremental sync since \(since)")
+        let merger = ArticleMerger(context: context)
+        var page = 1
+        let perPage = 50
+
+        do {
+            while true {
+                let response = try await apiClient.listArticles(
+                    page: page, perPage: perPage, updatedSince: since
+                )
+                for dto in response.data {
+                    try? merger.merge(dto: dto)
+                }
+                try? context.save()
+
+                let fetched = (page - 1) * perPage + response.data.count
+                if fetched >= response.pagination.total {
+                    break
+                }
+                page += 1
+            }
+            lastSyncedAt = Date()
+        } catch {
+            FolioLogger.sync.error("incremental sync failed: \(error)")
+        }
+    }
+
+    // MARK: - Processing Article Polling
+
+    func fetchProcessingArticles() async {
+        let processingRaw = ArticleStatus.processing.rawValue
+        let clientReadyRaw = ArticleStatus.clientReady.rawValue
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> {
+                $0.statusRaw == processingRaw || $0.statusRaw == clientReadyRaw
+            }
+        )
+        guard let processing = try? context.fetch(descriptor), !processing.isEmpty else { return }
+
+        FolioLogger.sync.debug("fetching \(processing.count) processing articles")
+        let merger = ArticleMerger(context: context)
+        for article in processing {
+            guard let serverID = article.serverID else { continue }
+            do {
+                let dto = try await apiClient.getArticle(id: serverID)
+                article.updateFromDTO(dto)
+                try merger.resolveRelationships(for: article, from: dto)
+            } catch {
+                continue
+            }
+        }
+        try? context.save()
     }
 }

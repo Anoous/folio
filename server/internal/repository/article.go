@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -81,12 +82,13 @@ func (r *ArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, 
 }
 
 type ListArticlesParams struct {
-	UserID   string
-	Category *string
-	Status   *domain.ArticleStatus
-	Favorite *bool
-	Page     int
-	PerPage  int
+	UserID       string
+	Category     *string
+	Status       *domain.ArticleStatus
+	Favorite     *bool
+	UpdatedSince *time.Time
+	Page         int
+	PerPage      int
 }
 
 type ListArticlesResult struct {
@@ -117,6 +119,11 @@ func (r *ArticleRepo) ListByUser(ctx context.Context, p ListArticlesParams) (*Li
 		args = append(args, *p.Favorite)
 		argIdx++
 	}
+	if p.UpdatedSince != nil {
+		countQuery += fmt.Sprintf(` AND updated_at > $%d`, argIdx)
+		args = append(args, *p.UpdatedSince)
+		argIdx++
+	}
 
 	var total int
 	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
@@ -144,6 +151,11 @@ func (r *ArticleRepo) ListByUser(ctx context.Context, p ListArticlesParams) (*Li
 	if p.Favorite != nil {
 		query += fmt.Sprintf(` AND is_favorite = $%d`, qArgIdx)
 		queryArgs = append(queryArgs, *p.Favorite)
+		qArgIdx++
+	}
+	if p.UpdatedSince != nil {
+		query += fmt.Sprintf(` AND updated_at > $%d`, qArgIdx)
+		queryArgs = append(queryArgs, *p.UpdatedSince)
 		qArgIdx++
 	}
 

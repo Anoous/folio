@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
@@ -101,6 +102,11 @@ func (h *ArticleHandler) HandleListArticles(w http.ResponseWriter, r *http.Reque
 	if fav := r.URL.Query().Get("favorite"); fav != "" {
 		b := fav == "true"
 		params.Favorite = &b
+	}
+	if since := r.URL.Query().Get("updated_since"); since != "" {
+		if t, err := time.Parse(time.RFC3339, since); err == nil {
+			params.UpdatedSince = &t
+		}
 	}
 
 	result, err := h.articleService.ListByUser(r.Context(), params)

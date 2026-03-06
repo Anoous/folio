@@ -167,7 +167,12 @@ final class APIClient {
     private let refreshCoordinator = RefreshCoordinator()
 
     #if DEBUG
-    static let defaultBaseURL = URL(string: "http://localhost:8080")!
+        #if targetEnvironment(simulator)
+        static let defaultBaseURL = URL(string: "http://localhost:8080")!
+        #else
+        // .local hostname resolved via Bonjour/mDNS — works on any Wi-Fi, no hardcoded IP
+        static let defaultBaseURL = URL(string: "http://macbookdeMacBook-Air.local:8080")!
+        #endif
     #else
     static let defaultBaseURL = URL(string: "https://api.folio.app")!
     #endif
@@ -437,7 +442,8 @@ final class APIClient {
         perPage: Int = 20,
         category: String? = nil,
         status: String? = nil,
-        favorite: Bool? = nil
+        favorite: Bool? = nil,
+        updatedSince: Date? = nil
     ) async throws -> ListResponse<ArticleDTO> {
         var queryItems = [
             URLQueryItem(name: "page", value: "\(page)"),
@@ -451,6 +457,10 @@ final class APIClient {
         }
         if let favorite {
             queryItems.append(URLQueryItem(name: "favorite", value: favorite ? "true" : "false"))
+        }
+        if let updatedSince {
+            let formatter = ISO8601DateFormatter()
+            queryItems.append(URLQueryItem(name: "updated_since", value: formatter.string(from: updatedSince)))
         }
         return try await request(method: "GET", path: "/api/v1/articles", queryItems: queryItems)
     }

@@ -13,6 +13,8 @@ struct ReaderView: View {
     @State private var showsReadingPreferences = false
     @State private var showsWebView = false
     @State private var showsDeleteConfirmation = false
+    @Environment(\.openURL) private var openURL
+    @State private var summaryExpanded = false
 
     // Reading preferences
     @AppStorage(ReadingPreferenceKeys.fontSize) private var fontSize: Double = 17
@@ -150,11 +152,10 @@ struct ReaderView: View {
                         contentUnavailableView
                     }
 
-                    // Related articles (F11 demo)
+                    // Related articles
                     if article.markdownContent != nil {
-                        Divider()
-                            .padding(.top, Spacing.lg)
                         RelatedArticlesSection()
+                            .padding(.top, Spacing.xl)
                     }
 
                     Spacer(minLength: Spacing.xl)
@@ -194,20 +195,32 @@ struct ReaderView: View {
 
     private func aiSummarySection(summary: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            HStack(spacing: Spacing.xxs) {
-                Text("\u{2726}")
-                    .font(.caption)
-                    .foregroundStyle(Color.folio.accent)
-                Text("AI")
-                    .font(Typography.tag)
-                    .foregroundStyle(Color.folio.accent)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { summaryExpanded.toggle() }
+            } label: {
+                HStack(spacing: Spacing.xxs) {
+                    Text("\u{2726}")
+                        .font(.caption)
+                        .foregroundStyle(Color.folio.accent)
+                    Text("AI")
+                        .font(Typography.tag)
+                        .foregroundStyle(Color.folio.accent)
+                    Image(systemName: summaryExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(Color.folio.textTertiary)
+                    Spacer()
+                }
             }
+            .buttonStyle(.plain)
 
-            Text(summary)
-                .font(.system(size: CGFloat(fontSize) - 1))
-                .foregroundStyle(readingTheme.secondaryTextColor)
-                .lineSpacing(Typography.articleBodyLineSpacing)
-                .fixedSize(horizontal: false, vertical: true)
+            if summaryExpanded {
+                Text(summary)
+                    .font(.system(size: CGFloat(fontSize) - 1))
+                    .foregroundStyle(readingTheme.secondaryTextColor)
+                    .lineSpacing(Typography.articleBodyLineSpacing)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
     }
 
@@ -281,7 +294,7 @@ struct ReaderView: View {
                 title: String(localized: "reader.openOriginal", defaultValue: "Open Original"),
                 style: .secondary
             ) {
-                showsWebView = true
+                openOriginal()
             }
             .frame(width: 200)
         }
@@ -328,7 +341,7 @@ struct ReaderView: View {
             }
 
             Button {
-                showsWebView = true
+                openOriginal()
             } label: {
                 Label(String(localized: "reader.openInBrowser", defaultValue: "Open Original"), systemImage: "safari")
             }
@@ -351,7 +364,7 @@ struct ReaderView: View {
     private var bottomToolbar: some View {
         HStack {
             Button {
-                showsWebView = true
+                openOriginal()
             } label: {
                 HStack(spacing: Spacing.xxs) {
                     Image(systemName: "safari")
@@ -388,6 +401,22 @@ struct ReaderView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, Spacing.sm)
         .background(.ultraThinMaterial)
+    }
+
+    // MARK: - Open Original
+
+    private static let externalBrowserHosts: Set<String> = [
+        "x.com", "www.x.com", "twitter.com", "www.twitter.com",
+        "mobile.x.com", "mobile.twitter.com"
+    ]
+
+    private func openOriginal() {
+        guard let url = URL(string: article.url) else { return }
+        if let host = url.host(), Self.externalBrowserHosts.contains(host) {
+            openURL(url)
+        } else {
+            showsWebView = true
+        }
     }
 
 }

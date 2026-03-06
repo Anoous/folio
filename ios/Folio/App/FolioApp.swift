@@ -27,7 +27,9 @@ struct FolioApp: App {
             }
             container = try ModelContainer(for: DataManager.schema, configurations: [config])
             DataManager.shared.preloadCategories(in: container.mainContext)
-            _offlineQueueManager = State(initialValue: OfflineQueueManager(context: container.mainContext))
+            let ctx = container.mainContext
+            _offlineQueueManager = State(initialValue: OfflineQueueManager(context: ctx))
+            _syncService = State(initialValue: SyncService(context: ctx))
             FolioLogger.data.info("app started, ModelContainer initialized")
         } catch {
             FolioLogger.data.fault("ModelContainer creation failed: \(error)")
@@ -50,11 +52,12 @@ struct FolioApp: App {
             }
             .environment(authViewModel)
             .environment(offlineQueueManager)
+            .environment(syncService)
             .task {
                 await authViewModel.checkExistingAuth()
             }
             .onChange(of: authViewModel.authState) { _, newValue in
-                if newValue == .signedIn, let manager = offlineQueueManager {
+                if newValue == .signedIn, let manager = offlineQueueManager, let sync = syncService {
                     // 将服务端配额同步到 UserDefaults，Share Extension 依赖此值
                     if let user = authViewModel.currentUser {
                         let isPro = user.subscription != "free"
@@ -64,8 +67,6 @@ struct FolioApp: App {
                             isPro: isPro
                         )
                     }
-                    let sync = SyncService(context: container.mainContext)
-                    syncService = sync
                     manager.onProcessPending = { articles in
                         await sync.submitPendingArticles(articles)
                     }
@@ -75,16 +76,20 @@ struct FolioApp: App {
                     }
                 } else if newValue == .signedOut {
                     offlineQueueManager?.onProcessPending = nil
-                    syncService = nil
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active, let manager = offlineQueueManager {
-                    manager.refreshPendingCount()
-                    if manager.pendingCount > 0 {
-                        Task {
-                            await manager.processPendingArticles()
+                if newPhase == .active {
+                    if let manager = offlineQueueManager {
+                        manager.refreshPendingCount()
+                        if manager.pendingCount > 0 {
+                            Task {
+                                await manager.processPendingArticles()
+                            }
                         }
+                    }
+                    if authViewModel.authState == .signedIn, let sync = syncService {
+                        Task { await sync.incrementalSync() }
                     }
                 }
             }

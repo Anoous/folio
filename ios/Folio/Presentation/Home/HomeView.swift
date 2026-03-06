@@ -5,8 +5,8 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
     @Environment(OfflineQueueManager.self) private var offlineQueueManager: OfflineQueueManager?
+    @Environment(SyncService.self) private var syncService: SyncService?
     @Query(sort: \Article.createdAt, order: .reverse) private var articles: [Article]
-    @Query(sort: \Category.sortOrder) private var categories: [Category]
     @State private var viewModel: HomeViewModel?
     @State private var searchViewModel: SearchViewModel?
     @State private var searchText = ""
@@ -16,7 +16,14 @@ struct HomeView: View {
     @State private var showDeleteConfirmation = false
     @State private var showShareSheet = false
     @State private var shareItems: [Any]? = nil
-    @State private var showInsightCard = true
+    @State private var showInsight = true
+    @State private var showAIAnswer = false
+
+    private let mockTopics: [(name: String, count: Int)] = [
+        ("AI & Machine Learning", 12),
+        ("Swift & iOS Development", 8),
+        ("Product Design", 5),
+    ]
 
     private var isSearchActive: Bool {
         !searchText.trimmingCharacters(in: .whitespaces).isEmpty
@@ -43,19 +50,7 @@ struct HomeView: View {
                 .accessibilityLabel(String(localized: "tab.settings", defaultValue: "Settings"))
             }
             ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: Spacing.xs) {
-                    NavigationLink(value: "topics") {
-                        Image(systemName: "rectangle.stack")
-                    }
-                    .accessibilityLabel(String(localized: "home.topics", defaultValue: "Topics"))
-
-                    NavigationLink(value: "askai") {
-                        Image(systemName: "brain.head.profile")
-                    }
-                    .accessibilityLabel(String(localized: "home.askai", defaultValue: "Ask AI"))
-
-                    addButton
-                }
+                addButton
             }
         }
         .searchable(
@@ -65,12 +60,11 @@ struct HomeView: View {
         )
         .searchSuggestions {
             if !isSearchActive, let svm = searchViewModel {
-                // Synced article count hint
                 Text(String(
                     format: NSLocalizedString(
                         "search.syncedScope",
-                        value: "搜索 %d 篇已同步文章",
-                        comment: "Search scope hint showing how many articles are indexed"
+                        value: "Search %d saved articles",
+                        comment: "Search scope hint"
                     ),
                     svm.syncedArticleCount
                 ))
@@ -78,7 +72,6 @@ struct HomeView: View {
                 .foregroundStyle(.secondary)
                 .listRowSeparator(.hidden)
 
-                // Recent searches
                 if !svm.searchHistory.isEmpty {
                     Section {
                         ForEach(svm.searchHistory, id: \.self) { query in
@@ -87,7 +80,7 @@ struct HomeView: View {
                         }
                     } header: {
                         HStack {
-                            Text(String(localized: "search.recent", defaultValue: "Recent Searches"))
+                            Text(String(localized: "search.recent", defaultValue: "Recent"))
                             Spacer()
                             Button(String(localized: "search.clearAll", defaultValue: "Clear")) {
                                 svm.clearHistory()
@@ -98,13 +91,37 @@ struct HomeView: View {
                     }
                 }
 
-                // Popular tags
                 if !svm.popularTags.isEmpty {
-                    Section(String(localized: "search.popularTags", defaultValue: "Popular Tags")) {
+                    Section(String(localized: "search.popularTags", defaultValue: "Tags")) {
                         ForEach(svm.popularTags) { tag in
                             Label(tag.name, systemImage: "tag")
                                 .searchCompletion(tag.name)
                         }
+                    }
+                }
+
+                // Smart topics (mock data)
+                Section(String(localized: "search.topics", defaultValue: "Topics")) {
+                    ForEach(mockTopics, id: \.name) { topic in
+                        Label {
+                            HStack {
+                                Text(topic.name)
+                                Spacer()
+                                Text(String(
+                                    format: NSLocalizedString(
+                                        "search.topicCount",
+                                        value: "%d articles",
+                                        comment: "Number of articles in topic"
+                                    ),
+                                    topic.count
+                                ))
+                                .font(Typography.caption)
+                                .foregroundStyle(Color.folio.textTertiary)
+                            }
+                        } icon: {
+                            Image(systemName: "folder")
+                        }
+                        .searchCompletion(topic.name)
                     }
                 }
             }
@@ -137,17 +154,8 @@ struct HomeView: View {
             }
         }
         .navigationDestination(for: String.self) { destination in
-            switch destination {
-            case "settings":
+            if destination == "settings" {
                 SettingsView()
-            case "topics":
-                TopicsView()
-            case "askai":
-                AskAIView()
-            case "digest":
-                DailyDigestView()
-            default:
-                EmptyView()
             }
         }
         .toast(isPresented: Binding(
@@ -296,76 +304,78 @@ struct HomeView: View {
                 .font(Typography.body)
                 .foregroundStyle(Color.folio.textSecondary)
                 .multilineTextAlignment(.center)
+
+            if showAIAnswer {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    HStack(spacing: Spacing.xxs) {
+                        Text("\u{2726}")
+                            .font(.caption)
+                            .foregroundStyle(Color.folio.accent)
+                        Text("AI")
+                            .font(Typography.tag)
+                            .foregroundStyle(Color.folio.accent)
+                    }
+                    Text(String(localized: "search.aiMockAnswer", defaultValue: "Based on 4 articles in your collection, here are some relevant insights on this topic..."))
+                        .font(Typography.body)
+                        .foregroundStyle(Color.folio.textSecondary)
+                        .lineSpacing(4)
+                }
+                .padding(Spacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.folio.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
+            } else {
+                Button {
+                    withAnimation { showAIAnswer = true }
+                } label: {
+                    HStack(spacing: Spacing.xs) {
+                        Text("\u{2728}")
+                        Text(String(localized: "search.askAI", defaultValue: "Ask AI about your collection"))
+                            .font(Typography.body)
+                    }
+                    .foregroundStyle(Color.folio.accent)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, Spacing.sm)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(Spacing.screenPadding)
+        .onChange(of: searchText) { _, _ in
+            showAIAnswer = false
+        }
     }
 
     // MARK: - Article List
 
     private var articleList: some View {
-        VStack(spacing: 0) {
-            if !categories.isEmpty {
-                CategoryFilterBar(
-                    selectedCategory: Binding(
-                        get: { viewModel?.selectedCategory },
-                        set: { newValue in
-                            viewModel?.selectedCategory = newValue
-                            viewModel?.fetchArticles()
-                        }
-                    ),
-                    categories: categories,
-                    articles: articles
-                )
+        List {
+            statusBanners
+
+            DailyDigestCard()
+
+            if showInsight {
+                InsightCard(onDismiss: { showInsight = false })
             }
 
-            List {
-                statusBanners
-
-                // Knowledge Awakening card (F14 demo)
-                if showInsightCard {
-                    InsightCard(
-                        insight: .sample,
-                        onDismiss: { withAnimation { showInsightCard = false } },
-                        onRead: {}
-                    )
-                    .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.screenPadding, bottom: Spacing.xs, trailing: Spacing.screenPadding))
-                    .listRowSeparator(.hidden)
-                }
-
-                // Daily Digest entry card (F10 demo)
-                NavigationLink(value: "digest") {
-                    HStack(spacing: Spacing.sm) {
-                        Image(systemName: "headphones")
-                            .font(.title3)
-                            .foregroundStyle(Color.folio.accent)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(String(localized: "home.digest.title", defaultValue: "Today's Digest"))
-                                .font(Typography.listTitle)
-                                .foregroundStyle(Color.folio.textPrimary)
-                            Text(String(localized: "home.digest.subtitle", defaultValue: "5 min audio summary of your latest saves"))
-                                .font(Typography.caption)
-                                .foregroundStyle(Color.folio.textSecondary)
-                        }
-                        Spacer()
-                        Image(systemName: "play.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(Color.folio.accent)
-                    }
-                    .padding(Spacing.sm)
-                    .background(Color.folio.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
-                }
-                .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.screenPadding, bottom: Spacing.xs, trailing: Spacing.screenPadding))
-                .listRowSeparator(.hidden)
-
-                if let vm = viewModel {
-                    articleSections(vm: vm)
-                }
+            if let vm = viewModel {
+                articleSections(vm: vm)
             }
-            .listStyle(.plain)
-            .refreshable {
-                await viewModel?.refreshFromServer()
+        }
+        .listStyle(.plain)
+        .refreshable {
+            if let syncService {
+                await syncService.incrementalSync()
+            }
+            viewModel?.fetchArticles()
+        }
+        .task(id: articles.contains { $0.status == .processing || $0.status == .clientReady }) {
+            guard articles.contains(where: { $0.status == .processing || $0.status == .clientReady }) else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard !Task.isCancelled else { break }
+                await syncService?.fetchProcessingArticles()
+                viewModel?.fetchArticles()
             }
         }
         .background(Color.folio.background)
@@ -380,7 +390,6 @@ struct HomeView: View {
 
     @ViewBuilder
     private var statusBanners: some View {
-        // Offline banner
         if offlineQueueManager?.isNetworkAvailable == false {
             HStack(spacing: Spacing.xs) {
                 Image(systemName: "wifi.slash")
@@ -392,7 +401,6 @@ struct HomeView: View {
             .padding(.vertical, Spacing.xxs)
         }
 
-        // Syncing indicator
         if viewModel?.isLoading == true {
             HStack(spacing: Spacing.xs) {
                 ProgressView()
@@ -404,7 +412,6 @@ struct HomeView: View {
             .padding(.vertical, Spacing.xxs)
         }
 
-        // Sync error banner
         if let syncError = viewModel?.syncError {
             syncErrorBanner(syncError)
         }
@@ -420,7 +427,10 @@ struct HomeView: View {
                 .lineLimit(2)
             Spacer()
             Button {
-                Task { await viewModel?.refreshFromServer() }
+                Task {
+                    await syncService?.incrementalSync()
+                    viewModel?.fetchArticles()
+                }
             } label: {
                 Text(String(localized: "home.retry", defaultValue: "Retry"))
                     .font(Typography.caption)
@@ -564,7 +574,6 @@ struct HomeView: View {
             viewModel?.fetchArticles()
             showToast(String(localized: "home.addURL.saved", defaultValue: "Link saved"), icon: "checkmark.circle.fill")
 
-            // Trigger backend processing
             Task {
                 await offlineQueueManager?.processPendingArticles()
             }
