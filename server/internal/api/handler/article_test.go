@@ -52,9 +52,17 @@ func (m *mockArticleService) Search(ctx context.Context, userID, query string, p
 	return &repository.ListArticlesResult{}, nil
 }
 
+// --- Mock user getter for handler tests ---
+
+type mockUserGetter struct{}
+
+func (m *mockUserGetter) GetByID(ctx context.Context, id string) (*domain.User, error) {
+	return &domain.User{ID: id, SyncEpoch: 1}, nil
+}
+
 // newTestArticleHandler creates an ArticleHandler with a mock service for testing.
 func newTestArticleHandler(mockSvc *mockArticleService) *ArticleHandler {
-	return &ArticleHandler{articleService: mockSvc}
+	return &ArticleHandler{articleService: mockSvc, userRepo: &mockUserGetter{}}
 }
 
 // newAuthenticatedRequest creates an HTTP request with userID injected into context

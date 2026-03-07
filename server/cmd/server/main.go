@@ -78,7 +78,7 @@ func main() {
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authService)
-	articleHandler := handler.NewArticleHandler(articleService)
+	articleHandler := handler.NewArticleHandler(articleService, userRepo)
 	searchHandler := handler.NewSearchHandler(articleService)
 	tagHandler := handler.NewTagHandler(tagService)
 	categoryHandler := handler.NewCategoryHandler(categoryRepo)

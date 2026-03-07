@@ -49,4 +49,5 @@ type ListResponse struct {
 	Data       any                `json:"data"`
 	Pagination PaginationResponse `json:"pagination"`
 	ServerTime string             `json:"server_time,omitempty"`
+	SyncEpoch  int                `json:"sync_epoch,omitempty"`
 }

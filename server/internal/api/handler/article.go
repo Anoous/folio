@@ -26,12 +26,17 @@ type articleServicer interface {
 	Search(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error)
 }
 
-type ArticleHandler struct {
-	articleService articleServicer
+type userGetter interface {
+	GetByID(ctx context.Context, id string) (*domain.User, error)
 }
 
-func NewArticleHandler(articleService *service.ArticleService) *ArticleHandler {
-	return &ArticleHandler{articleService: articleService}
+type ArticleHandler struct {
+	articleService articleServicer
+	userRepo       userGetter
+}
+
+func NewArticleHandler(articleService *service.ArticleService, userRepo *repository.UserRepo) *ArticleHandler {
+	return &ArticleHandler{articleService: articleService, userRepo: userRepo}
 }
 
 // maxMarkdownContentBytes is the maximum allowed size for client-provided markdown content (500 KB).
@@ -109,6 +114,13 @@ func (h *ArticleHandler) HandleListArticles(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
+	// Fetch user for sync_epoch
+	user, err := h.userRepo.GetByID(r.Context(), userID)
+	if err != nil || user == nil {
+		writeError(w, http.StatusInternalServerError, "failed to load user")
+		return
+	}
+
 	result, err := h.articleService.ListByUser(r.Context(), params)
 	if err != nil {
 		handleServiceError(w, r, err)
@@ -123,6 +135,7 @@ func (h *ArticleHandler) HandleListArticles(w http.ResponseWriter, r *http.Reque
 			Total:   result.Total,
 		},
 		ServerTime: time.Now().UTC().Format(time.RFC3339),
+		SyncEpoch:  user.SyncEpoch,
 	})
 }
 
