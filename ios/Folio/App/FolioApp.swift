@@ -25,7 +25,10 @@ struct FolioApp: App {
             } else {
                 config = ModelConfiguration("Folio", schema: DataManager.schema)
             }
-            container = try ModelContainer(for: DataManager.schema, configurations: [config])
+            let c = try ModelContainer(for: DataManager.schema, configurations: [config])
+            let storeURL = c.configurations.first?.url.path ?? "unknown"
+            FolioLogger.data.info("app-debug: storeURL=\(storeURL)")
+            container = c
             DataManager.shared.preloadCategories(in: container.mainContext)
             let ctx = container.mainContext
             _offlineQueueManager = State(initialValue: OfflineQueueManager(context: ctx))

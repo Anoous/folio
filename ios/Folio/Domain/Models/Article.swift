@@ -35,7 +35,7 @@ enum SourceType: String, Codable {
 
     static func detect(from urlString: String) -> SourceType {
         guard let url = URL(string: urlString),
-              let host = url.host?.lowercased() else {
+              let host = url.host()?.lowercased() else {
             return .web
         }
 
@@ -155,7 +155,7 @@ final class Article {
             return title
         }
         // Extract host + path from URL for a cleaner display
-        if let url = URL(string: url), let host = url.host {
+        if let url = URL(string: url), let host = url.host() {
             let path = url.path
             if path.isEmpty || path == "/" {
                 return host

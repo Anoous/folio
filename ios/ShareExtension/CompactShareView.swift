@@ -1,85 +1,39 @@
 import SwiftUI
 
 enum ShareState {
-    case saving
-    case saved
-    case duplicate
-    case offline
+    case saved(domain: String)
+    case duplicate(domain: String)
     case quotaExceeded
-    case quotaWarning(remaining: Int)
-    case extracting
-    case extracted
+    case error
 }
 
 struct CompactShareView: View {
-    @Environment(\.openURL) private var openURL
     let state: ShareState
-    let onDismiss: () -> Void
 
     var body: some View {
-        VStack(spacing: Spacing.md) {
+        VStack(spacing: Spacing.sm) {
             switch state {
-            case .saving:
-                ProgressView()
-                Text(String(localized: "share.saving", defaultValue: "Adding..."))
-                    .font(Typography.listTitle)
-
-            case .saved:
+            case .saved(let domain):
                 statusIcon("checkmark.circle.fill", color: Color.folio.success)
-                Text(String(localized: "share.saved", defaultValue: "Added to Folio"))
-                    .font(Typography.listTitle)
-                Text(String(localized: "share.savedSubtitle", defaultValue: "AI will organize it in the background"))
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textSecondary)
-                openFolioButton
+                domainLabel(domain)
 
-            case .duplicate:
+            case .duplicate(let domain):
                 statusIcon("pin.fill", color: Color.folio.warning)
                 Text(String(localized: "share.duplicate", defaultValue: "Already saved"))
-                    .font(Typography.listTitle)
-
-            case .offline:
-                statusIcon("wifi.slash", color: Color.folio.textSecondary)
-                Text(String(localized: "share.offline", defaultValue: "Added to Folio"))
-                    .font(Typography.listTitle)
-                Text(String(localized: "share.offlineSubtitle", defaultValue: "Content will be fetched when online"))
                     .font(Typography.caption)
                     .foregroundStyle(Color.folio.textSecondary)
+                domainLabel(domain)
 
             case .quotaExceeded:
-                statusIcon("exclamationmark.triangle.fill", color: Color.folio.error)
+                statusIcon("exclamationmark.triangle.fill", color: Color.folio.warning)
                 Text(String(localized: "share.quotaExceeded", defaultValue: "Monthly limit reached"))
                     .font(Typography.listTitle)
-                Text(String(localized: "share.quotaExceededSubtitle", defaultValue: "Upgrade to Pro for unlimited saves"))
-                    .font(Typography.caption)
                     .foregroundStyle(Color.folio.textSecondary)
 
-            case .quotaWarning(let remaining):
-                statusIcon("checkmark.circle.fill", color: Color.folio.success)
-                Text(String(localized: "share.saved", defaultValue: "Added to Folio"))
+            case .error:
+                statusIcon("xmark.circle.fill", color: Color.folio.error)
+                Text(String(localized: "share.error", defaultValue: "Save failed"))
                     .font(Typography.listTitle)
-                HStack(spacing: Spacing.xxs) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(Color.folio.warning)
-                    Text("\(remaining) " + String(localized: "share.quotaWarning", defaultValue: "saves remaining this month"))
-                        .font(Typography.caption)
-                        .foregroundStyle(Color.folio.warning)
-                }
-
-            case .extracting:
-                ProgressView()
-                Text(String(localized: "share.extracting", defaultValue: "Extracting article..."))
-                    .font(Typography.listTitle)
-                Text(String(localized: "share.extractingSubtitle", defaultValue: "Getting content ready for reading"))
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textSecondary)
-
-            case .extracted:
-                statusIcon("doc.richtext", color: Color.folio.success)
-                Text(String(localized: "share.extracted", defaultValue: "Article ready"))
-                    .font(Typography.listTitle)
-                openFolioButton
             }
         }
         .padding(Spacing.xl)
@@ -92,16 +46,9 @@ struct CompactShareView: View {
             .foregroundStyle(color)
     }
 
-    private var openFolioButton: some View {
-        Button {
-            if let url = URL(string: "folio://library") {
-                openURL(url)
-            }
-            onDismiss()
-        } label: {
-            Text(String(localized: "share.openApp", defaultValue: "Open Folio"))
-                .font(Typography.caption)
-                .foregroundStyle(Color.folio.accent)
-        }
+    private func domainLabel(_ domain: String) -> some View {
+        Text(domain)
+            .font(Typography.caption)
+            .foregroundStyle(Color.folio.textTertiary)
     }
 }

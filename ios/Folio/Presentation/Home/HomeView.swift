@@ -3,6 +3,7 @@ import SwiftData
 
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
     @Environment(OfflineQueueManager.self) private var offlineQueueManager: OfflineQueueManager?
     @Environment(SyncService.self) private var syncService: SyncService?
@@ -196,6 +197,19 @@ struct HomeView: View {
         }
         .onChange(of: authViewModel?.isAuthenticated) { _, newValue in
             viewModel?.isAuthenticated = newValue ?? false
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Share Extension 在独立进程中写入 SQLite，主 App 的 ModelContext
+            // 不会自动感知跨进程变更。通过 UserDefaults 标志位检测后重新 fetch。
+            if newPhase == .active {
+                let flag = UserDefaults.appGroup.bool(forKey: AppConstants.shareExtensionDidSaveKey)
+                FolioLogger.data.info("home-debug: scenePhase=active, shareFlag=\(flag), @Query.count=\(articles.count)")
+                if flag {
+                    UserDefaults.appGroup.set(false, forKey: AppConstants.shareExtensionDidSaveKey)
+                    viewModel?.fetchArticles()
+                    FolioLogger.data.info("home-debug: fetchArticles called, vm.articles.count=\(viewModel?.articles.count ?? -1)")
+                }
+            }
         }
         .onChange(of: articles) { _, _ in
             searchViewModel?.refreshSyncedCount(context: modelContext)

@@ -7,9 +7,17 @@ import os
 class ShareViewController: UIViewController {
     private var hostingController: UIHostingController<CompactShareView>?
 
+    private lazy var modelContainer: ModelContainer? = {
+        let schema = Schema([Article.self, Tag.self, Category.self])
+        let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier)
+        let config = groupURL != nil
+            ? ModelConfiguration("Folio", schema: schema, groupContainer: .identifier(AppConstants.appGroupIdentifier))
+            : ModelConfiguration("Folio", schema: schema)
+        return try? ModelContainer(for: schema, configurations: [config])
+    }()
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        showState(.saving)
         processInput()
     }
 
@@ -23,25 +31,32 @@ class ShareViewController: UIViewController {
             guard let attachments = item.attachments else { continue }
             for provider in attachments {
                 if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
-                    provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { [weak self] item, _ in
-                        if let url = item as? URL {
-                            Task { @MainActor in
+                    provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { [weak self] item, error in
+                        Task { @MainActor in
+                            if let url = item as? URL {
                                 self?.saveURL(url.absoluteString)
+                            } else {
+                                FolioLogger.data.error("share: loadItem(url) failed — \(error?.localizedDescription ?? "nil item")")
+                                self?.showAndDismiss(.error, delay: 1.2)
                             }
                         }
                     }
                     return
                 } else if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
-                    provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] item, _ in
-                        if let text = item as? String {
-                            Task { @MainActor in
-                                // Try to extract a URL from plain text
+                    provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] item, error in
+                        Task { @MainActor in
+                            if let text = item as? String {
                                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                                 if let url = URL(string: trimmed), let scheme = url.scheme, scheme.hasPrefix("http") {
                                     self?.saveURL(trimmed)
+                                } else if let extracted = Self.extractURL(from: trimmed) {
+                                    self?.saveURL(extracted)
                                 } else {
                                     self?.dismiss()
                                 }
+                            } else {
+                                FolioLogger.data.error("share: loadItem(text) failed — \(error?.localizedDescription ?? "nil item")")
+                                self?.showAndDismiss(.error, delay: 1.2)
                             }
                         }
                     }
@@ -55,113 +70,78 @@ class ShareViewController: UIViewController {
 
     @MainActor
     private func saveURL(_ urlString: String) {
-        do {
-            let schema = Schema([Article.self, Tag.self, Category.self])
-            let hasAppGroup = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) != nil
-            let config = hasAppGroup
-                ? ModelConfiguration("Folio", schema: schema, groupContainer: .identifier(AppConstants.appGroupIdentifier))
-                : ModelConfiguration("Folio", schema: schema)
-            let container = try ModelContainer(for: schema, configurations: [config])
-            let manager = SharedDataManager(context: container.mainContext)
+        let domain = URL(string: urlString).flatMap { $0.host()?.replacingOccurrences(of: "www.", with: "") } ?? urlString
 
-            // Check quota before saving
-            let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
-            guard SharedDataManager.canSave(isPro: isPro) else {
-                FolioLogger.data.info("share: quota exceeded")
-                showState(.quotaExceeded)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
-                    self?.dismiss()
-                }
-                return
-            }
-
-            let article = try manager.saveArticle(url: urlString)
-            SharedDataManager.incrementQuota()
-            FolioLogger.data.info("share: article saved — \(urlString)")
-
-            // Check if nearing quota limit for warning
-            let currentCount = SharedDataManager.currentMonthCount()
-            let storedQuota = UserDefaults.appGroup.integer(forKey: SharedDataManager.monthlyQuotaKey)
-            let quota = storedQuota > 0 ? storedQuota : SharedDataManager.freeMonthlyQuota
-            if !isPro && currentCount >= Int(Double(quota) * 0.9) {
-                showState(.quotaWarning(remaining: quota - currentCount))
-            } else {
-                showState(.saved)
-            }
-
-            // Start client-side extraction if supported
-            if article.sourceType.supportsClientExtraction {
-                showState(.extracting)
-                let articleURL = article.url
-                Task {
-                    do {
-                        guard let url = URL(string: articleURL) else { return }
-                        let result = try await ContentExtractor().extract(url: url)
-                        try manager.updateWithExtraction(result, for: article)
-                        FolioLogger.data.info("share: extraction succeeded — \(articleURL)")
-                        self.showState(.extracted)
-                    } catch {
-                        FolioLogger.data.error("share: extraction failed — \(error)")
-                        self.showState(.saved)
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-                        self?.dismiss()
-                    }
-                }
-                // Hard limit: dismiss after 10s regardless
-                DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
-                    self?.dismiss()
-                }
-                return
-            }
-        } catch SharedDataError.duplicateURL {
-            FolioLogger.data.info("share: duplicate URL — \(urlString)")
-            showState(.duplicate)
-        } catch {
-            FolioLogger.data.error("share: save failed — \(error)")
-            showState(.offline)
+        let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
+        guard SharedDataManager.canSave(isPro: isPro) else {
+            FolioLogger.data.info("share: quota exceeded — \(urlString)")
+            showAndDismiss(.quotaExceeded, delay: 1.5)
+            return
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.dismiss()
+        guard let container = modelContainer else {
+            FolioLogger.data.error("share: ModelContainer unavailable")
+            showAndDismiss(.error, delay: 1.2)
+            return
+        }
+
+        do {
+            let manager = SharedDataManager(context: container.mainContext)
+
+            _ = try manager.saveArticle(url: urlString)
+            SharedDataManager.incrementQuota()
+            UserDefaults.appGroup.set(true, forKey: AppConstants.shareExtensionDidSaveKey)
+            FolioLogger.data.info("share: saved — \(urlString)")
+
+            showAndDismiss(.saved(domain: domain))
+        } catch SharedDataError.duplicateURL {
+            FolioLogger.data.info("share: duplicate — \(urlString)")
+            showAndDismiss(.duplicate(domain: domain))
+        } catch {
+            FolioLogger.data.error("share: failed — \(error)")
+            showAndDismiss(.error, delay: 1.2)
         }
     }
 
-    private func showState(_ state: ShareState) {
+    private func showAndDismiss(_ state: ShareState, delay: TimeInterval = 1.0) {
         switch state {
-        case .saved, .quotaWarning, .extracted:
+        case .saved:
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         case .duplicate:
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
         case .quotaExceeded:
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        case .error:
             UINotificationFeedbackGenerator().notificationOccurred(.error)
-        case .offline:
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        case .saving, .extracting:
-            break
         }
 
-        if let hostingController {
-            hostingController.rootView = CompactShareView(state: state, onDismiss: { [weak self] in
-                self?.dismiss()
-            })
-        } else {
-            let shareView = CompactShareView(state: state, onDismiss: { [weak self] in
-                self?.dismiss()
-            })
-            let hc = UIHostingController(rootView: shareView)
-            addChild(hc)
-            view.addSubview(hc.view)
-            hc.view.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                hc.view.topAnchor.constraint(equalTo: view.topAnchor),
-                hc.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-                hc.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                hc.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            ])
-            hc.didMove(toParent: self)
-            hostingController = hc
+        let shareView = CompactShareView(state: state)
+        let hc = UIHostingController(rootView: shareView)
+        addChild(hc)
+        view.addSubview(hc.view)
+        hc.view.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            hc.view.topAnchor.constraint(equalTo: view.topAnchor),
+            hc.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            hc.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hc.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        hc.didMove(toParent: self)
+        hostingController = hc
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.dismiss()
         }
+    }
+
+    private static func extractURL(from text: String) -> String? {
+        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        let range = NSRange(text.startIndex..., in: text)
+        if let match = detector?.firstMatch(in: text, options: [], range: range),
+           let url = match.url, url.scheme?.hasPrefix("http") == true {
+            return url.absoluteString
+        }
+        return nil
     }
 
     private func dismiss() {

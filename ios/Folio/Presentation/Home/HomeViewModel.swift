@@ -222,9 +222,11 @@ final class HomeViewModel {
         descriptor.fetchOffset = currentPage * pageSize
 
         guard var fetched = try? context.fetch(descriptor) else {
+            FolioLogger.data.error("vm-debug: loadPage fetch failed")
             isLoading = false
             return
         }
+        FolioLogger.data.info("vm-debug: loadPage reset=\(reset), fetched=\(fetched.count), offset=\(self.currentPage * self.pageSize)")
 
         // Tag filtering must remain post-fetch because SwiftData #Predicate
         // does not support relationship collection queries.

@@ -52,24 +52,52 @@ final class ReaderViewModel {
 
     // MARK: - Fetch Content from Server
 
-    /// If the article has a serverID but no local content, fetch the full detail.
+    /// If the article has no local content, try server first, then fall back to client extraction.
     func fetchContentIfNeeded() async {
-        guard article.markdownContent == nil,
-              isAuthenticated,
-              let serverID = article.serverID else { return }
+        guard article.markdownContent == nil else { return }
 
         isLoadingContent = true
         contentLoadError = nil
 
-        do {
-            let dto = try await apiClient.getArticle(id: serverID)
-            article.updateFromDTO(dto)
-            try? context.save()
-            calculateWordCount()
-            FolioLogger.network.info("reader: content fetched for \(serverID)")
-        } catch {
-            FolioLogger.network.error("reader: fetch content failed — \(serverID) — \(error)")
-            contentLoadError = error.localizedDescription
+        // Try server fetch first
+        if isAuthenticated, let serverID = article.serverID {
+            do {
+                let dto = try await apiClient.getArticle(id: serverID)
+                article.updateFromDTO(dto)
+                try? context.save()
+                calculateWordCount()
+                FolioLogger.network.info("reader: content fetched from server for \(serverID)")
+                isLoadingContent = false
+                return
+            } catch {
+                FolioLogger.network.error("reader: server fetch failed — \(serverID) — \(error)")
+            }
+        }
+
+        // Fall back to client-side extraction
+        if let url = URL(string: article.url) {
+            do {
+                let result = try await ContentExtractor().extract(url: url)
+                article.markdownContent = result.markdownContent
+                article.wordCount = result.wordCount
+                if let t = result.title, article.title == nil { article.title = t }
+                if let a = result.author { article.author = a }
+                if let s = result.siteName { article.siteName = s }
+                if let e = result.excerpt, article.summary == nil { article.summary = e }
+                article.extractionSource = .client
+                article.clientExtractedAt = Date()
+                article.status = .clientReady
+                try? context.save()
+                calculateWordCount()
+                FolioLogger.data.info("reader: client extraction succeeded for \(url.absoluteString)")
+                isLoadingContent = false
+                return
+            } catch {
+                FolioLogger.data.error("reader: client extraction failed — \(error)")
+                contentLoadError = error.localizedDescription
+            }
+        } else {
+            contentLoadError = String(localized: "reader.invalidURL", defaultValue: "Invalid URL")
         }
 
         isLoadingContent = false

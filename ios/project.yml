@@ -32,6 +32,11 @@ targets:
   Folio:
     type: application
     platform: iOS
+    entitlements:
+      path: Folio/Folio.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.7WSH9CR7KS.folio.app
     sources:
       - path: Folio
         excludes:
@@ -60,6 +65,11 @@ targets:
   ShareExtension:
     type: app-extension
     platform: iOS
+    entitlements:
+      path: ShareExtension/ShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.7WSH9CR7KS.folio.app
     sources:
       - path: ShareExtension
         excludes:
