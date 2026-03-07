@@ -6,10 +6,27 @@ struct ArticleMerger {
     let context: ModelContext
 
     /// Resolve or create a local Article from a DTO, then apply category + tag resolution.
-    /// Returns the article and whether it was newly created.
+    /// Returns the article, or nil if the article was deleted (locally or on server).
     @discardableResult
-    func merge(dto: ArticleDTO) throws -> Article {
+    func merge(dto: ArticleDTO) throws -> Article? {
         let articleRepo = ArticleRepository(context: context)
+
+        // Server says this article is deleted → delete locally + record
+        if dto.deletedAt != nil {
+            if let existing = try articleRepo.fetchByServerID(dto.id) {
+                context.delete(existing)
+            } else if let byURL = try articleRepo.fetchByURL(dto.url) {
+                context.delete(byURL)
+            }
+            recordDeletion(serverID: dto.id)
+            return nil
+        }
+
+        // Anti-resurrection: skip if we've previously deleted this article locally
+        if isDeletedLocally(serverID: dto.id) {
+            return nil
+        }
+
         let article: Article
 
         if let existing = try articleRepo.fetchByServerID(dto.id) {
@@ -26,6 +43,21 @@ struct ArticleMerger {
 
         try resolveRelationships(for: article, from: dto)
         return article
+    }
+
+    /// Check if the serverID exists in the DeletionRecord table.
+    private func isDeletedLocally(serverID: String) -> Bool {
+        let descriptor = FetchDescriptor<DeletionRecord>(
+            predicate: #Predicate<DeletionRecord> { $0.serverID == serverID }
+        )
+        return ((try? context.fetchCount(descriptor)) ?? 0) > 0
+    }
+
+    /// Record a deletion so future syncs don't resurrect this article.
+    private func recordDeletion(serverID: String) {
+        if !isDeletedLocally(serverID: serverID) {
+            context.insert(DeletionRecord(serverID: serverID))
+        }
     }
 
     /// Apply category + tag resolution to an existing article from a DTO.

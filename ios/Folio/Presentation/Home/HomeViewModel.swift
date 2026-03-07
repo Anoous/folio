@@ -79,7 +79,7 @@ final class HomeViewModel {
         var needsDetail: [String] = []
 
         for dto in dtos {
-            guard let article = try? merger.merge(dto: dto) else { continue }
+            guard let article = (try? merger.merge(dto: dto)) ?? nil else { continue }
 
             // Article is ready on server but local content is missing
             if dto.status == ArticleStatus.ready.rawValue && article.markdownContent == nil {
@@ -135,15 +135,23 @@ final class HomeViewModel {
     func deleteArticle(_ article: Article) {
         let serverID = article.serverID
 
+        // Record deletion intent for server sync (before deleting the article)
+        if let serverID {
+            context.insert(PendingDeletion(serverID: serverID))
+            // Anti-resurrection: remember this serverID was deleted
+            let existing = try? context.fetch(FetchDescriptor<DeletionRecord>(
+                predicate: #Predicate<DeletionRecord> { $0.serverID == serverID }
+            ))
+            if existing?.isEmpty ?? true {
+                context.insert(DeletionRecord(serverID: serverID))
+            }
+        }
+
         context.delete(article)
         try? context.save()
         fetchArticles()
 
         showToastMessage(String(localized: "home.article.deleted", defaultValue: "Article deleted"), icon: "trash")
-
-        if isAuthenticated, let serverID {
-            Task { try? await apiClient.deleteArticle(id: serverID) }
-        }
     }
 
     // MARK: - Retry Failed Article

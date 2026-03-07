@@ -85,6 +85,7 @@ struct ArticleDTO: Decodable {
     let publishedAt: Date?
     let createdAt: Date
     let updatedAt: Date
+    let deletedAt: Date?
     let category: CategoryDTO?
     let tags: [TagDTO]?
 }
@@ -152,6 +153,7 @@ struct PaginationDTO: Decodable {
 struct ListResponse<T: Decodable>: Decodable {
     let data: [T]
     let pagination: PaginationDTO
+    let serverTime: String?
 }
 
 // MARK: - APIClient

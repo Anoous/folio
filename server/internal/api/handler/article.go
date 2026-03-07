@@ -122,6 +122,7 @@ func (h *ArticleHandler) HandleListArticles(w http.ResponseWriter, r *http.Reque
 			PerPage: perPage,
 			Total:   result.Total,
 		},
+		ServerTime: time.Now().UTC().Format(time.RFC3339),
 	})
 }
 

@@ -18,8 +18,10 @@ final class OfflineQueueManager {
     private let monitorQueue = DispatchQueue(label: "com.folio.network-monitor")
 
     /// Callback invoked when network becomes available and there are pending articles.
-    /// In M7, this will call the backend API.
     var onProcessPending: (([Article]) async -> [UUID: Bool])?
+
+    /// Callback invoked when network becomes available to sync pending deletions and updates.
+    var onSyncDeletionsAndUpdates: (() async -> Void)?
 
     init(context: ModelContext) {
         self.context = context
@@ -41,6 +43,7 @@ final class OfflineQueueManager {
                     FolioLogger.network.info("network status changed: \(self.isNetworkAvailable ? "available" : "unavailable")")
                 }
                 if !wasAvailable && self.isNetworkAvailable {
+                    await self.onSyncDeletionsAndUpdates?()
                     await self.processPendingArticles()
                 }
             }
