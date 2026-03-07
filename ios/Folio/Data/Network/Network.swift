@@ -40,6 +40,7 @@ struct UserDTO: Decodable {
     let preferredLanguage: String
     let createdAt: Date
     let updatedAt: Date
+    let syncEpoch: Int?
 }
 
 // MARK: Articles
@@ -154,6 +155,7 @@ struct ListResponse<T: Decodable>: Decodable {
     let data: [T]
     let pagination: PaginationDTO
     let serverTime: String?
+    let syncEpoch: Int?
 }
 
 // MARK: - APIClient

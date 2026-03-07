@@ -11,6 +11,12 @@ final class SyncService {
     private static let pollMaxAttempts = 10
     private static let pollIntervalNanoseconds: UInt64 = 5_000_000_000
     private static let lastSyncedAtKey = "com.folio.lastSyncedAt"
+    private static let lastEpochKey = "com.folio.lastSyncEpoch"
+
+    private var lastEpoch: Int {
+        get { UserDefaults.standard.integer(forKey: Self.lastEpochKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.lastEpochKey) }
+    }
 
     private var lastSyncedAt: Date? {
         get { UserDefaults.standard.object(forKey: Self.lastSyncedAtKey) as? Date }
@@ -224,9 +230,58 @@ final class SyncService {
                 currentMonthCount: user.currentMonthCount,
                 isPro: isPro
             )
+            // Check epoch from auth response
+            if let epoch = user.syncEpoch {
+                _ = checkEpoch(epoch)
+            }
         } catch {
             FolioLogger.sync.error("quota sync failed: \(error)")
         }
+    }
+
+    // MARK: - Epoch Check
+
+    /// Purge all locally-synced articles (preserving pending/clientReady that haven't been uploaded).
+    private func purgeLocalSyncedArticles() {
+        let syncedRaw = SyncState.synced.rawValue
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { $0.syncStateRaw == syncedRaw }
+        )
+        guard let articles = try? context.fetch(descriptor) else { return }
+        for article in articles {
+            context.delete(article)
+        }
+
+        // Also clear deletion records since they reference a previous epoch
+        let deletionDescriptor = FetchDescriptor<DeletionRecord>()
+        if let records = try? context.fetch(deletionDescriptor) {
+            for record in records {
+                context.delete(record)
+            }
+        }
+
+        try? context.save()
+        FolioLogger.sync.info("purged \(articles.count) synced article(s) due to epoch change")
+    }
+
+    /// Check the server epoch from a list response. Returns true if epoch is OK (no reset needed).
+    private func checkEpoch(_ serverEpoch: Int?) -> Bool {
+        guard let serverEpoch, serverEpoch > 0 else { return true }
+        let local = lastEpoch
+        if local == 0 {
+            // First sync ever — just record the epoch
+            lastEpoch = serverEpoch
+            return true
+        }
+        if local == serverEpoch {
+            return true
+        }
+        // Epoch mismatch — server data was reset
+        FolioLogger.sync.info("epoch mismatch: local=\(local) server=\(serverEpoch), purging")
+        purgeLocalSyncedArticles()
+        lastSyncedAt = nil
+        lastEpoch = serverEpoch
+        return false
     }
 
     // MARK: - Article Sync
@@ -251,6 +306,10 @@ final class SyncService {
                 let response = try await apiClient.listArticles(page: page, perPage: perPage)
                 if let serverTime = response.serverTime {
                     latestServerTime = serverTime
+                }
+                // Epoch check on first page
+                if page == 1 {
+                    _ = checkEpoch(response.syncEpoch)
                 }
                 for dto in response.data {
                     _ = try? merger.merge(dto: dto)
@@ -288,6 +347,12 @@ final class SyncService {
                 )
                 if let serverTime = response.serverTime {
                     latestServerTime = serverTime
+                }
+                // Epoch check on first page
+                if page == 1 && !checkEpoch(response.syncEpoch) {
+                    // Epoch changed — checkEpoch already purged and reset lastSyncedAt
+                    await fullSyncArticles()
+                    return
                 }
                 for dto in response.data {
                     _ = try? merger.merge(dto: dto)
