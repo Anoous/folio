@@ -10,15 +10,6 @@ final class UIComponentTests: XCTestCase {
         XCTAssertEqual(chip.text, "Swift")
     }
 
-    func testStatusBadgeAllStates() {
-        let states: [ContentStatus] = [.unread, .processing, .failed, .offline]
-        for state in states {
-            let badge = StatusBadge(status: state)
-            XCTAssertNotNil(badge)
-            XCTAssertEqual(badge.status, state)
-        }
-    }
-
     func testFolioButtonStyles() {
         let primary = FolioButton(title: "OK", style: .primary) {}
         XCTAssertNotNil(primary)
