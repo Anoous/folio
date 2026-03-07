@@ -1,152 +1,192 @@
 import SwiftUI
+import NukeUI
 
 struct ArticleCardView: View {
     let article: Article
     var onRetry: (() -> Void)?
 
+    private var isUnread: Bool {
+        article.readProgress == 0 && article.status == .ready
+    }
+
+    private var isFailed: Bool {
+        article.status == .failed
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: Spacing.xs) {
-                statusBadge
+        HStack(alignment: .top, spacing: Spacing.xs) {
+            // Unread dot
+            if isUnread {
+                Circle()
+                    .fill(Color.folio.unread)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, 6) // align with first line of title
+                    .accessibilityLabel(Text(String(localized: "status.unread", defaultValue: "Unread")))
+            }
 
-                VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    Text(article.displayTitle)
-                        .font(Typography.listTitle)
-                        .foregroundStyle(Color.folio.textPrimary)
+            VStack(alignment: .leading, spacing: 0) {
+                // Title
+                Text(article.displayTitle)
+                    .font(Typography.listTitle)
+                    .foregroundStyle(isFailed ? Color.folio.textSecondary : Color.folio.textPrimary)
+                    .lineLimit(2)
+
+                // Summary
+                if let summary = article.displaySummary {
+                    Text(summary)
+                        .font(Typography.body)
+                        .foregroundStyle(Color.folio.textSecondary)
                         .lineLimit(2)
-
-                    if let summary = article.displaySummary {
-                        Text(summary)
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.folio.textSecondary)
-                            .lineLimit(1)
-                    }
-
-                    HStack(spacing: Spacing.xxs) {
-                        sourceIcon
-                        if let siteName = article.siteName {
-                            Text(siteName)
-                                .font(Typography.caption)
-                                .foregroundStyle(Color.folio.textTertiary)
-                        }
-                        Text("\u{00B7}")
-                            .foregroundStyle(Color.folio.textTertiary)
-                        Text(article.createdAt.relativeFormatted())
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.folio.textTertiary)
-                    }
+                        .padding(.top, Spacing.xxs)
                 }
 
-                Spacer(minLength: 0)
+                // Source line
+                sourceLine
+                    .padding(.top, Spacing.xs)
             }
 
-            // Status bar for non-ready states
-            switch article.status {
-            case .processing:
-                statusInfoBar(
-                    icon: "arrow.trianglehead.2.counterclockwise",
-                    text: String(localized: "article.status.processing", defaultValue: "AI is analyzing..."),
-                    color: Color.folio.warning
-                )
-            case .failed:
-                HStack(spacing: Spacing.xs) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(Color.folio.error)
-                    Text(article.fetchError ?? String(localized: "article.status.failed", defaultValue: "Processing failed"))
-                        .font(Typography.caption)
-                        .foregroundStyle(Color.folio.error)
-                        .lineLimit(1)
-                    Spacer()
-                    if let onRetry {
-                        Button {
-                            onRetry()
-                        } label: {
-                            Text(String(localized: "article.retry", defaultValue: "Retry"))
-                                .font(Typography.caption)
-                                .foregroundStyle(Color.folio.accent)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.top, Spacing.xxs)
-            case .clientReady:
-                statusInfoBar(
-                    icon: "doc.richtext",
-                    text: String(localized: "article.status.clientReady", defaultValue: "Content ready, AI analyzing..."),
-                    color: Color.folio.success
-                )
-            case .pending where article.syncState == .pendingUpload:
-                statusInfoBar(
-                    icon: "arrow.up.icloud",
-                    text: String(localized: "article.status.pendingUpload", defaultValue: "Waiting to upload..."),
-                    color: Color.folio.textTertiary
-                )
-            default:
-                EmptyView()
-            }
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, Spacing.xs)
+        .padding(.vertical, Spacing.sm)
     }
 
-    private func statusInfoBar(icon: String, text: String, color: Color) -> some View {
-        HStack(spacing: Spacing.xs) {
-            Image(systemName: icon)
-                .font(.caption2)
-                .foregroundStyle(color)
-            Text(text)
+    // MARK: - Source Line
+
+    private var sourceLine: some View {
+        HStack(spacing: Spacing.xxs) {
+            // Favicon
+            faviconView
+
+            // Source name
+            if let siteName = article.siteName, !siteName.isEmpty {
+                Text(siteName)
+                    .font(Typography.tag)
+                    .foregroundStyle(Color.folio.textTertiary)
+
+                Text("\u{00B7}")
+                    .foregroundStyle(Color.folio.textTertiary)
+            }
+
+            // Category
+            if let category = article.category {
+                Text(category.localizedName)
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.folio.textTertiary)
+
+                Text("\u{00B7}")
+                    .foregroundStyle(Color.folio.textTertiary)
+            }
+
+            // Time
+            Text(article.createdAt.relativeFormatted())
                 .font(Typography.caption)
-                .foregroundStyle(color)
-                .lineLimit(1)
-            Spacer()
+                .foregroundStyle(Color.folio.textTertiary)
+
+            Spacer(minLength: 0)
+
+            // Status icon (trailing)
+            statusIcon
+
+            // Favorite heart (trailing)
+            if article.isFavorite {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.pink)
+                    .accessibilityLabel(Text(String(localized: "status.favorited", defaultValue: "Favorited")))
+            }
         }
-        .padding(.top, Spacing.xxs)
     }
+
+    // MARK: - Favicon
 
     @ViewBuilder
-    private var statusBadge: some View {
-        switch article.status {
-        case .pending:
-            if article.syncState == .pendingUpload {
-                StatusBadge(status: .pendingSync)
-            } else if article.readProgress == 0 {
-                StatusBadge(status: .unread)
+    private var faviconView: some View {
+        if let faviconURL = article.faviconURL, let url = URL(string: faviconURL) {
+            LazyImage(url: url) { state in
+                if let image = state.image {
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    // Loading or failure: show SF Symbol fallback
+                    sourceTypeIcon
+                }
             }
-        case .processing:
-            StatusBadge(status: .processing)
-        case .failed:
-            StatusBadge(status: .failed)
-        case .ready:
-            if article.readProgress == 0 {
-                StatusBadge(status: .unread)
-            }
-        case .clientReady:
-            StatusBadge(status: .clientReady)
+            .frame(width: 20, height: 20)
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.small))
+        } else {
+            sourceTypeIcon
         }
     }
 
-    private var sourceIcon: some View {
+    private var sourceTypeIcon: some View {
         Image(systemName: article.sourceType.iconName)
-            .font(.caption2)
+            .font(.system(size: 13))
             .foregroundStyle(Color.folio.textTertiary)
+            .frame(width: 20, height: 20)
             .accessibilityLabel(article.sourceType.displayName)
+    }
+
+    // MARK: - Status Icon
+
+    @ViewBuilder
+    private var statusIcon: some View {
+        switch article.status {
+        case .processing:
+            Image(systemName: "circle.dashed")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.folio.warning)
+                .symbolEffect(.variableColor.iterative)
+                .accessibilityLabel(Text(String(localized: "status.processing", defaultValue: "Processing")))
+        case .clientReady:
+            Image(systemName: "doc.richtext")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.folio.success)
+                .accessibilityLabel(Text(String(localized: "status.clientReady", defaultValue: "Content ready")))
+        case .failed:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.folio.error)
+                .accessibilityLabel(Text(String(localized: "status.failed", defaultValue: "Failed")))
+        case .pending where article.syncState == .pendingUpload:
+            Image(systemName: "arrow.up.icloud")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.folio.textTertiary)
+                .accessibilityLabel(Text(String(localized: "status.pendingSync", defaultValue: "Pending sync")))
+        default:
+            EmptyView()
+        }
     }
 }
 
-#Preview {
-    VStack(spacing: 0) {
+#Preview("Standard") {
+    List {
         ArticleCardView(article: {
             let a = Article(url: "https://example.com", title: "SwiftUI Best Practices for 2025", sourceType: .web)
             a.siteName = "Swift Blog"
-            a.summary = "A comprehensive guide to modern SwiftUI patterns and architecture decisions."
+            a.summary = "A comprehensive guide to modern SwiftUI patterns and architecture decisions that will change how you build apps."
             return a
         }())
-        Divider()
         ArticleCardView(article: {
             let a = Article(url: "https://mp.weixin.qq.com/s/abc", title: "Deep Dive into Swift Concurrency", sourceType: .wechat)
             a.siteName = "SwiftGG"
+            a.summary = "Understanding actors, async/await, and structured concurrency in Swift 5.9."
             a.statusRaw = ArticleStatus.processing.rawValue
             return a
         }())
+        ArticleCardView(article: {
+            let a = Article(url: "https://x.com/user/status/123", title: "Claude Code is amazing", sourceType: .twitter)
+            a.siteName = "Yanhua on X"
+            a.statusRaw = ArticleStatus.ready.rawValue
+            a.isFavorite = true
+            return a
+        }())
+        ArticleCardView(article: {
+            let a = Article(url: "https://example.com/fail", title: "Failed Article", sourceType: .web)
+            a.statusRaw = ArticleStatus.failed.rawValue
+            a.fetchError = "Network timeout"
+            return a
+        }())
     }
+    .listStyle(.plain)
 }
