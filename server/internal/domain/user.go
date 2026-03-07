@@ -24,4 +24,5 @@ type User struct {
 	PreferredLanguage    string       `json:"preferred_language"`
 	CreatedAt            time.Time    `json:"created_at"`
 	UpdatedAt            time.Time    `json:"updated_at"`
+	SyncEpoch            int          `json:"sync_epoch"`
 }

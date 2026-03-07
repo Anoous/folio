@@ -24,13 +24,13 @@ func (r *UserRepo) GetByID(ctx context.Context, id string) (*domain.User, error)
 		SELECT id, apple_id, email, nickname, avatar_url,
 		       subscription, subscription_expires_at, monthly_quota,
 		       current_month_count, quota_reset_at, preferred_language,
-		       created_at, updated_at
+		       created_at, updated_at, sync_epoch
 		FROM users WHERE id = $1`, id,
 	).Scan(
 		&u.ID, &u.AppleID, &u.Email, &u.Nickname, &u.AvatarURL,
 		&u.Subscription, &u.SubscriptionExpiresAt, &u.MonthlyQuota,
 		&u.CurrentMonthCount, &u.QuotaResetAt, &u.PreferredLanguage,
-		&u.CreatedAt, &u.UpdatedAt,
+		&u.CreatedAt, &u.UpdatedAt, &u.SyncEpoch,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -47,13 +47,13 @@ func (r *UserRepo) GetByAppleID(ctx context.Context, appleID string) (*domain.Us
 		SELECT id, apple_id, email, nickname, avatar_url,
 		       subscription, subscription_expires_at, monthly_quota,
 		       current_month_count, quota_reset_at, preferred_language,
-		       created_at, updated_at
+		       created_at, updated_at, sync_epoch
 		FROM users WHERE apple_id = $1`, appleID,
 	).Scan(
 		&u.ID, &u.AppleID, &u.Email, &u.Nickname, &u.AvatarURL,
 		&u.Subscription, &u.SubscriptionExpiresAt, &u.MonthlyQuota,
 		&u.CurrentMonthCount, &u.QuotaResetAt, &u.PreferredLanguage,
-		&u.CreatedAt, &u.UpdatedAt,
+		&u.CreatedAt, &u.UpdatedAt, &u.SyncEpoch,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -78,13 +78,13 @@ func (r *UserRepo) Create(ctx context.Context, p CreateUserParams) (*domain.User
 		RETURNING id, apple_id, email, nickname, avatar_url,
 		          subscription, subscription_expires_at, monthly_quota,
 		          current_month_count, quota_reset_at, preferred_language,
-		          created_at, updated_at`,
+		          created_at, updated_at, sync_epoch`,
 		p.AppleID, p.Email, p.Nickname,
 	).Scan(
 		&u.ID, &u.AppleID, &u.Email, &u.Nickname, &u.AvatarURL,
 		&u.Subscription, &u.SubscriptionExpiresAt, &u.MonthlyQuota,
 		&u.CurrentMonthCount, &u.QuotaResetAt, &u.PreferredLanguage,
-		&u.CreatedAt, &u.UpdatedAt,
+		&u.CreatedAt, &u.UpdatedAt, &u.SyncEpoch,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create user: %w", err)
