@@ -156,14 +156,13 @@ if [ -z "$READER_PKG_DIR" ]; then
     err "@vakra-dev/reader 本地包不存在。请确保 $(cd "$ROOT_DIR/../.." && pwd)/reader 目录存在"
 fi
 
-# 确保 reader 包已构建
-if [ ! -d "$READER_PKG_DIR/dist" ]; then
-    warn "reader 包未构建，正在构建..."
-    (cd "$READER_PKG_DIR" && npm install && npm run build)
-fi
+# 每次都重新构建 reader 包，避免改动未生效
+log "构建 @vakra-dev/reader..."
+(cd "$READER_PKG_DIR" && /opt/homebrew/bin/npm install --silent 2>/dev/null && /opt/homebrew/bin/npm run build)
 
 cd "$ROOT_DIR/reader-service"
-npm install --silent 2>/dev/null
+rm -rf node_modules/@vakra-dev
+/opt/homebrew/bin/npm install --silent 2>/dev/null
 npm run dev &
 PIDS+=($!)
 
@@ -201,7 +200,7 @@ for i in $(seq 1 15); do
 done
 
 # ── 4. Go API Server ─────────────────────────────────────────
-step "4/5 启动 Go API Server (:8080)"
+step "4/5 构建并启动 Go API Server (:8080)"
 
 cd "$ROOT_DIR"
 
@@ -214,7 +213,9 @@ export DEV_MODE="true"
 export LOG_LEVEL="debug"
 export PORT="8080"
 
-go run ./cmd/server &
+log "编译 Go server..."
+go build -o "$ROOT_DIR/.bin/folio-server" ./cmd/server
+"$ROOT_DIR/.bin/folio-server" &
 PIDS+=($!)
 
 for i in $(seq 1 30); do

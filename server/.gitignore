@@ -21,3 +21,4 @@ tests/e2e/.venv/
 tests/e2e/reports/
 tests/e2e/__pycache__/
 tests/e2e/helpers/__pycache__/
+.bin/
