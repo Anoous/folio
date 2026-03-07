@@ -17,7 +17,6 @@ struct HomeView: View {
     @State private var showDeleteConfirmation = false
     @State private var showShareSheet = false
     @State private var shareItems: [Any]? = nil
-    @State private var showInsight = true
     @State private var showAIAnswer = false
 
     private let mockTopics: [(name: String, count: Int)] = [
@@ -366,12 +365,6 @@ struct HomeView: View {
         List {
             statusBanners
 
-            DailyDigestCard()
-
-            if showInsight {
-                InsightCard(onDismiss: { showInsight = false })
-            }
-
             if let vm = viewModel {
                 articleSections(vm: vm)
             }
@@ -525,6 +518,17 @@ struct HomeView: View {
 
     @ViewBuilder
     private func articleContextMenu(article: Article, vm: HomeViewModel) -> some View {
+        // Retry (only for failed articles)
+        if article.status == .failed {
+            Button {
+                vm.retryArticle(article)
+            } label: {
+                Label(String(localized: "article.retry", defaultValue: "Retry"), systemImage: "arrow.clockwise")
+            }
+
+            Divider()
+        }
+
         Button {
             vm.toggleFavorite(article)
         } label: {
