@@ -57,7 +57,7 @@ final class DTOMappingTests: XCTestCase {
             status: dto.status, sourceType: dto.sourceType, fetchError: dto.fetchError,
             retryCount: dto.retryCount, isFavorite: dto.isFavorite, isArchived: dto.isArchived,
             readProgress: dto.readProgress, lastReadAt: dto.lastReadAt, publishedAt: dto.publishedAt,
-            createdAt: dto.createdAt, updatedAt: dto.updatedAt,
+            createdAt: dto.createdAt, updatedAt: dto.updatedAt, deletedAt: dto.deletedAt,
             category: dto.category, tags: dto.tags
         )
 
@@ -357,6 +357,7 @@ final class DTOMappingTests: XCTestCase {
             publishedAt: nil,
             createdAt: Date(),
             updatedAt: Date(),
+            deletedAt: nil,
             category: CategoryDTO(
                 id: "cat-1",
                 slug: "tech",
@@ -399,6 +400,7 @@ final class DTOMappingTests: XCTestCase {
             publishedAt: nil,
             createdAt: Date(),
             updatedAt: Date(),
+            deletedAt: nil,
             category: CategoryDTO(
                 id: "cat-1",
                 slug: "tech",

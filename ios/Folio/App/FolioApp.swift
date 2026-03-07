@@ -73,12 +73,16 @@ struct FolioApp: App {
                     manager.onProcessPending = { articles in
                         await sync.submitPendingArticles(articles)
                     }
+                    manager.onSyncDeletionsAndUpdates = {
+                        await sync.syncDeletions()
+                    }
                     Task {
                         await sync.performFullSync()
                         await manager.processPendingArticles()
                     }
                 } else if newValue == .signedOut {
                     offlineQueueManager?.onProcessPending = nil
+                    offlineQueueManager?.onSyncDeletionsAndUpdates = nil
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in

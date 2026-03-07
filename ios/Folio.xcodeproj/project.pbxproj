@@ -36,6 +36,7 @@
 		321AC41EC14FAE3B6A15F031 /* ReadingPreferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC23CD3192062DC98AC6E3A /* ReadingPreferenceTests.swift */; };
 		394C04342086169BE5F88C2F /* TypographyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DAF903DE4A88322BFC3BF05 /* TypographyTests.swift */; };
 		39DA0FA67B570EAE11E96675 /* ReadingFontFamily.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F1CE534E4841B018C1B9B69 /* ReadingFontFamily.swift */; };
+		3B061844B4CF3E835999A36D /* DeletionRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8244B3437FA244ECDCEC9B8 /* DeletionRecord.swift */; };
 		3C3116F28F3B9161A01E4DB8 /* ExtractionResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0635AE053751363901C124 /* ExtractionResult.swift */; };
 		3C682BEA1A77E42AB56C908D /* DTOMappingExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5600F3DD868B1C6B4542E6 /* DTOMappingExtractionTests.swift */; };
 		3C6C21CF9FD05E60442EB8ED /* ArticleExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8860BD5AC39483C0DFBB9B8 /* ArticleExtractionTests.swift */; };
@@ -46,8 +47,10 @@
 		43579BBC415E1F84F30E446E /* HTMLFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 778C5484202A7680D0B819AC /* HTMLFetcher.swift */; };
 		435993C74DA5BD92F9356E23 /* Tag.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB03DB08F0EA3FE4B5EFDF2 /* Tag.swift */; };
 		46387FC7554DACCA09A6F68D /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7848623895B7F57C8EE0147E /* AppConstants.swift */; };
+		46A175D339FA067B2715859B /* DeletionRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8244B3437FA244ECDCEC9B8 /* DeletionRecord.swift */; };
 		507FD0D0AACFBAF5160E8DA0 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17799D4B4BF31ECDFD409532 /* ShareViewController.swift */; };
 		5477C797109972B7DF15E4C3 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BA5436DFCCF18BD94C6B09B4 /* Localizable.xcstrings */; };
+		54FE0F9264A8237856172D77 /* PendingDeletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EE692E348F73CFF5A586D19 /* PendingDeletion.swift */; };
 		572C7C646CE7316D8C6EB0F3 /* QuotaCheckTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D34AADE7B610BF96EAEEC32 /* QuotaCheckTests.swift */; };
 		5D66D20231FB94CF147E9066 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = D1A09DA691F886B661C41C00 /* Markdown */; };
 		5FCAE0579D0B517F927A33BB /* RealURLExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED7C4C2705656150338470D /* RealURLExtractionTests.swift */; };
@@ -138,6 +141,7 @@
 		F711DBC96F752E6A7156934B /* ReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3895BDC8F0D382B020B65FC /* ReaderView.swift */; };
 		F94D8215A1CB7DA4F11A2978 /* DTOMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2075F1EB1B542E31ACDC680 /* DTOMappingTests.swift */; };
 		FEE253F7581AAE209F8E36D7 /* DataManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB12E81162EBFF3804FA474 /* DataManagerTests.swift */; };
+		FFBE3A135CA66A408944D123 /* PendingDeletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EE692E348F73CFF5A586D19 /* PendingDeletion.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -178,6 +182,7 @@
 		093066FDA4B62ED98824E50B /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
 		0C717CA8AAEB7479E6E52A73 /* TagChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagChip.swift; sourceTree = "<group>"; };
 		0E012CBB7734D7150DE83121 /* SharedDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDataManager.swift; sourceTree = "<group>"; };
+		0EE692E348F73CFF5A586D19 /* PendingDeletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingDeletion.swift; sourceTree = "<group>"; };
 		117C69065C4BFC1C68EB1C00 /* CategoryRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryRepositoryTests.swift; sourceTree = "<group>"; };
 		169A0B494F30137A1EB80458 /* Color+Folio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Folio.swift"; sourceTree = "<group>"; };
 		17799D4B4BF31ECDFD409532 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
@@ -260,6 +265,7 @@
 		C1CF36A18455EBEE914D8516 /* SearchResultRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchResultRow.swift; sourceTree = "<group>"; };
 		C4FD381B4DBC7A43941569C6 /* DailyDigestCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyDigestCard.swift; sourceTree = "<group>"; };
 		C5BBCF93626F7CCCD8B69BA5 /* DataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataManager.swift; sourceTree = "<group>"; };
+		C8244B3437FA244ECDCEC9B8 /* DeletionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeletionRecord.swift; sourceTree = "<group>"; };
 		CCCA910CD906C5CD07B76226 /* CodeBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeBlockView.swift; sourceTree = "<group>"; };
 		CF21EED2AB8D7E9F2F02E548 /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
 		D17221CFE5B385D12B44C562 /* ArticleCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleCardView.swift; sourceTree = "<group>"; };
@@ -370,7 +376,6 @@
 				A27E690A15323A5E5687ED17 /* Extensions */,
 				856A164DF53EC304B1C9A700 /* Extraction */,
 				DE901DB5A903C33D9C59AF29 /* Fixtures */,
-				4BEC88AA3FFCDE89FAB41116 /* Home */,
 				A6D82D4E0649C5F748FB2385 /* Models */,
 				7F1D83B16BCFFC96DA9E6F71 /* Network */,
 				383B12C0C6A9E10923BC99B7 /* Reader */,
@@ -398,13 +403,6 @@
 				4FC23CD3192062DC98AC6E3A /* ReadingPreferenceTests.swift */,
 			);
 			path = Reader;
-			sourceTree = "<group>";
-		};
-		4BEC88AA3FFCDE89FAB41116 /* Home */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Home;
 			sourceTree = "<group>";
 		};
 		51C99D6CFAA3E0CEC1DCA00D /* Repository */ = {
@@ -636,13 +634,6 @@
 			path = Utils;
 			sourceTree = "<group>";
 		};
-		CA09AD528A09CD3F7D2C75E7 /* UseCases */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = UseCases;
-			sourceTree = "<group>";
-		};
 		D00CB4EF65C8C1AA0618DCAD /* Sync */ = {
 			isa = PBXGroup;
 			children = (
@@ -706,6 +697,8 @@
 				AF1772655ED28449F93C0F22 /* Article.swift */,
 				32F4C0B8557877AA4BE7B649 /* Article+Actions.swift */,
 				A1F05970EB8BBD7890F0F92A /* Category.swift */,
+				C8244B3437FA244ECDCEC9B8 /* DeletionRecord.swift */,
+				0EE692E348F73CFF5A586D19 /* PendingDeletion.swift */,
 				DAB03DB08F0EA3FE4B5EFDF2 /* Tag.swift */,
 			);
 			path = Models;
@@ -743,7 +736,6 @@
 			isa = PBXGroup;
 			children = (
 				DB681C6B591CC15FB6F98DBE /* Models */,
-				CA09AD528A09CD3F7D2C75E7 /* UseCases */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -977,6 +969,7 @@
 				BCAB2D7FD390F5ADD5B23B81 /* DailyDigestCard.swift in Sources */,
 				E4A35B6BC54591B02708D023 /* DataManager.swift in Sources */,
 				018799BBD8B0E6C059F8AAC1 /* Date+RelativeFormat.swift in Sources */,
+				46A175D339FA067B2715859B /* DeletionRecord.swift in Sources */,
 				88244A394FF61FC79EB30654 /* EmptyStateView.swift in Sources */,
 				3C3116F28F3B9161A01E4DB8 /* ExtractionResult.swift in Sources */,
 				2A57FC66DB63B4308B046B67 /* FTS5SearchManager.swift in Sources */,
@@ -998,6 +991,7 @@
 				B78BB948FAE128379413D974 /* OfflineQueueManager.swift in Sources */,
 				D64452371814291D07013630 /* OnboardingPage.swift in Sources */,
 				BB5886321294CC35D148A494 /* OnboardingView.swift in Sources */,
+				FFBE3A135CA66A408944D123 /* PendingDeletion.swift in Sources */,
 				B6277342ECA7718F9BF64446 /* PermissionView.swift in Sources */,
 				74FCB17F4508741AB1950FCC /* ReadabilityExtractor.swift in Sources */,
 				F711DBC96F752E6A7156934B /* ReaderView.swift in Sources */,
@@ -1036,11 +1030,13 @@
 				2DD1C8F6FC51A65191CF7A50 /* ContentExtractor.swift in Sources */,
 				63AC4562353FCD588C5139C2 /* CornerRadius.swift in Sources */,
 				B21C3B1391C44DA3DAD5C600 /* DataManager.swift in Sources */,
+				3B061844B4CF3E835999A36D /* DeletionRecord.swift in Sources */,
 				25FD4449D9303109BA245ED7 /* ExtractionResult.swift in Sources */,
 				C6FDC12B2471ECF8CEA42F8D /* FolioButton.swift in Sources */,
 				6988B23E1FF8A6B2E967FD94 /* FolioLogger.swift in Sources */,
 				1C0CFF021F3B1FFB08AFCBE2 /* HTMLFetcher.swift in Sources */,
 				1AE876662D56B0AA6F87D6B2 /* HTMLToMarkdownConverter.swift in Sources */,
+				54FE0F9264A8237856172D77 /* PendingDeletion.swift in Sources */,
 				88AAD27FDC11814ECA361DCB /* ReadabilityExtractor.swift in Sources */,
 				B5B5BB7C1E320260DD4A3823 /* ReadingFontFamily.swift in Sources */,
 				02A98492EE40243075256D1A /* ReadingPreferenceKeys.swift in Sources */,

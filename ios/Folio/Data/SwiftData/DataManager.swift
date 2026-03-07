@@ -11,6 +11,8 @@ final class DataManager {
         Article.self,
         Tag.self,
         Category.self,
+        PendingDeletion.self,
+        DeletionRecord.self,
     ]
 
     static let schema = Schema(modelTypes)

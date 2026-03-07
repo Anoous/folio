@@ -18,7 +18,6 @@ extension Article {
         isAuthenticated: Bool,
         showToast: @escaping (String, String?) -> Void
     ) {
-        let previousValue = isFavorite
         isFavorite.toggle()
         updatedAt = Date()
         try? context.save()
@@ -39,7 +38,7 @@ extension Article {
                 )
                 syncState = .synced
             } catch {
-                isFavorite = previousValue
+                // Keep the user's intended value; mark for retry on next sync
                 syncState = .pendingUpdate
                 try? context.save()
                 showToast(
@@ -58,7 +57,6 @@ extension Article {
         isAuthenticated: Bool,
         showToast: @escaping (String, String?) -> Void
     ) {
-        let previousValue = isArchived
         isArchived.toggle()
         updatedAt = Date()
         try? context.save()
@@ -79,7 +77,7 @@ extension Article {
                 )
                 syncState = .synced
             } catch {
-                isArchived = previousValue
+                // Keep the user's intended value; mark for retry on next sync
                 syncState = .pendingUpdate
                 try? context.save()
                 showToast(

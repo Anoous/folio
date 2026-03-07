@@ -194,16 +194,20 @@ final class SyncService {
 
     func performFullSync() async {
         FolioLogger.sync.info("starting full sync")
+        await syncDeletions()
         await syncCategories()
         await syncTags()
         await syncArticles()
         await syncUserQuota()
+        cleanupOldDeletionRecords()
         FolioLogger.sync.info("full sync completed")
     }
 
     // MARK: - Incremental Sync (public entry point)
 
     func incrementalSync() async {
+        await syncDeletions()
+        await syncPendingUpdates()
         await incrementalSyncArticles()
         await fetchProcessingArticles()
     }
@@ -240,12 +244,16 @@ final class SyncService {
         let merger = ArticleMerger(context: context)
         var page = 1
         let perPage = 50
+        var latestServerTime: String?
 
         do {
             while true {
                 let response = try await apiClient.listArticles(page: page, perPage: perPage)
+                if let serverTime = response.serverTime {
+                    latestServerTime = serverTime
+                }
                 for dto in response.data {
-                    try? merger.merge(dto: dto)
+                    _ = try? merger.merge(dto: dto)
                 }
                 try? context.save()
 
@@ -255,7 +263,7 @@ final class SyncService {
                 }
                 page += 1
             }
-            lastSyncedAt = Date()
+            lastSyncedAt = parseServerTime(latestServerTime) ?? Date()
             FolioLogger.sync.info("full article sync completed")
         } catch {
             FolioLogger.sync.error("full article sync failed: \(error)")
@@ -271,14 +279,18 @@ final class SyncService {
         let merger = ArticleMerger(context: context)
         var page = 1
         let perPage = 50
+        var latestServerTime: String?
 
         do {
             while true {
                 let response = try await apiClient.listArticles(
                     page: page, perPage: perPage, updatedSince: since
                 )
+                if let serverTime = response.serverTime {
+                    latestServerTime = serverTime
+                }
                 for dto in response.data {
-                    try? merger.merge(dto: dto)
+                    _ = try? merger.merge(dto: dto)
                 }
                 try? context.save()
 
@@ -288,10 +300,85 @@ final class SyncService {
                 }
                 page += 1
             }
-            lastSyncedAt = Date()
+            lastSyncedAt = parseServerTime(latestServerTime) ?? Date()
         } catch {
             FolioLogger.sync.error("incremental sync failed: \(error)")
         }
+    }
+
+    private func parseServerTime(_ timeString: String?) -> Date? {
+        guard let timeString else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: timeString)
+    }
+
+    // MARK: - Deletion Sync
+
+    /// Send pending local deletions to the server.
+    func syncDeletions() async {
+        let descriptor = FetchDescriptor<PendingDeletion>(
+            sortBy: [SortDescriptor(\.deletedAt)]
+        )
+        guard let pending = try? context.fetch(descriptor), !pending.isEmpty else { return }
+
+        FolioLogger.sync.info("syncing \(pending.count) pending deletion(s)")
+        for deletion in pending {
+            do {
+                try await apiClient.deleteArticle(id: deletion.serverID)
+                context.delete(deletion)
+                FolioLogger.sync.debug("deletion synced: \(deletion.serverID)")
+            } catch let error as APIError where error == .notFound {
+                // Already deleted on server — clear the pending record
+                context.delete(deletion)
+            } catch {
+                FolioLogger.sync.error("deletion sync failed: \(deletion.serverID) — \(error)")
+            }
+        }
+        try? context.save()
+    }
+
+    // MARK: - Pending Update Sync
+
+    /// Retry syncing articles that have local changes not yet sent to server.
+    private func syncPendingUpdates() async {
+        let pendingUpdateRaw = SyncState.pendingUpdate.rawValue
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { $0.syncStateRaw == pendingUpdateRaw }
+        )
+        guard let articles = try? context.fetch(descriptor), !articles.isEmpty else { return }
+
+        FolioLogger.sync.info("syncing \(articles.count) pending update(s)")
+        for article in articles {
+            guard let serverID = article.serverID else { continue }
+            do {
+                try await apiClient.updateArticle(id: serverID, request: UpdateArticleRequest(
+                    isFavorite: article.isFavorite,
+                    isArchived: article.isArchived,
+                    readProgress: article.readProgress
+                ))
+                article.syncState = .synced
+            } catch {
+                FolioLogger.sync.error("update sync failed: \(serverID) — \(error)")
+            }
+        }
+        try? context.save()
+    }
+
+    // MARK: - Deletion Record Cleanup
+
+    /// Remove DeletionRecords older than retention period.
+    private func cleanupOldDeletionRecords() {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -DeletionRecord.retentionDays, to: Date()) ?? Date()
+        let descriptor = FetchDescriptor<DeletionRecord>(
+            predicate: #Predicate<DeletionRecord> { $0.deletedAt < cutoff }
+        )
+        guard let expired = try? context.fetch(descriptor), !expired.isEmpty else { return }
+        for record in expired {
+            context.delete(record)
+        }
+        try? context.save()
+        FolioLogger.sync.debug("cleaned up \(expired.count) old deletion record(s)")
     }
 
     // MARK: - Processing Article Polling

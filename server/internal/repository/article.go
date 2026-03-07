@@ -59,7 +59,7 @@ func (r *ArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, 
 		       markdown_content, word_count, language, category_id, summary, key_points,
 		       ai_confidence, status, source_type, fetch_error, retry_count,
 		       is_favorite, is_archived, read_progress, last_read_at, published_at,
-		       created_at, updated_at
+		       created_at, updated_at, deleted_at
 		FROM articles WHERE id = $1`, id,
 	).Scan(
 		&a.ID, &a.UserID, &a.URL, &a.Title, &a.Author, &a.SiteName,
@@ -67,7 +67,7 @@ func (r *ArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, 
 		&a.Language, &a.CategoryID, &a.Summary, &keyPointsJSON,
 		&a.AIConfidence, &a.Status, &a.SourceType, &a.FetchError, &a.RetryCount,
 		&a.IsFavorite, &a.IsArchived, &a.ReadProgress, &a.LastReadAt, &a.PublishedAt,
-		&a.CreatedAt, &a.UpdatedAt,
+		&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -99,11 +99,18 @@ type ListArticlesResult struct {
 func (r *ArticleRepo) ListByUser(ctx context.Context, p ListArticlesParams) (*ListArticlesResult, error) {
 	offset := (p.Page - 1) * p.PerPage
 
+	// When using updated_since (incremental sync), include soft-deleted articles
+	// so the client can learn about deletions. Otherwise, filter them out.
+	includeDeleted := p.UpdatedSince != nil
+
 	// Count
 	countQuery := `SELECT COUNT(*) FROM articles WHERE user_id = $1`
 	args := []any{p.UserID}
 	argIdx := 2
 
+	if !includeDeleted {
+		countQuery += ` AND deleted_at IS NULL`
+	}
 	if p.Category != nil {
 		countQuery += fmt.Sprintf(` AND category_id = (SELECT id FROM categories WHERE slug = $%d)`, argIdx)
 		args = append(args, *p.Category)
@@ -133,11 +140,14 @@ func (r *ArticleRepo) ListByUser(ctx context.Context, p ListArticlesParams) (*Li
 	// Query
 	query := `SELECT id, user_id, url, title, summary, cover_image_url, site_name,
 	                 source_type, category_id, word_count, is_favorite, is_archived,
-	                 read_progress, status, created_at, updated_at
+	                 read_progress, status, created_at, updated_at, deleted_at
 	          FROM articles WHERE user_id = $1`
 	queryArgs := []any{p.UserID}
 	qArgIdx := 2
 
+	if !includeDeleted {
+		query += ` AND deleted_at IS NULL`
+	}
 	if p.Category != nil {
 		query += fmt.Sprintf(` AND category_id = (SELECT id FROM categories WHERE slug = $%d)`, qArgIdx)
 		queryArgs = append(queryArgs, *p.Category)
@@ -175,7 +185,7 @@ func (r *ArticleRepo) ListByUser(ctx context.Context, p ListArticlesParams) (*Li
 			&a.ID, &a.UserID, &a.URL, &a.Title, &a.Summary, &a.CoverImageURL,
 			&a.SiteName, &a.SourceType, &a.CategoryID, &a.WordCount,
 			&a.IsFavorite, &a.IsArchived, &a.ReadProgress, &a.Status, &a.CreatedAt,
-			&a.UpdatedAt,
+			&a.UpdatedAt, &a.DeletedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan article: %w", err)
 		}
@@ -328,7 +338,7 @@ func (r *ArticleRepo) Update(ctx context.Context, id string, userID string, p Up
 func (r *ArticleRepo) ExistsByUserAndURL(ctx context.Context, userID, url string) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM articles WHERE user_id = $1 AND url = $2)`,
+		`SELECT EXISTS(SELECT 1 FROM articles WHERE user_id = $1 AND url = $2 AND deleted_at IS NULL)`,
 		userID, url).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("check article exists: %w", err)
@@ -337,9 +347,11 @@ func (r *ArticleRepo) ExistsByUserAndURL(ctx context.Context, userID, url string
 }
 
 func (r *ArticleRepo) Delete(ctx context.Context, id string, userID string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM articles WHERE id = $1 AND user_id = $2`, id, userID)
+	_, err := r.pool.Exec(ctx,
+		`UPDATE articles SET deleted_at = NOW() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+		id, userID)
 	if err != nil {
-		return fmt.Errorf("delete article: %w", err)
+		return fmt.Errorf("soft delete article: %w", err)
 	}
 	return nil
 }
@@ -351,7 +363,7 @@ func (r *ArticleRepo) Search(ctx context.Context, userID, query string, page, pe
 
 	var total int
 	err := r.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM articles WHERE user_id = $1 AND (
+		`SELECT COUNT(*) FROM articles WHERE user_id = $1 AND deleted_at IS NULL AND (
 			title ILIKE $2 OR summary ILIKE $2 OR author ILIKE $2 OR site_name ILIKE $2
 		)`,
 		userID, pattern,
@@ -362,7 +374,7 @@ func (r *ArticleRepo) Search(ctx context.Context, userID, query string, page, pe
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, user_id, url, title, summary, site_name, source_type, created_at
-		FROM articles WHERE user_id = $1 AND (
+		FROM articles WHERE user_id = $1 AND deleted_at IS NULL AND (
 			title ILIKE $2 OR summary ILIKE $2 OR author ILIKE $2 OR site_name ILIKE $2
 		)
 		ORDER BY

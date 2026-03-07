@@ -257,6 +257,7 @@ final class DTOMappingExtractionTests: XCTestCase {
             publishedAt: nil,
             createdAt: Date(),
             updatedAt: Date(),
+            deletedAt: nil,
             category: nil,
             tags: nil
         )
