@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -6,7 +6,9 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /folio-server ./cmd/server
 
 FROM alpine:3.19
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata && \
+    adduser -D -u 1000 appuser
 COPY --from=builder /folio-server /folio-server
+USER appuser
 EXPOSE 8080
 CMD ["/folio-server"]

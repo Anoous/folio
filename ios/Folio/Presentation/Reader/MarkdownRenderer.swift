@@ -13,6 +13,9 @@ struct MarkdownRenderer: View {
     let textColor: Color
     let secondaryTextColor: Color
 
+    /// Pre-parsed views — computed once during init instead of on every `body` call.
+    private let parsedViews: [AnyView]
+
     init(
         markdownText: String,
         fontSize: CGFloat = 17,
@@ -27,9 +30,8 @@ struct MarkdownRenderer: View {
         self.fontFamily = fontFamily
         self.textColor = textColor
         self.secondaryTextColor = secondaryTextColor
-    }
 
-    var body: some View {
+        // Parse the markdown document once and cache the resulting views.
         let document = Document(parsing: markdownText)
         var visitor = MarkdownSwiftUIVisitor(
             fontSize: fontSize,
@@ -38,10 +40,12 @@ struct MarkdownRenderer: View {
             textColor: textColor,
             secondaryTextColor: secondaryTextColor
         )
-        let views = visitor.visitDocument(document)
+        self.parsedViews = visitor.visitDocument(document)
+    }
 
+    var body: some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
-            ForEach(Array(views.enumerated()), id: \.offset) { _, view in
+            ForEach(Array(parsedViews.enumerated()), id: \.offset) { _, view in
                 view
             }
         }

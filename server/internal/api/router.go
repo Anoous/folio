@@ -32,6 +32,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.RequestID)
 
+	// Limit request body to 1 MB to prevent memory exhaustion (DoS)
+	const maxBodyBytes int64 = 1 << 20 // 1 MB
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

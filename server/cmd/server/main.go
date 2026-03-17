@@ -103,7 +103,7 @@ func main() {
 
 	// Worker server
 	jinaClient := client.NewJinaClient(cfg.JinaAPIKey)
-	crawlHandler := worker.NewCrawlHandler(readerClient, jinaClient, articleRepo, taskRepo, asynqClient, r2Client != nil, contentCacheRepo, tagRepo)
+	crawlHandler := worker.NewCrawlHandler(readerClient, jinaClient, articleRepo, taskRepo, asynqClient, r2Client != nil, contentCacheRepo, tagRepo, categoryRepo)
 	aiHandler := worker.NewAIHandler(aiClient, articleRepo, taskRepo, categoryRepo, tagRepo, contentCacheRepo)
 
 	var workerServer *worker.WorkerServer

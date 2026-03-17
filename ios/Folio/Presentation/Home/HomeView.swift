@@ -1,5 +1,8 @@
 import SwiftUI
-import SwiftData
+
+private enum HomeDestination: Hashable {
+    case settings
+}
 
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
@@ -7,7 +10,6 @@ struct HomeView: View {
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
     @Environment(OfflineQueueManager.self) private var offlineQueueManager: OfflineQueueManager?
     @Environment(SyncService.self) private var syncService: SyncService?
-    @Query(sort: \Article.createdAt, order: .reverse) private var articles: [Article]
     @State private var viewModel: HomeViewModel?
     @State private var searchViewModel: SearchViewModel?
     @State private var searchText = ""
@@ -33,7 +35,7 @@ struct HomeView: View {
         Group {
             if isSearchActive {
                 searchResultsContent
-            } else if articles.isEmpty {
+            } else if viewModel?.articles.isEmpty ?? true {
                 EmptyStateView(onPasteURL: { url in
                     saveURL(url.absoluteString)
                 })
@@ -44,7 +46,7 @@ struct HomeView: View {
         .navigationTitle("Folio")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                NavigationLink(value: "settings") {
+                NavigationLink(value: HomeDestination.settings) {
                     Image(systemName: "gearshape")
                 }
                 .accessibilityLabel(String(localized: "tab.settings", defaultValue: "Settings"))
@@ -149,12 +151,13 @@ struct HomeView: View {
             Text(String(localized: "home.addURL.message", defaultValue: "Enter or paste a link to save"))
         }
         .navigationDestination(for: UUID.self) { articleID in
-            if let article = articles.first(where: { $0.id == articleID }) {
+            if let article = viewModel?.articles.first(where: { $0.id == articleID }) {
                 ReaderView(article: article)
             }
         }
-        .navigationDestination(for: String.self) { destination in
-            if destination == "settings" {
+        .navigationDestination(for: HomeDestination.self) { destination in
+            switch destination {
+            case .settings:
                 SettingsView()
             }
         }
@@ -202,16 +205,14 @@ struct HomeView: View {
             // 不会自动感知跨进程变更。通过 UserDefaults 标志位检测后重新 fetch。
             if newPhase == .active {
                 let flag = UserDefaults.appGroup.bool(forKey: AppConstants.shareExtensionDidSaveKey)
-                FolioLogger.data.info("home-debug: scenePhase=active, shareFlag=\(flag), @Query.count=\(articles.count)")
+                FolioLogger.data.info("home-debug: scenePhase=active, shareFlag=\(flag)")
                 if flag {
                     UserDefaults.appGroup.set(false, forKey: AppConstants.shareExtensionDidSaveKey)
                     viewModel?.fetchArticles()
+                    searchViewModel?.refreshSyncedCount(context: modelContext)
                     FolioLogger.data.info("home-debug: fetchArticles called, vm.articles.count=\(viewModel?.articles.count ?? -1)")
                 }
             }
-        }
-        .onChange(of: articles) { _, _ in
-            searchViewModel?.refreshSyncedCount(context: modelContext)
         }
     }
 
@@ -376,8 +377,8 @@ struct HomeView: View {
             }
             viewModel?.fetchArticles()
         }
-        .task(id: articles.contains { $0.status == .processing || $0.status == .clientReady }) {
-            guard articles.contains(where: { $0.status == .processing || $0.status == .clientReady }) else { return }
+        .task(id: viewModel?.hasProcessingArticles) {
+            guard viewModel?.hasProcessingArticles == true else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
                 guard !Task.isCancelled else { break }
@@ -460,8 +461,7 @@ struct HomeView: View {
 
     @ViewBuilder
     private func articleSections(vm: HomeViewModel) -> some View {
-        let groups = vm.groupedArticles.isEmpty ? vm.groupByDate(articles) : vm.groupedArticles
-        ForEach(groups, id: \.0) { group in
+        ForEach(vm.groupedArticles, id: \.0) { group in
             Section {
                 ForEach(group.1) { article in
                     articleRow(article: article, vm: vm, isLast: article.id == group.1.last?.id)

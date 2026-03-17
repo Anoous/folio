@@ -50,6 +50,6 @@ final class DataManager {
             context.insert(category)
         }
 
-        try? context.save()
+        ModelContext.safeSave(context)
     }
 }

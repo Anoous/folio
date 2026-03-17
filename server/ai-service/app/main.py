@@ -26,4 +26,4 @@ async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
         return await analyze_article(request)
     except Exception as e:
         logger.exception("AI analysis failed")
-        raise HTTPException(status_code=502, detail=f"AI service error: {e}")
+        raise HTTPException(status_code=502, detail="AI service error: internal failure")

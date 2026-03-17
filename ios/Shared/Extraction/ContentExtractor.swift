@@ -52,11 +52,19 @@ struct ContentExtractor {
 
         do {
             html = try await HTMLFetcher().fetch(url: url)
+            try Task.checkCancellation()
             FolioLogger.data.debug("extraction: HTML fetched — \(html.count) chars")
+
             readability = try ReadabilityExtractor().extract(html: html, url: url)
+            try Task.checkCancellation()
             FolioLogger.data.debug("extraction: readability done — title=\(readability.title ?? "nil")")
+
             markdown = try HTMLToMarkdownConverter().convert(html: readability.contentHTML)
+            try Task.checkCancellation()
             FolioLogger.data.debug("extraction: markdown converted — \(markdown.count) chars")
+        } catch is CancellationError {
+            FolioLogger.data.info("extraction cancelled: \(url.absoluteString)")
+            throw CancellationError()
         } catch {
             FolioLogger.data.error("extraction failed at pipeline: \(error)")
             throw ExtractionError.extractionFailed(error)

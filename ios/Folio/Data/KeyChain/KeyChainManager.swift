@@ -17,7 +17,7 @@ final class KeyChainManager {
         static let refreshToken = "refresh_token"
     }
 
-    init(service: String = "com.folio.app") {
+    init(service: String = AppConstants.keychainServiceName) {
         self.keychain = Keychain(service: service)
     }
 

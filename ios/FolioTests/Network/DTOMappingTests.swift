@@ -299,6 +299,28 @@ final class DTOMappingTests: XCTestCase {
     }
 
     @MainActor
+    func testUpdateFromDTO_preservesPendingLocalChangesWhenRequested() {
+        let article = Article(url: "https://example.com/article")
+        article.serverID = "server-123"
+        article.syncState = .pendingUpdate
+        article.isFavorite = true
+        article.isArchived = true
+        article.readProgress = 0.7
+        article.lastReadAt = Date(timeIntervalSince1970: 3000)
+        context.insert(article)
+
+        let dto = makeArticleDTO(readProgress: 0.4, lastReadAt: Date(timeIntervalSince1970: 2000))
+        article.updateFromDTO(dto, preservePendingLocalChanges: true)
+
+        XCTAssertTrue(article.isFavorite)
+        XCTAssertTrue(article.isArchived)
+        XCTAssertEqual(article.readProgress, 0.7)
+        XCTAssertEqual(article.lastReadAt, Date(timeIntervalSince1970: 3000))
+        XCTAssertEqual(article.syncState, .pendingUpdate)
+        XCTAssertEqual(article.title, "Test Article")
+    }
+
+    @MainActor
     func testCategoryUpdateFromDTO_nilIconPreservesExisting() {
         let categoryRepo = CategoryRepository(context: context)
         guard let techCategory = try? categoryRepo.fetchBySlug("tech") else {

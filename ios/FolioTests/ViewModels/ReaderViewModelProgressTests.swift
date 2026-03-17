@@ -89,4 +89,18 @@ final class ReaderViewModelProgressTests: XCTestCase {
         vm.updateReadingProgress(0.3)
         XCTAssertNotNil(article.lastReadAt)
     }
+
+    @MainActor
+    func testUpdateProgress_marksSyncedArticlePendingUpdate() throws {
+        let article = Article(url: "https://example.com", title: "Sync me")
+        article.serverID = "server-1"
+        article.syncState = .synced
+        context.insert(article)
+        try context.save()
+
+        let vm = ReaderViewModel(article: article, context: context)
+        vm.updateReadingProgress(0.3)
+
+        XCTAssertEqual(article.syncState, .pendingUpdate)
+    }
 }

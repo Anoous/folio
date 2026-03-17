@@ -2,12 +2,20 @@ import Foundation
 import SwiftData
 
 extension Article {
+    /// Marks this article as having local changes that still need server sync.
+    func markPendingUpdateIfNeeded() {
+        guard serverID != nil else { return }
+        guard syncState != .pendingUpload else { return }
+        syncState = .pendingUpdate
+        updatedAt = Date()
+    }
+
     /// Mark this article as read with minimal progress.
     func markAsRead(in context: ModelContext) {
         if readProgress == 0 { readProgress = 0.01 }
         lastReadAt = Date()
-        updatedAt = Date()
-        try? context.save()
+        markPendingUpdateIfNeeded()
+        ModelContext.safeSave(context)
     }
 
     /// Toggle favorite with optimistic update and server sync.
@@ -19,8 +27,8 @@ extension Article {
         showToast: @escaping (String, String?) -> Void
     ) {
         isFavorite.toggle()
-        updatedAt = Date()
-        try? context.save()
+        markPendingUpdateIfNeeded()
+        ModelContext.safeSave(context)
 
         showToast(
             isFavorite
@@ -37,10 +45,11 @@ extension Article {
                     request: UpdateArticleRequest(isFavorite: isFavorite)
                 )
                 syncState = .synced
+                ModelContext.safeSave(context)
             } catch {
                 // Keep the user's intended value; mark for retry on next sync
                 syncState = .pendingUpdate
-                try? context.save()
+                ModelContext.safeSave(context)
                 showToast(
                     String(localized: "home.article.syncFailed", defaultValue: "Sync failed, will retry"),
                     "exclamationmark.icloud"
@@ -58,8 +67,8 @@ extension Article {
         showToast: @escaping (String, String?) -> Void
     ) {
         isArchived.toggle()
-        updatedAt = Date()
-        try? context.save()
+        markPendingUpdateIfNeeded()
+        ModelContext.safeSave(context)
 
         showToast(
             isArchived
@@ -76,10 +85,11 @@ extension Article {
                     request: UpdateArticleRequest(isArchived: isArchived)
                 )
                 syncState = .synced
+                ModelContext.safeSave(context)
             } catch {
                 // Keep the user's intended value; mark for retry on next sync
                 syncState = .pendingUpdate
-                try? context.save()
+                ModelContext.safeSave(context)
                 showToast(
                     String(localized: "home.article.syncFailed", defaultValue: "Sync failed, will retry"),
                     "exclamationmark.icloud"

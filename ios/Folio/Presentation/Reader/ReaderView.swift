@@ -49,6 +49,7 @@ struct ReaderView: View {
                     Image(systemName: "chevron.left")
                         .foregroundStyle(Color.folio.textPrimary)
                 }
+                .accessibilityLabel(String(localized: "button.back", defaultValue: "Back"))
             }
 
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -357,6 +358,7 @@ struct ReaderView: View {
             Image(systemName: "ellipsis.circle")
                 .foregroundStyle(Color.folio.textPrimary)
         }
+        .accessibilityLabel(String(localized: "button.more", defaultValue: "More options"))
     }
 
     // MARK: - Bottom Toolbar
@@ -373,12 +375,14 @@ struct ReaderView: View {
                 }
                 .foregroundStyle(Color.folio.textSecondary)
             }
+            .accessibilityLabel(String(localized: "reader.openOriginal", defaultValue: "Open Original"))
 
             Spacer()
 
             Text("\(Int(round((viewModel?.readingProgress ?? 0) * 100)))%")
                 .font(Typography.caption)
                 .foregroundStyle(Color.folio.textTertiary)
+                .accessibilityLabel(String(localized: "reader.progressLabel", defaultValue: "Reading progress \(Int(round((viewModel?.readingProgress ?? 0) * 100))) percent"))
 
             Spacer()
 
@@ -392,6 +396,7 @@ struct ReaderView: View {
                 }
                 .foregroundStyle(Color.folio.textSecondary)
             }
+            .accessibilityLabel(String(localized: "reader.shareArticle", defaultValue: "Share article"))
             .sheet(isPresented: $showsShareSheet) {
                 if let url = viewModel?.shareURL() {
                     ShareSheet(activityItems: [url])

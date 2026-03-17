@@ -73,7 +73,8 @@ func (c *R2Client) DownloadAndUpload(ctx context.Context, sourceURL, keyPrefix s
 		return "", fmt.Errorf("download failed: status %d", resp.StatusCode)
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	const maxImageBytes = 10 << 20 // 10 MB
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes))
 	if err != nil {
 		return "", fmt.Errorf("read image body: %w", err)
 	}

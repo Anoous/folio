@@ -30,10 +30,16 @@ struct ArticleMerger {
         let article: Article
 
         if let existing = try articleRepo.fetchByServerID(dto.id) {
-            existing.updateFromDTO(dto)
+            existing.updateFromDTO(
+                dto,
+                preservePendingLocalChanges: existing.syncState == .pendingUpdate
+            )
             article = existing
         } else if let byURL = try articleRepo.fetchByURL(dto.url) {
-            byURL.updateFromDTO(dto)
+            byURL.updateFromDTO(
+                dto,
+                preservePendingLocalChanges: byURL.syncState == .pendingUpdate
+            )
             article = byURL
         } else {
             let newArticle = Article.fromDTO(dto)

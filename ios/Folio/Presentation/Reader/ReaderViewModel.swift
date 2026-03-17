@@ -25,6 +25,11 @@ final class ReaderViewModel {
     /// Words per minute for reading time estimation.
     private static let wordsPerMinute: Double = 250
 
+    /// Minimum progress change (1%) before persisting to disk.
+    private static let progressPersistThreshold: Double = 0.01
+    /// Last progress value that was actually persisted to disk.
+    private var lastPersistedProgress: Double = 0.0
+
     // MARK: - Initialization
 
     init(article: Article, context: ModelContext, isAuthenticated: Bool = false, apiClient: APIClient = .shared) {
@@ -33,6 +38,7 @@ final class ReaderViewModel {
         self.isAuthenticated = isAuthenticated
         self.apiClient = apiClient
         self.readingProgress = article.readProgress
+        self.lastPersistedProgress = article.readProgress
         calculateWordCount()
     }
 
@@ -64,7 +70,7 @@ final class ReaderViewModel {
             do {
                 let dto = try await apiClient.getArticle(id: serverID)
                 article.updateFromDTO(dto)
-                try? context.save()
+                ModelContext.safeSave(context)
                 calculateWordCount()
                 FolioLogger.network.info("reader: content fetched from server for \(serverID)")
                 isLoadingContent = false
@@ -87,7 +93,7 @@ final class ReaderViewModel {
                 article.extractionSource = .client
                 article.clientExtractedAt = Date()
                 article.status = .clientReady
-                try? context.save()
+                ModelContext.safeSave(context)
                 calculateWordCount()
                 FolioLogger.data.info("reader: client extraction succeeded for \(url.absoluteString)")
                 isLoadingContent = false
@@ -117,7 +123,23 @@ final class ReaderViewModel {
         readingProgress = clamped
         article.readProgress = clamped
         article.lastReadAt = Date()
-        try? context.save()
+
+        // Only persist to disk when the progress changed by at least 1%
+        // or reached 100%, to avoid writing on every scroll frame.
+        let delta = clamped - lastPersistedProgress
+        if delta >= Self.progressPersistThreshold || clamped >= 1.0 {
+            article.markPendingUpdateIfNeeded()
+            ModelContext.safeSave(context)
+            lastPersistedProgress = clamped
+        }
+    }
+
+    /// Flush any un-persisted progress (e.g., on view disappear).
+    func persistProgressIfNeeded() {
+        guard readingProgress > lastPersistedProgress else { return }
+        article.markPendingUpdateIfNeeded()
+        ModelContext.safeSave(context)
+        lastPersistedProgress = readingProgress
     }
 
     // MARK: - Favorite
@@ -144,7 +166,7 @@ final class ReaderViewModel {
         let serverID = article.serverID
 
         context.delete(article)
-        try? context.save()
+        ModelContext.safeSave(context)
 
         if isAuthenticated, let serverID {
             Task { try? await apiClient.deleteArticle(id: serverID) }

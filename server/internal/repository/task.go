@@ -10,6 +10,14 @@ import (
 	"folio-server/internal/domain"
 )
 
+// Task status values used in SQL queries (from domain.TaskStatus constants).
+var (
+	taskStatusCrawling     = string(domain.TaskStatusCrawling)
+	taskStatusAIProcessing = string(domain.TaskStatusAIProcessing)
+	taskStatusDone         = string(domain.TaskStatusDone)
+	taskStatusFailed       = string(domain.TaskStatusFailed)
+)
+
 type TaskRepo struct {
 	pool *pgxpool.Pool
 }
@@ -62,7 +70,7 @@ func (r *TaskRepo) GetByID(ctx context.Context, id string) (*domain.CrawlTask, e
 
 func (r *TaskRepo) SetCrawlStarted(ctx context.Context, id string) error {
 	_, err := r.pool.Exec(ctx,
-		`UPDATE crawl_tasks SET status = 'crawling', crawl_started_at = NOW() WHERE id = $1`, id)
+		`UPDATE crawl_tasks SET status = $2, crawl_started_at = NOW() WHERE id = $1`, id, taskStatusCrawling)
 	if err != nil {
 		return fmt.Errorf("set crawl started: %w", err)
 	}
@@ -80,7 +88,7 @@ func (r *TaskRepo) SetCrawlFinished(ctx context.Context, id string) error {
 
 func (r *TaskRepo) SetAIStarted(ctx context.Context, id string) error {
 	_, err := r.pool.Exec(ctx,
-		`UPDATE crawl_tasks SET status = 'ai_processing', ai_started_at = NOW() WHERE id = $1`, id)
+		`UPDATE crawl_tasks SET status = $2, ai_started_at = NOW() WHERE id = $1`, id, taskStatusAIProcessing)
 	if err != nil {
 		return fmt.Errorf("set ai started: %w", err)
 	}
@@ -89,7 +97,7 @@ func (r *TaskRepo) SetAIStarted(ctx context.Context, id string) error {
 
 func (r *TaskRepo) SetAIFinished(ctx context.Context, id string) error {
 	_, err := r.pool.Exec(ctx,
-		`UPDATE crawl_tasks SET status = 'done', ai_finished_at = NOW() WHERE id = $1`, id)
+		`UPDATE crawl_tasks SET status = $2, ai_finished_at = NOW() WHERE id = $1`, id, taskStatusDone)
 	if err != nil {
 		return fmt.Errorf("set ai finished: %w", err)
 	}
@@ -98,8 +106,8 @@ func (r *TaskRepo) SetAIFinished(ctx context.Context, id string) error {
 
 func (r *TaskRepo) SetFailed(ctx context.Context, id string, errMsg string) error {
 	_, err := r.pool.Exec(ctx,
-		`UPDATE crawl_tasks SET status = 'failed', error_message = $1, retry_count = retry_count + 1 WHERE id = $2`,
-		errMsg, id)
+		`UPDATE crawl_tasks SET status = $3, error_message = $1, retry_count = retry_count + 1 WHERE id = $2`,
+		errMsg, id, taskStatusFailed)
 	if err != nil {
 		return fmt.Errorf("set task failed: %w", err)
 	}

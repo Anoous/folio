@@ -52,16 +52,30 @@ SYSTEM_PROMPT = f"""你是一个文章分析助手。给定一篇文章的标题
 MAX_CONTENT_LENGTH = 12000
 
 
+def _sanitize_field(value: str) -> str:
+    """Strip characters that could be used for prompt injection."""
+    # Remove triple backticks and system/assistant role markers
+    sanitized = value.replace("```", "")
+    for marker in ("system:", "assistant:", "user:"):
+        sanitized = sanitized.replace(marker, "")
+    return sanitized
+
+
 def build_user_prompt(title: str, content: str, source: str, author: str) -> str:
     truncated = content[:MAX_CONTENT_LENGTH]
     if len(content) > MAX_CONTENT_LENGTH:
         truncated += "\n...(内容已截断)"
 
+    safe_title = _sanitize_field(title)
+    safe_source = _sanitize_field(source)
+    safe_author = _sanitize_field(author)
+    safe_content = _sanitize_field(truncated)
+
     return f"""请分析以下文章：
 
-标题：{title}
-来源：{source}
-作者：{author}
+标题：{safe_title}
+来源：{safe_source}
+作者：{safe_author}
 
 正文：
-{truncated}"""
+{safe_content}"""

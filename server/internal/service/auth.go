@@ -233,14 +233,16 @@ func (s *AuthService) verifyAppleToken(tokenString string) (string, error) {
 		return "", err
 	}
 
-	// Verify the token with the public key
+	// Verify the token with the public key (issuer + audience)
 	claims := &jwt.RegisteredClaims{}
 	verified, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return publicKey, nil
-	}, jwt.WithIssuer("https://appleid.apple.com"))
+	}, jwt.WithIssuer("https://appleid.apple.com"),
+		jwt.WithAudience("com.folio.app"),
+	)
 	if err != nil || !verified.Valid {
 		return "", fmt.Errorf("token verification failed: %w", err)
 	}
@@ -283,7 +285,8 @@ func fetchAppleJWKS() (*AppleJWKSResponse, error) {
 		return appleJWKS, nil
 	}
 
-	resp, err := http.Get("https://appleid.apple.com/auth/keys")
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Get("https://appleid.apple.com/auth/keys")
 	if err != nil {
 		return nil, fmt.Errorf("fetch apple jwks: %w", err)
 	}

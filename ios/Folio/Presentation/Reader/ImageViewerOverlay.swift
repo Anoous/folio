@@ -38,7 +38,7 @@ struct ImageViewerOverlay: View {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.system(size: 40))
                             .foregroundStyle(.white.opacity(0.6))
-                        Text("Failed to load image")
+                        Text(String(localized: "image.loadFailed", defaultValue: "Failed to load image"))
                             .font(Typography.body)
                             .foregroundStyle(.white.opacity(0.6))
                     }
@@ -77,6 +77,7 @@ struct ImageViewerOverlay: View {
                             .foregroundStyle(.white.opacity(0.8))
                             .padding(Spacing.md)
                     }
+                    .accessibilityLabel(String(localized: "button.close", defaultValue: "Close"))
                 }
                 Spacer()
 

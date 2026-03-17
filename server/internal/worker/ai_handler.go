@@ -14,13 +14,44 @@ import (
 	"folio-server/internal/repository"
 )
 
+// analyzer abstracts the AI client for testing.
+type analyzer interface {
+	Analyze(ctx context.Context, req client.AnalyzeRequest) (*client.AnalyzeResponse, error)
+}
+
+// aiArticleRepo abstracts the article repository methods used by AIHandler.
+type aiArticleRepo interface {
+	GetByID(ctx context.Context, id string) (*domain.Article, error)
+	UpdateAIResult(ctx context.Context, id string, ai repository.AIResult) error
+	UpdateStatus(ctx context.Context, id string, status domain.ArticleStatus) error
+	SetError(ctx context.Context, id string, errMsg string) error
+}
+
+// aiTaskRepo abstracts the task repository methods used by AIHandler.
+type aiTaskRepo interface {
+	SetAIStarted(ctx context.Context, id string) error
+	SetAIFinished(ctx context.Context, id string) error
+	SetFailed(ctx context.Context, id string, errMsg string) error
+}
+
+// aiTagRepo abstracts the tag repository methods used by AIHandler.
+type aiTagRepo interface {
+	Create(ctx context.Context, userID, name string, isAIGenerated bool) (*domain.Tag, error)
+	AttachToArticle(ctx context.Context, articleID, tagID string) error
+}
+
+// aiContentCacheRepo abstracts the content cache repository for AIHandler.
+type aiContentCacheRepo interface {
+	Upsert(ctx context.Context, cache *domain.ContentCache) error
+}
+
 type AIHandler struct {
-	aiClient     *client.AIClient
-	articleRepo  *repository.ArticleRepo
-	taskRepo     *repository.TaskRepo
+	aiClient     analyzer
+	articleRepo  aiArticleRepo
+	taskRepo     aiTaskRepo
 	categoryRepo *repository.CategoryRepo
-	tagRepo      *repository.TagRepo
-	cacheRepo    *repository.ContentCacheRepo
+	tagRepo      aiTagRepo
+	cacheRepo    aiContentCacheRepo
 }
 
 func NewAIHandler(
@@ -72,13 +103,25 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("ai analyze failed: %w", err)
 	}
 
+	// Ensure category exists (create if needed)
+	cat, err := h.categoryRepo.FindOrCreate(ctx, result.Category, result.CategoryName, result.CategoryName)
+	if err != nil {
+		slog.Error("ai task failed to find/create category",
+			"article_id", p.ArticleID,
+			"slug", result.Category,
+			"error", err,
+		)
+		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
+		return fmt.Errorf("find or create category: %w", err)
+	}
+
 	// Update article with AI results
 	if err := h.articleRepo.UpdateAIResult(ctx, p.ArticleID, repository.AIResult{
-		CategorySlug: result.Category,
-		Summary:      result.Summary,
-		KeyPoints:    result.KeyPoints,
-		Confidence:   result.Confidence,
-		Language:     result.Language,
+		CategoryID: cat.ID,
+		Summary:    result.Summary,
+		KeyPoints:  result.KeyPoints,
+		Confidence: result.Confidence,
+		Language:   result.Language,
 	}); err != nil {
 		slog.Error("ai task failed to persist result",
 			"article_id", p.ArticleID,

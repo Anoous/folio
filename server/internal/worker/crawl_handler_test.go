@@ -480,6 +480,7 @@ func (m *mockCrawlArticleRepo) SetError(ctx context.Context, id string, errMsg s
 type mockCrawlTaskRepo struct {
 	setCrawlStartedCalls  []string
 	setCrawlFinishedCalls []string
+	setAIFinishedCalls    []string
 	setFailedCalls        []struct{ ID, ErrMsg string }
 	setCrawlStartedFn     func(ctx context.Context, id string) error
 }
@@ -494,6 +495,11 @@ func (m *mockCrawlTaskRepo) SetCrawlStarted(ctx context.Context, id string) erro
 
 func (m *mockCrawlTaskRepo) SetCrawlFinished(ctx context.Context, id string) error {
 	m.setCrawlFinishedCalls = append(m.setCrawlFinishedCalls, id)
+	return nil
+}
+
+func (m *mockCrawlTaskRepo) SetAIFinished(ctx context.Context, id string) error {
+	m.setAIFinishedCalls = append(m.setAIFinishedCalls, id)
 	return nil
 }
 
@@ -549,6 +555,12 @@ func (m *mockCrawlTagRepo) AttachToArticle(ctx context.Context, articleID, tagID
 	return nil
 }
 
+type mockCrawlCategoryRepo struct{}
+
+func (m *mockCrawlCategoryRepo) FindOrCreate(ctx context.Context, slug, nameZH, nameEN string) (*domain.Category, error) {
+	return &domain.Category{ID: "cat-" + slug, Slug: slug, NameZH: nameZH, NameEN: nameEN}, nil
+}
+
 // failingScraper is a scraper that always returns an error.
 var failingScraper = &mockScraper{
 	scrapeFn: func(ctx context.Context, url string) (*client.ScrapeResponse, error) {
@@ -573,6 +585,7 @@ func newTestCrawlHandler(
 		enableImage:  enableImage,
 		cacheRepo:    &mockContentCacheRepo{},
 		tagRepo:      &mockCrawlTagRepo{},
+		categoryRepo: &mockCrawlCategoryRepo{},
 	}
 }
 
@@ -1147,6 +1160,7 @@ func TestProcessTask_CacheHitFull_SkipsCrawlAndAI(t *testing.T) {
 		asynqClient:  mockEnq,
 		cacheRepo:    mockCache,
 		tagRepo:      &mockCrawlTagRepo{},
+		categoryRepo: &mockCrawlCategoryRepo{},
 	}
 
 	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/cached", "user-1")
@@ -1165,9 +1179,9 @@ func TestProcessTask_CacheHitFull_SkipsCrawlAndAI(t *testing.T) {
 		t.Fatal("UpdateStatus should have been called")
 	}
 
-	// Verify task was marked finished (not failed)
-	if len(mockTaskRepo.setCrawlFinishedCalls) != 1 {
-		t.Errorf("SetCrawlFinished calls = %d, want 1", len(mockTaskRepo.setCrawlFinishedCalls))
+	// Verify task was marked done via SetAIFinished (full cache hit skips AI enqueue)
+	if len(mockTaskRepo.setAIFinishedCalls) != 1 {
+		t.Errorf("SetAIFinished calls = %d, want 1", len(mockTaskRepo.setAIFinishedCalls))
 	}
 	if len(mockTaskRepo.setFailedCalls) != 0 {
 		t.Errorf("SetFailed should not be called on cache hit, got %d", len(mockTaskRepo.setFailedCalls))
@@ -1205,6 +1219,7 @@ func TestProcessTask_CacheMiss_ClientContent_SkipsReader(t *testing.T) {
 		asynqClient:  mockEnq,
 		cacheRepo:    &mockContentCacheRepo{}, // cache miss (default nil)
 		tagRepo:      &mockCrawlTagRepo{},
+		categoryRepo: &mockCrawlCategoryRepo{},
 	}
 
 	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/client", "user-1")
@@ -1258,6 +1273,7 @@ func TestProcessTask_CacheMiss_NoClientContent_CallsReader(t *testing.T) {
 		asynqClient:  mockEnq,
 		cacheRepo:    &mockContentCacheRepo{}, // cache miss
 		tagRepo:      &mockCrawlTagRepo{},
+		categoryRepo: &mockCrawlCategoryRepo{},
 	}
 
 	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/fresh", "user-1")

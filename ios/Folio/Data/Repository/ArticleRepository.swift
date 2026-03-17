@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 
+@MainActor
 final class ArticleRepository {
     private let context: ModelContext
 
@@ -27,6 +28,8 @@ final class ArticleRepository {
 
     /// Paginated fetch with optional filtering.
     /// Filters are applied at the predicate level to ensure correct pagination.
+    /// When tag filtering is active, over-fetches to compensate for post-fetch
+    /// filtering, ensuring the caller receives up to `limit` results.
     func fetchAll(
         category: Folio.Category? = nil,
         tags: [Tag] = [],
@@ -34,31 +37,45 @@ final class ArticleRepository {
         limit: Int = 20,
         offset: Int = 0
     ) throws -> [Article] {
-        var descriptor = FetchDescriptor<Article>(
-            sortBy: [SortDescriptor(\.createdAt, order: sortBy)]
-        )
+        let needsTagFilter = !tags.isEmpty
+        let tagIDs = needsTagFilter ? Set(tags.map(\.id)) : []
+        var collected: [Article] = []
+        var currentOffset = offset
+        let batchSize = needsTagFilter ? limit * 3 : limit
 
-        if let categoryID = category?.id {
-            descriptor.predicate = #Predicate<Article> { article in
-                article.category?.id == categoryID
+        repeat {
+            var descriptor = FetchDescriptor<Article>(
+                sortBy: [SortDescriptor(\.createdAt, order: sortBy)]
+            )
+
+            if let categoryID = category?.id {
+                descriptor.predicate = #Predicate<Article> { article in
+                    article.category?.id == categoryID
+                }
             }
-        }
 
-        descriptor.fetchLimit = limit
-        descriptor.fetchOffset = offset
+            descriptor.fetchLimit = batchSize
+            descriptor.fetchOffset = currentOffset
 
-        var articles = try context.fetch(descriptor)
+            let batch = try context.fetch(descriptor)
+            let exhausted = batch.count < batchSize
+            currentOffset += batch.count
 
-        // Tag filtering must remain post-fetch because SwiftData #Predicate
-        // does not support relationship collection queries (contains/intersects).
-        if !tags.isEmpty {
-            let tagIDs = Set(tags.map(\.id))
-            articles = articles.filter { article in
-                !Set(article.tags.map(\.id)).isDisjoint(with: tagIDs)
+            if needsTagFilter {
+                // Tag filtering must remain post-fetch because SwiftData #Predicate
+                // does not support relationship collection queries.
+                let filtered = batch.filter { article in
+                    !Set(article.tags.map(\.id)).isDisjoint(with: tagIDs)
+                }
+                collected.append(contentsOf: filtered)
+            } else {
+                collected.append(contentsOf: batch)
             }
-        }
 
-        return articles
+            if exhausted { break }
+        } while needsTagFilter && collected.count < limit
+
+        return Array(collected.prefix(limit))
     }
 
     func fetchByID(_ id: UUID) throws -> Article? {

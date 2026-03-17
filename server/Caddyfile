@@ -1,4 +1,10 @@
-:80 {
+# Production Caddyfile for Folio API
+# Replace {$DOMAIN} with your actual domain (e.g., api.folio.app)
+# or set the DOMAIN environment variable.
+# Caddy automatically provisions and renews TLS certificates
+# when a real domain is configured.
+
+{$DOMAIN:api.folio.app} {
 	# Health check
 	handle /health {
 		reverse_proxy api:8080

@@ -9,7 +9,6 @@ Features:
 
 from fastapi import FastAPI
 from pydantic import BaseModel
-import hashlib
 import re
 import uvicorn
 
@@ -149,4 +148,4 @@ def analyze(req: AnalyzeRequest):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")

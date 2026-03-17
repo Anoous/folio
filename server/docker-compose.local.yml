@@ -1,0 +1,120 @@
+# Local full-stack testing (API+Worker combined, no Caddy)
+# Usage: cd server && ./scripts/deploy-local.sh
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - APP_MODE=all
+      - DEV_MODE=true
+      - DATABASE_URL=postgresql://folio:${DB_PASSWORD:-folio}@postgres:5432/folio
+      - REDIS_ADDR=redis:6379
+      - READER_URL=http://reader:3000
+      - AI_SERVICE_URL=http://ai:8000
+      - JWT_SECRET=${JWT_SECRET}
+      - JINA_API_KEY=${JINA_API_KEY:-}
+      - R2_ENDPOINT=${R2_ENDPOINT:-}
+      - R2_ACCESS_KEY=${R2_ACCESS_KEY:-}
+      - R2_SECRET_KEY=${R2_SECRET_KEY:-}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME:-folio-images}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL:-}
+      - LOG_FORMAT=json
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      reader:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - backend
+
+  reader:
+    build:
+      context: ./reader-service
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      - POOL_SIZE=2
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - backend
+
+  ai:
+    build: ./ai-service
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - backend
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=folio
+      - POSTGRES_USER=folio
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-folio}
+    volumes:
+      - pg_data_local:/var/lib/postgresql/data
+      - ./migrations/001_init.up.sql:/docker-entrypoint-initdb.d/001_init.sql
+      - ./migrations/002_content_cache.up.sql:/docker-entrypoint-initdb.d/002_content_cache.sql
+      - ./migrations/002_soft_delete.up.sql:/docker-entrypoint-initdb.d/003_soft_delete.sql
+      - ./migrations/003_sync_epoch.up.sql:/docker-entrypoint-initdb.d/004_sync_epoch.sql
+      - ./migrations/004_fix_category_names.up.sql:/docker-entrypoint-initdb.d/005_fix_category_names.sql
+      - ./migrations/005_fix_precision.up.sql:/docker-entrypoint-initdb.d/006_fix_precision.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U folio -d folio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data_local:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  pg_data_local:
+  redis_data_local:

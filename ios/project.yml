@@ -43,11 +43,16 @@ targets:
           - "**/.DS_Store"
       - path: Shared/Extraction
       - path: Shared/Constants
+    info:
+      path: Folio/Info.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+        UILaunchScreen: {}
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.7WSH9CR7KS.folio.app
-        INFOPLIST_FILE: Folio/Info.plist
-        GENERATE_INFOPLIST_FILE: true
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

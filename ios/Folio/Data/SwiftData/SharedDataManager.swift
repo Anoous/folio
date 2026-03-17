@@ -2,10 +2,11 @@ import Foundation
 import os
 import SwiftData
 
-enum SharedDataError: Error {
+enum SharedDataError: Error, Equatable {
     case duplicateURL
     case quotaExceeded
     case containerUnavailable
+    case invalidInput
 }
 
 final class SharedDataManager {
@@ -38,16 +39,26 @@ final class SharedDataManager {
     /// Save article from plain text (extract URL)
     @MainActor
     func saveArticleFromText(_ text: String) throws -> Article {
-        guard let url = extractURL(from: text) else {
-            let article = Article(url: text, sourceType: .web)
-            context.insert(article)
-            try context.save()
-            return article
+        // First try to extract a URL from the text
+        if let url = extractURL(from: text) {
+            return try saveArticle(url: url)
         }
-        return try saveArticle(url: url)
+
+        // If the raw text itself looks like a valid HTTP(S) URL, use it directly
+        if let parsed = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
+           let scheme = parsed.scheme?.lowercased(),
+           scheme == "http" || scheme == "https",
+           parsed.host != nil {
+            return try saveArticle(url: parsed.absoluteString)
+        }
+
+        // Not a valid URL — reject instead of storing arbitrary text as a URL
+        FolioLogger.data.debug("saveArticleFromText: rejected non-URL text — \(text.prefix(80))")
+        throw SharedDataError.invalidInput
     }
 
     /// Check if URL already exists
+    @MainActor
     func existsByURL(_ url: String) throws -> Bool {
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate { $0.url == url }

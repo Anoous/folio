@@ -9,9 +9,6 @@ struct OnboardingView: View {
     @State private var showPermission = false
     let onComplete: () -> Void
 
-    /// Total steps: 3 intro pages + 1 sign-in page
-    private let totalPages = 4
-
     private let pages = [
         OnboardingPageData(
             icon: "book.pages",

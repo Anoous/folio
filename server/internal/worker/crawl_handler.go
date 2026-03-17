@@ -34,6 +34,7 @@ type crawlArticleRepo interface {
 type crawlTaskRepo interface {
 	SetCrawlStarted(ctx context.Context, id string) error
 	SetCrawlFinished(ctx context.Context, id string) error
+	SetAIFinished(ctx context.Context, id string) error
 	SetFailed(ctx context.Context, id string, errMsg string) error
 }
 
@@ -53,6 +54,11 @@ type crawlTagRepo interface {
 	AttachToArticle(ctx context.Context, articleID, tagID string) error
 }
 
+// crawlCategoryRepo abstracts the category repository methods used by CrawlHandler.
+type crawlCategoryRepo interface {
+	FindOrCreate(ctx context.Context, slug, nameZH, nameEN string) (*domain.Category, error)
+}
+
 type CrawlHandler struct {
 	readerClient scraper
 	jinaClient   scraper
@@ -62,6 +68,7 @@ type CrawlHandler struct {
 	enableImage  bool
 	cacheRepo    crawlContentCacheRepo
 	tagRepo      crawlTagRepo
+	categoryRepo crawlCategoryRepo
 }
 
 func NewCrawlHandler(
@@ -73,6 +80,7 @@ func NewCrawlHandler(
 	enableImage bool,
 	cacheRepo *repository.ContentCacheRepo,
 	tagRepo *repository.TagRepo,
+	categoryRepo *repository.CategoryRepo,
 ) *CrawlHandler {
 	return &CrawlHandler{
 		readerClient: readerClient,
@@ -83,6 +91,7 @@ func NewCrawlHandler(
 		enableImage:  enableImage,
 		cacheRepo:    cacheRepo,
 		tagRepo:      tagRepo,
+		categoryRepo: categoryRepo,
 	}
 }
 
@@ -112,7 +121,7 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		}
 		if cached.HasContent() {
 			// Partial hit: have content but no AI. Use cached content, run AI.
-			h.articleRepo.UpdateCrawlResult(ctx, p.ArticleID, repository.CrawlResult{
+			if err := h.articleRepo.UpdateCrawlResult(ctx, p.ArticleID, repository.CrawlResult{
 				Title:      derefOrEmpty(cached.Title),
 				Author:     derefOrEmpty(cached.Author),
 				SiteName:   derefOrEmpty(cached.SiteName),
@@ -120,8 +129,12 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 				CoverImage: derefOrEmpty(cached.CoverImageURL),
 				Language:   derefOrEmpty(cached.Language),
 				FaviconURL: derefOrEmpty(cached.FaviconURL),
-			})
-			h.taskRepo.SetCrawlFinished(ctx, p.TaskID)
+			}); err != nil {
+				return fmt.Errorf("cache partial: update crawl result: %w", err)
+			}
+			if err := h.taskRepo.SetCrawlFinished(ctx, p.TaskID); err != nil {
+				return fmt.Errorf("cache partial: set crawl finished: %w", err)
+			}
 			source := derefOrDefault(cached.SiteName, "web")
 			aiTask := NewAIProcessTask(
 				p.ArticleID, p.TaskID, p.UserID,
@@ -249,7 +262,7 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 // creates user-specific tags, and marks the task as done.
 func (h *CrawlHandler) applyCacheHit(ctx context.Context, p CrawlPayload, cached *domain.ContentCache, start time.Time) error {
 	// Update article with cached crawl results
-	h.articleRepo.UpdateCrawlResult(ctx, p.ArticleID, repository.CrawlResult{
+	if err := h.articleRepo.UpdateCrawlResult(ctx, p.ArticleID, repository.CrawlResult{
 		Title:      derefOrEmpty(cached.Title),
 		Author:     derefOrEmpty(cached.Author),
 		SiteName:   derefOrEmpty(cached.SiteName),
@@ -257,16 +270,34 @@ func (h *CrawlHandler) applyCacheHit(ctx context.Context, p CrawlPayload, cached
 		CoverImage: derefOrEmpty(cached.CoverImageURL),
 		Language:   derefOrEmpty(cached.Language),
 		FaviconURL: derefOrEmpty(cached.FaviconURL),
-	})
+	}); err != nil {
+		return fmt.Errorf("cache hit: update crawl result: %w", err)
+	}
 
-	// Update article with cached AI results
-	h.articleRepo.UpdateAIResult(ctx, p.ArticleID, repository.AIResult{
-		CategorySlug: derefOrEmpty(cached.CategorySlug),
-		Summary:      derefOrEmpty(cached.Summary),
-		KeyPoints:    cached.KeyPoints,
-		Confidence:   derefFloat(cached.AIConfidence),
-		Language:     derefOrEmpty(cached.Language),
-	})
+	// Ensure category exists and update article with cached AI results
+	categorySlug := derefOrEmpty(cached.CategorySlug)
+	var categoryID string
+	if categorySlug != "" {
+		cat, err := h.categoryRepo.FindOrCreate(ctx, categorySlug, categorySlug, categorySlug)
+		if err != nil {
+			return fmt.Errorf("cache hit: find or create category: %w", err)
+		}
+		categoryID = cat.ID
+	}
+	if err := h.articleRepo.UpdateAIResult(ctx, p.ArticleID, repository.AIResult{
+		CategoryID: categoryID,
+		Summary:    derefOrEmpty(cached.Summary),
+		KeyPoints:  cached.KeyPoints,
+		Confidence: derefFloat(cached.AIConfidence),
+		Language:   derefOrEmpty(cached.Language),
+	}); err != nil {
+		return fmt.Errorf("cache hit: update ai result: %w", err)
+	}
+
+	// Set article status to ready (cache hit has full content + AI)
+	if err := h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusReady); err != nil {
+		return fmt.Errorf("cache hit: update article status: %w", err)
+	}
 
 	// Create per-user tags from cached AI tag names
 	for _, tagName := range cached.AITagNames {
@@ -277,8 +308,10 @@ func (h *CrawlHandler) applyCacheHit(ctx context.Context, p CrawlPayload, cached
 		h.tagRepo.AttachToArticle(ctx, p.ArticleID, tag.ID)
 	}
 
-	// Mark task as done
-	h.taskRepo.SetCrawlFinished(ctx, p.TaskID)
+	// Mark task as done (SetAIFinished sets status='done')
+	if err := h.taskRepo.SetAIFinished(ctx, p.TaskID); err != nil {
+		return fmt.Errorf("cache hit: set task done: %w", err)
+	}
 
 	slog.Info("crawl task completed via cache hit",
 		"article_id", p.ArticleID,

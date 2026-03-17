@@ -16,6 +16,7 @@ final class HomeViewModel {
     var isLoading = false
     var isAuthenticated = false
     var syncError: String?
+    var hasProcessingArticles = false
     var showToast = false
     var toastMessage = ""
     var toastIcon: String? = nil
@@ -87,7 +88,7 @@ final class HomeViewModel {
             }
         }
 
-        try? context.save()
+        ModelContext.safeSave(context)
         return needsDetail
     }
 
@@ -113,7 +114,7 @@ final class HomeViewModel {
             }
         }
 
-        try? context.save()
+        ModelContext.safeSave(context)
     }
 
     // MARK: - Article Actions
@@ -148,7 +149,7 @@ final class HomeViewModel {
         }
 
         context.delete(article)
-        try? context.save()
+        ModelContext.safeSave(context)
         fetchArticles()
 
         showToastMessage(String(localized: "home.article.deleted", defaultValue: "Article deleted"), icon: "trash")
@@ -161,7 +162,7 @@ final class HomeViewModel {
         article.fetchError = nil
         article.retryCount += 1
         article.updatedAt = Date()
-        try? context.save()
+        ModelContext.safeSave(context)
         fetchArticles()
 
         showToastMessage(String(localized: "home.article.retrying", defaultValue: "Retrying..."), icon: "arrow.clockwise")
@@ -190,7 +191,7 @@ final class HomeViewModel {
                     article.status = .failed
                     article.fetchError = error.localizedDescription
                 }
-                try? context.save()
+                ModelContext.safeSave(context)
                 fetchArticles()
             }
         }
@@ -215,45 +216,64 @@ final class HomeViewModel {
     private func loadPage(reset: Bool) {
         isLoading = true
 
-        var descriptor = FetchDescriptor<Article>(
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
+        // When tag filtering is active, we must over-fetch because SwiftData
+        // #Predicate cannot filter on relationship collections. We keep
+        // fetching batches until we fill a page or exhaust the data source.
+        let needsTagFilter = !selectedTags.isEmpty
+        let tagIDs = needsTagFilter ? Set(selectedTags.map(\.id)) : []
+        var collected: [Article] = []
+        var fetchOffset = currentPage * pageSize
+        let batchSize = needsTagFilter ? pageSize * 3 : pageSize
+        var exhausted = false
 
-        // Apply category filter at predicate level for correct pagination
-        if let categoryID = selectedCategory?.id {
-            descriptor.predicate = #Predicate<Article> { article in
-                article.category?.id == categoryID
+        repeat {
+            var descriptor = FetchDescriptor<Article>(
+                sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+            )
+
+            // Apply category filter at predicate level for correct pagination
+            if let categoryID = selectedCategory?.id {
+                descriptor.predicate = #Predicate<Article> { article in
+                    article.category?.id == categoryID
+                }
             }
-        }
 
-        descriptor.fetchLimit = pageSize
-        descriptor.fetchOffset = currentPage * pageSize
+            descriptor.fetchLimit = batchSize
+            descriptor.fetchOffset = fetchOffset
 
-        guard var fetched = try? context.fetch(descriptor) else {
-            FolioLogger.data.error("vm-debug: loadPage fetch failed")
-            isLoading = false
-            return
-        }
-        FolioLogger.data.info("vm-debug: loadPage reset=\(reset), fetched=\(fetched.count), offset=\(self.currentPage * self.pageSize)")
-
-        // Tag filtering must remain post-fetch because SwiftData #Predicate
-        // does not support relationship collection queries.
-        if !selectedTags.isEmpty {
-            let tagIDs = Set(selectedTags.map(\.id))
-            fetched = fetched.filter { article in
-                tagIDs.isSubset(of: Set(article.tags.map(\.id)))
+            guard let batch = try? context.fetch(descriptor) else {
+                FolioLogger.data.error("vm-debug: loadPage fetch failed")
+                isLoading = false
+                return
             }
-        }
+
+            if batch.count < batchSize {
+                exhausted = true
+            }
+            fetchOffset += batch.count
+
+            if needsTagFilter {
+                let filtered = batch.filter { article in
+                    tagIDs.isSubset(of: Set(article.tags.map(\.id)))
+                }
+                collected.append(contentsOf: filtered)
+            } else {
+                collected.append(contentsOf: batch)
+            }
+        } while needsTagFilter && collected.count < pageSize && !exhausted
+
+        FolioLogger.data.info("vm-debug: loadPage reset=\(reset), collected=\(collected.count), offset=\(self.currentPage * self.pageSize)")
 
         if reset {
-            articles = fetched
+            articles = collected
         } else {
-            articles.append(contentsOf: fetched)
+            articles.append(contentsOf: collected)
         }
 
-        hasMorePages = fetched.count == pageSize
-        currentPage += 1
+        hasMorePages = !exhausted
+        currentPage = fetchOffset / pageSize
         groupedArticles = groupByDate(articles)
+        hasProcessingArticles = articles.contains { $0.status == .processing || $0.status == .clientReady }
         isLoading = false
     }
 

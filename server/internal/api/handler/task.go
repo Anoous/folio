@@ -31,7 +31,7 @@ func (h *TaskHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if task.UserID != userID {
-		writeError(w, http.StatusForbidden, "forbidden")
+		writeError(w, http.StatusNotFound, "task not found")
 		return
 	}
 

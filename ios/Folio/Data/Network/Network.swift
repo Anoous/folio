@@ -2,6 +2,23 @@
 import Foundation
 import os
 
+// MARK: - Shared ISO8601 Formatters
+
+/// Reusable formatters — `ISO8601DateFormatter` is expensive to create.
+private enum ISO8601Formatters {
+    static let standard: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    static let fractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+}
+
 // MARK: - APIError
 
 enum APIError: Error, Equatable {
@@ -12,6 +29,7 @@ enum APIError: Error, Equatable {
     case forbidden
     case notFound
     case quotaExceeded
+    case conflict
     case serverError(Int)
     case networkError(String)
     case serverMessage(String)
@@ -174,8 +192,8 @@ final class APIClient {
         #if targetEnvironment(simulator)
         static let defaultBaseURL = URL(string: "http://localhost:8080")!
         #else
-        // .local hostname resolved via Bonjour/mDNS — works on any Wi-Fi, no hardcoded IP
-        static let defaultBaseURL = URL(string: "http://macbookdeMacBook-Air.local:8080")!
+        // Tailscale IP — stable across networks, no Wi-Fi dependency
+        static let defaultBaseURL = URL(string: "http://100.79.57.66:8080")!
         #endif
     #else
     static let defaultBaseURL = URL(string: "https://api.folio.app")!
@@ -204,15 +222,11 @@ final class APIClient {
             let container = try decoder.singleValueContainer()
             let string = try container.decode(String.self)
 
-            let iso8601 = ISO8601DateFormatter()
-            iso8601.formatOptions = [.withInternetDateTime]
-            if let date = iso8601.date(from: string) {
+            if let date = ISO8601Formatters.standard.date(from: string) {
                 return date
             }
 
-            let iso8601Fractional = ISO8601DateFormatter()
-            iso8601Fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = iso8601Fractional.date(from: string) {
+            if let date = ISO8601Formatters.fractional.date(from: string) {
                 return date
             }
 
@@ -298,10 +312,7 @@ final class APIClient {
         case 404:
             throw APIError.notFound
         case 409:
-            if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
-                throw APIError.serverMessage(errorResponse.error)
-            }
-            throw APIError.serverMessage("Conflict")
+            throw APIError.conflict
         case 429:
             throw APIError.quotaExceeded
         default:
@@ -463,8 +474,7 @@ final class APIClient {
             queryItems.append(URLQueryItem(name: "favorite", value: favorite ? "true" : "false"))
         }
         if let updatedSince {
-            let formatter = ISO8601DateFormatter()
-            queryItems.append(URLQueryItem(name: "updated_since", value: formatter.string(from: updatedSince)))
+            queryItems.append(URLQueryItem(name: "updated_since", value: ISO8601Formatters.standard.string(from: updatedSince)))
         }
         return try await request(method: "GET", path: "/api/v1/articles", queryItems: queryItems)
     }

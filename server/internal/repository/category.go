@@ -38,6 +38,21 @@ func (r *CategoryRepo) ListAll(ctx context.Context) ([]domain.Category, error) {
 	return categories, nil
 }
 
+func (r *CategoryRepo) FindOrCreate(ctx context.Context, slug, nameZH, nameEN string) (*domain.Category, error) {
+	var c domain.Category
+	err := r.pool.QueryRow(ctx,
+		`INSERT INTO categories (slug, name_zh, name_en, sort_order)
+		 VALUES ($1, $2, $3, (SELECT COALESCE(MAX(sort_order),0)+1 FROM categories))
+		 ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
+		 RETURNING id, slug, name_zh, name_en, icon, sort_order, created_at`,
+		slug, nameZH, nameEN,
+	).Scan(&c.ID, &c.Slug, &c.NameZH, &c.NameEN, &c.Icon, &c.SortOrder, &c.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("find or create category: %w", err)
+	}
+	return &c, nil
+}
+
 func (r *CategoryRepo) GetByID(ctx context.Context, id string) (*domain.Category, error) {
 	var c domain.Category
 	err := r.pool.QueryRow(ctx,

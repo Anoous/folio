@@ -44,6 +44,13 @@ struct HTMLFetcher {
             throw HTMLFetchError.httpError(httpResponse.statusCode)
         }
 
+        // Early size check via Content-Length header (avoids buffering the full body)
+        if let contentLength = httpResponse.value(forHTTPHeaderField: "Content-Length"),
+           let length = Int(contentLength), length > Self.maxResponseSize {
+            FolioLogger.data.error("HTMLFetcher: Content-Length too large \(length) bytes — \(url.absoluteString)")
+            throw HTMLFetchError.responseTooLarge(length)
+        }
+
         // Content-Type check
         if let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") {
             let lowered = contentType.lowercased()

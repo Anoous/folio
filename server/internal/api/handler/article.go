@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -42,6 +43,13 @@ func NewArticleHandler(articleService *service.ArticleService, userRepo *reposit
 // maxMarkdownContentBytes is the maximum allowed size for client-provided markdown content (500 KB).
 const maxMarkdownContentBytes = 500 * 1024
 
+// Shared pagination defaults.
+const (
+	defaultPage    = 1
+	defaultPerPage = 20
+	maxPerPage     = 100
+)
+
 func (h *ArticleHandler) HandleSubmitURL(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 
@@ -53,6 +61,13 @@ func (h *ArticleHandler) HandleSubmitURL(w http.ResponseWriter, r *http.Request)
 
 	if req.URL == "" {
 		writeError(w, http.StatusBadRequest, "url is required")
+		return
+	}
+
+	// Validate URL: only http/https schemes allowed
+	parsed, err := url.Parse(req.URL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		writeError(w, http.StatusBadRequest, "invalid url: only http and https are allowed")
 		return
 	}
 
@@ -82,13 +97,13 @@ func (h *ArticleHandler) HandleListArticles(w http.ResponseWriter, r *http.Reque
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
 	if page < 1 {
-		page = 1
+		page = defaultPage
 	}
 	if perPage < 1 {
-		perPage = 20
+		perPage = defaultPerPage
 	}
-	if perPage > 100 {
-		perPage = 100
+	if perPage > maxPerPage {
+		perPage = maxPerPage
 	}
 
 	params := repository.ListArticlesParams{
@@ -160,6 +175,14 @@ func (h *ArticleHandler) HandleUpdateArticle(w http.ResponseWriter, r *http.Requ
 	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+
+	// Validate read_progress range [0, 1]
+	if params.ReadProgress != nil {
+		if *params.ReadProgress < 0 || *params.ReadProgress > 1 {
+			writeError(w, http.StatusBadRequest, "read_progress must be between 0 and 1")
+			return
+		}
 	}
 
 	if err := h.articleService.Update(r.Context(), userID, articleID, params); err != nil {

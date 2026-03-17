@@ -42,16 +42,7 @@ CREATE TABLE categories (
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
-INSERT INTO categories (slug, name_zh, name_en, icon, sort_order) VALUES
-    ('tech',       '技术',   'Technology', 'cpu',              1),
-    ('business',   '商业',   'Business',   'chart.bar',        2),
-    ('science',    '科学',   'Science',    'atom',             3),
-    ('culture',    '文化',   'Culture',    'book',             4),
-    ('lifestyle',  '生活',   'Lifestyle',  'heart',            5),
-    ('news',       '时事',   'News',       'newspaper',        6),
-    ('education',  '学习',   'Education',  'graduationcap',    7),
-    ('design',     '设计',   'Design',     'paintbrush',       8),
-    ('other',      '其他',   'Other',      'ellipsis.circle',  9);
+-- Categories are created dynamically by the AI service, no pre-seeding needed.
 
 -- ============================================
 -- 文章表

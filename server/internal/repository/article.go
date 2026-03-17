@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,6 +49,7 @@ func (r *ArticleRepo) Create(ctx context.Context, p CreateArticleParams) (*domai
 	if err != nil {
 		return nil, fmt.Errorf("insert article: %w", err)
 	}
+	a.KeyPoints = []string{}
 	return &a, nil
 }
 
@@ -76,7 +78,12 @@ func (r *ArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, 
 		return nil, fmt.Errorf("get article: %w", err)
 	}
 	if keyPointsJSON != nil {
-		json.Unmarshal(keyPointsJSON, &a.KeyPoints)
+		if err := json.Unmarshal(keyPointsJSON, &a.KeyPoints); err != nil {
+			return nil, fmt.Errorf("unmarshal key_points: %w", err)
+		}
+	}
+	if a.KeyPoints == nil {
+		a.KeyPoints = []string{}
 	}
 	return &a, nil
 }
@@ -189,6 +196,7 @@ func (r *ArticleRepo) ListByUser(ctx context.Context, p ListArticlesParams) (*Li
 		); err != nil {
 			return nil, fmt.Errorf("scan article: %w", err)
 		}
+		a.KeyPoints = []string{}
 		articles = append(articles, a)
 	}
 
@@ -244,9 +252,36 @@ func (r *ArticleRepo) UpdateCrawlResult(ctx context.Context, id string, cr Crawl
 	return nil
 }
 
-// countWords counts whitespace-separated words in text.
+// isCJK reports whether r is a CJK ideograph or fullwidth character.
+func isCJK(r rune) bool {
+	return unicode.Is(unicode.Han, r) ||
+		unicode.Is(unicode.Hangul, r) ||
+		unicode.Is(unicode.Katakana, r) ||
+		unicode.Is(unicode.Hiragana, r)
+}
+
+// countWords counts words in text. CJK characters are counted individually;
+// non-CJK runs are counted by whitespace-separated tokens.
 func countWords(text string) int {
-	return len(strings.Fields(text))
+	count := 0
+	var nonCJK strings.Builder
+	for _, r := range text {
+		if isCJK(r) {
+			// Flush any accumulated non-CJK text as space-separated words
+			if nonCJK.Len() > 0 {
+				count += len(strings.Fields(nonCJK.String()))
+				nonCJK.Reset()
+			}
+			count++
+		} else {
+			nonCJK.WriteRune(r)
+		}
+	}
+	// Flush remaining non-CJK text
+	if nonCJK.Len() > 0 {
+		count += len(strings.Fields(nonCJK.String()))
+	}
+	return count
 }
 
 // truncateUTF8 truncates s to at most maxLen runes.
@@ -259,22 +294,26 @@ func truncateUTF8(s string, maxLen int) string {
 }
 
 type AIResult struct {
-	CategorySlug string
-	Summary      string
-	KeyPoints    []string
-	Confidence   float64
-	Language     string
+	CategoryID string
+	Summary    string
+	KeyPoints  []string
+	Confidence float64
+	Language   string
 }
 
 func (r *ArticleRepo) UpdateAIResult(ctx context.Context, id string, ai AIResult) error {
-	keyPointsJSON, _ := json.Marshal(ai.KeyPoints)
+	kp := ai.KeyPoints
+	if kp == nil {
+		kp = []string{}
+	}
+	keyPointsJSON, _ := json.Marshal(kp)
 	_, err := r.pool.Exec(ctx, `
 		UPDATE articles SET
-			category_id = (SELECT id FROM categories WHERE slug = $1),
+			category_id = $1,
 			summary = $2, key_points = $3, ai_confidence = $4, language = $5,
 			status = 'ready'
 		WHERE id = $6`,
-		ai.CategorySlug, ai.Summary, keyPointsJSON, ai.Confidence, ai.Language, id)
+		ai.CategoryID, ai.Summary, keyPointsJSON, ai.Confidence, ai.Language, id)
 	if err != nil {
 		return fmt.Errorf("update ai result: %w", err)
 	}
@@ -394,6 +433,7 @@ func (r *ArticleRepo) Search(ctx context.Context, userID, query string, page, pe
 			&a.SiteName, &a.SourceType, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan search result: %w", err)
 		}
+		a.KeyPoints = []string{}
 		articles = append(articles, a)
 	}
 

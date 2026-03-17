@@ -27,13 +27,13 @@ func (h *SearchHandler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
 	if page < 1 {
-		page = 1
+		page = defaultPage
 	}
 	if perPage < 1 {
-		perPage = 20
+		perPage = defaultPerPage
 	}
-	if perPage > 100 {
-		perPage = 100
+	if perPage > maxPerPage {
+		perPage = maxPerPage
 	}
 
 	result, err := h.articleService.Search(r.Context(), userID, query, page, perPage)

@@ -34,9 +34,6 @@
     "✨" : {
 
     },
-    "0:00 / %@" : {
-
-    },
     "A" : {
 
     },
@@ -196,30 +193,6 @@
         }
       }
     },
-    "digest.duration" : {
-      "comment" : "Digest audio duration in minutes",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%d min"
-          }
-        }
-      }
-    },
-    "digest.summary" : {
-      "comment" : "Daily digest summary text",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Today you saved %d articles about Swift concurrency, iOS architecture, and testing patterns."
-          }
-        }
-      }
-    },
     "empty.subtitle" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -253,9 +226,6 @@
           }
         }
       }
-    },
-    "Failed to load image" : {
-
     },
     "home.add" : {
       "extractionState" : "manual",

@@ -7,7 +7,7 @@ extension Article {
     /// Update local article fields from a server DTO and mark as synced.
     /// Only overwrites string fields when the server value is non-nil,
     /// preserving client-extracted data if the server hasn't finished processing.
-    func updateFromDTO(_ dto: ArticleDTO) {
+    func updateFromDTO(_ dto: ArticleDTO, preservePendingLocalChanges: Bool = false) {
         serverID = dto.id
         url = dto.url
         if let v = dto.title { title = v }
@@ -26,17 +26,24 @@ extension Article {
         sourceTypeRaw = dto.sourceType
         fetchError = dto.fetchError
         retryCount = dto.retryCount
-        isFavorite = dto.isFavorite
-        isArchived = dto.isArchived
-        readProgress = max(readProgress, dto.readProgress)
-        if let serverDate = dto.lastReadAt {
-            lastReadAt = lastReadAt.map { max($0, serverDate) } ?? serverDate
+        if preservePendingLocalChanges {
+            readProgress = max(readProgress, dto.readProgress)
+            if let serverDate = dto.lastReadAt {
+                lastReadAt = lastReadAt.map { max($0, serverDate) } ?? serverDate
+            }
+        } else {
+            isFavorite = dto.isFavorite
+            isArchived = dto.isArchived
+            readProgress = max(readProgress, dto.readProgress)
+            if let serverDate = dto.lastReadAt {
+                lastReadAt = lastReadAt.map { max($0, serverDate) } ?? serverDate
+            }
+            syncState = .synced
         }
         if let v = dto.publishedAt { publishedAt = v }
         if dto.wordCount > 0 { wordCount = dto.wordCount }
         if let v = dto.language { language = v }
         updatedAt = dto.updatedAt
-        syncState = .synced
     }
 
     /// Create a new local Article from a server DTO.

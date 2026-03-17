@@ -9,12 +9,17 @@ folio-server
 
 # Build output
 reader-service/dist/
+reader-service/reader-local.tgz
 
 # OS
 .DS_Store
 
 # Environment
 .env
+
+# TLS certificates
+*.crt
+*.key
 
 # E2E tests
 tests/e2e/.venv/

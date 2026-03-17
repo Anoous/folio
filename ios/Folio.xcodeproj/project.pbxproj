@@ -370,6 +370,7 @@
 				A27E690A15323A5E5687ED17 /* Extensions */,
 				856A164DF53EC304B1C9A700 /* Extraction */,
 				DE901DB5A903C33D9C59AF29 /* Fixtures */,
+				4BEC88AA3FFCDE89FAB41116 /* Home */,
 				A6D82D4E0649C5F748FB2385 /* Models */,
 				7F1D83B16BCFFC96DA9E6F71 /* Network */,
 				383B12C0C6A9E10923BC99B7 /* Reader */,
@@ -397,6 +398,13 @@
 				4FC23CD3192062DC98AC6E3A /* ReadingPreferenceTests.swift */,
 			);
 			path = Reader;
+			sourceTree = "<group>";
+		};
+		4BEC88AA3FFCDE89FAB41116 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Home;
 			sourceTree = "<group>";
 		};
 		51C99D6CFAA3E0CEC1DCA00D /* Repository */ = {
@@ -625,6 +633,13 @@
 			path = Utils;
 			sourceTree = "<group>";
 		};
+		CA09AD528A09CD3F7D2C75E7 /* UseCases */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = UseCases;
+			sourceTree = "<group>";
+		};
 		D00CB4EF65C8C1AA0618DCAD /* Sync */ = {
 			isa = PBXGroup;
 			children = (
@@ -727,6 +742,7 @@
 			isa = PBXGroup;
 			children = (
 				DB681C6B591CC15FB6F98DBE /* Models */,
+				CA09AD528A09CD3F7D2C75E7 /* UseCases */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -1059,7 +1075,6 @@
 				CODE_SIGN_ENTITLEMENTS = Folio/Folio.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Folio/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1177,7 +1192,6 @@
 				CODE_SIGN_ENTITLEMENTS = Folio/Folio.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Folio/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

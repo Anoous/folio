@@ -61,10 +61,11 @@ final class SharedDataManagerTests: XCTestCase {
     // MARK: - Edge Cases
 
     @MainActor
-    func testSaveArticleFromText_noURL() throws {
-        // Plain text without URL — falls back to raw text as URL
-        let article = try manager.saveArticleFromText("just plain text no link")
-        XCTAssertEqual(article.url, "just plain text no link")
+    func testSaveArticleFromText_noURL_throwsInvalidInput() throws {
+        // Plain text without a valid URL should be rejected
+        XCTAssertThrowsError(try manager.saveArticleFromText("just plain text no link")) { error in
+            XCTAssertEqual(error as? SharedDataError, .invalidInput)
+        }
     }
 
     @MainActor

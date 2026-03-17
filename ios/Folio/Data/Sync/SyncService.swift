@@ -14,13 +14,13 @@ final class SyncService {
     private static let lastEpochKey = "com.folio.lastSyncEpoch"
 
     private var lastEpoch: Int {
-        get { UserDefaults.standard.integer(forKey: Self.lastEpochKey) }
-        set { UserDefaults.standard.set(newValue, forKey: Self.lastEpochKey) }
+        get { UserDefaults.appGroup.integer(forKey: Self.lastEpochKey) }
+        set { UserDefaults.appGroup.set(newValue, forKey: Self.lastEpochKey) }
     }
 
     private var lastSyncedAt: Date? {
-        get { UserDefaults.standard.object(forKey: Self.lastSyncedAtKey) as? Date }
-        set { UserDefaults.standard.set(newValue, forKey: Self.lastSyncedAtKey) }
+        get { UserDefaults.appGroup.object(forKey: Self.lastSyncedAtKey) as? Date }
+        set { UserDefaults.appGroup.set(newValue, forKey: Self.lastSyncedAtKey) }
     }
 
     init(apiClient: APIClient = .shared, context: ModelContext) {
@@ -62,8 +62,8 @@ final class SyncService {
                 }
             } catch let error as APIError {
                 switch error {
-                case .serverMessage(let msg) where msg.contains("already saved"):
-                    // Server already has this URL — mark as synced
+                case .conflict:
+                    // Server already has this URL (HTTP 409) — mark as synced
                     article.syncState = .synced
                     article.status = .processing
                     results[article.id] = true
@@ -96,17 +96,19 @@ final class SyncService {
                 let task = try await apiClient.getTask(id: taskId)
 
                 switch task.status {
-                case "done":
+                case AppConstants.TaskStatus.done:
                     FolioLogger.sync.info("task done: \(taskId)")
                     if let articleId = task.articleId {
                         await fetchAndUpdateArticle(serverID: articleId, localID: articleLocalId)
                     }
                     return
-                case "failed":
+                case AppConstants.TaskStatus.failed:
                     FolioLogger.sync.error("task failed: \(taskId) — \(task.errorMessage ?? "unknown")")
                     updateArticleStatus(localID: articleLocalId, status: .failed, error: task.errorMessage)
                     return
-                case "queued", "crawling", "ai_processing":
+                case AppConstants.TaskStatus.queued,
+                     AppConstants.TaskStatus.crawling,
+                     AppConstants.TaskStatus.aiProcessing:
                     continue
                 default:
                     continue
@@ -201,9 +203,10 @@ final class SyncService {
     func performFullSync() async {
         FolioLogger.sync.info("starting full sync")
         await syncDeletions()
+        await syncPendingUpdates()
         await syncCategories()
         await syncTags()
-        await syncArticles()
+        await fullSyncArticles()
         await syncUserQuota()
         cleanupOldDeletionRecords()
         FolioLogger.sync.info("full sync completed")
@@ -224,7 +227,7 @@ final class SyncService {
         do {
             let response = try await apiClient.refreshAuth()
             let user = response.user
-            let isPro = user.subscription != "free"
+            let isPro = user.subscription != AppConstants.subscriptionFree
             SharedDataManager.syncQuotaFromServer(
                 monthlyQuota: user.monthlyQuota,
                 currentMonthCount: user.currentMonthCount,
@@ -300,6 +303,7 @@ final class SyncService {
         var page = 1
         let perPage = 50
         var latestServerTime: String?
+        var serverIDs: Set<String> = []
 
         do {
             while true {
@@ -312,6 +316,7 @@ final class SyncService {
                     _ = checkEpoch(response.syncEpoch)
                 }
                 for dto in response.data {
+                    serverIDs.insert(dto.id)
                     _ = try? merger.merge(dto: dto)
                 }
                 try? context.save()
@@ -322,10 +327,34 @@ final class SyncService {
                 }
                 page += 1
             }
+            reconcileLocalArticles(serverIDs: serverIDs)
             lastSyncedAt = parseServerTime(latestServerTime) ?? Date()
             FolioLogger.sync.info("full article sync completed")
         } catch {
             FolioLogger.sync.error("full article sync failed: \(error)")
+        }
+    }
+
+    /// Delete local synced articles whose serverID is not in the server's full article set.
+    /// Delete local synced articles whose serverID is not in the server's full article set.
+    private func reconcileLocalArticles(serverIDs: Set<String>) {
+        let syncedRaw = SyncState.synced.rawValue
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { $0.syncStateRaw == syncedRaw && $0.serverID != nil }
+        )
+        guard let localArticles = try? context.fetch(descriptor) else { return }
+
+        var removedCount = 0
+        for article in localArticles {
+            guard let sid = article.serverID else { continue }
+            if !serverIDs.contains(sid) {
+                context.delete(article)
+                removedCount += 1
+            }
+        }
+        if removedCount > 0 {
+            try? context.save()
+            FolioLogger.sync.info("reconciliation: removed \(removedCount) orphaned article(s)")
         }
     }
 
@@ -371,11 +400,15 @@ final class SyncService {
         }
     }
 
+    private static let serverTimeFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     private func parseServerTime(_ timeString: String?) -> Date? {
         guard let timeString else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: timeString)
+        return Self.serverTimeFormatter.date(from: timeString)
     }
 
     // MARK: - Deletion Sync

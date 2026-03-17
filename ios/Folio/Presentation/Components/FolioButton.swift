@@ -31,7 +31,7 @@ struct FolioButton: View {
 
     private var foregroundColor: Color {
         switch style {
-        case .primary: Color.folio.cardBackground
+        case .primary: Color.white
         case .secondary: Color.folio.textPrimary
         }
     }

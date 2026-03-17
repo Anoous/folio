@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 
 from openai import AsyncOpenAI
 
@@ -17,6 +18,15 @@ MODEL = "deepseek-chat"
 TEMPERATURE = 0.3
 MAX_TOKENS = 1024
 MAX_RETRIES = 1
+
+# Fail fast at import time if the API key is missing.
+if not os.environ.get("DEEPSEEK_API_KEY"):
+    print(
+        "FATAL: DEEPSEEK_API_KEY environment variable is not set. "
+        "The AI service cannot start without it.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def _get_client() -> AsyncOpenAI:

@@ -9,8 +9,11 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - frontend
 
   api:
     build:
@@ -28,11 +31,24 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - LOG_FORMAT=json
     depends_on:
-      - postgres
-      - redis
-      - reader
-      - ai
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      reader:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
+    networks:
+      - frontend
+      - backend
 
   worker:
     build:
@@ -50,11 +66,17 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - LOG_FORMAT=json
     depends_on:
-      - postgres
-      - redis
-      - reader
-      - ai
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      reader:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - backend
 
   reader:
     build:
@@ -64,7 +86,15 @@ services:
       - NODE_ENV=production
       - LOG_LEVEL=info
       - POOL_SIZE=2
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
+    networks:
+      - backend
 
   ai:
     build: ./ai-service
@@ -72,8 +102,17 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
+    networks:
+      - backend
 
   postgres:
     image: postgres:16-alpine
@@ -84,14 +123,36 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./migrations/001_init.up.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U folio -d folio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
+    networks:
+      - backend
 
   redis:
     image: redis:7-alpine
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
     restart: unless-stopped
+    networks:
+      - backend
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
 
 volumes:
   pg_data:

@@ -8,6 +8,52 @@ const reader = new ReaderClient({
   verbose: process.env.NODE_ENV !== "production",
 });
 
+// SSRF protection: reject private/internal URLs
+function isPrivateURL(rawURL: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawURL);
+  } catch {
+    return true; // unparseable URLs are rejected
+  }
+
+  const proto = parsed.protocol;
+  if (proto !== "http:" && proto !== "https:") {
+    return true;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Block localhost variants
+  if (
+    hostname === "localhost" ||
+    hostname === "[::1]" ||
+    hostname.endsWith(".local")
+  ) {
+    return true;
+  }
+
+  // Block private/reserved IP ranges
+  const parts = hostname.split(".").map(Number);
+  if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
+    const [a, b] = parts;
+    if (
+      a === 127 || // loopback
+      a === 10 || // 10.0.0.0/8
+      (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12
+      (a === 192 && b === 168) || // 192.168.0.0/16
+      (a === 169 && b === 254) || // link-local / cloud metadata
+      a === 0 // 0.0.0.0/8
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+const MAX_TIMEOUT_MS = 120_000; // 2 minutes cap
+
 // Single URL scrape
 app.post("/scrape", async (req, res) => {
   const { url, timeout_ms } = req.body;
@@ -17,13 +63,18 @@ app.post("/scrape", async (req, res) => {
     return;
   }
 
+  if (isPrivateURL(url)) {
+    res.status(400).json({ error: "url is not allowed" });
+    return;
+  }
+
   try {
     const result = await reader.scrape({
       urls: [url],
       formats: ["markdown"],
       onlyMainContent: true,
       removeAds: true,
-      timeoutMs: timeout_ms || 30000,
+      timeoutMs: Math.min(timeout_ms || 30000, MAX_TIMEOUT_MS),
       maxRetries: 2,
     });
 

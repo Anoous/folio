@@ -50,8 +50,15 @@ func writeAuthError(w http.ResponseWriter, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
+// UserIDFromContext extracts the user ID from the request context.
+// Returns the user ID set by JWTAuth middleware. Returns empty string if not set
+// (should not happen for routes behind JWTAuth).
 func UserIDFromContext(ctx context.Context) string {
-	id, _ := ctx.Value(userIDKey).(string)
+	id, ok := ctx.Value(userIDKey).(string)
+	if !ok || id == "" {
+		slog.Error("UserIDFromContext: no user ID in context")
+		return ""
+	}
 	return id
 }
 

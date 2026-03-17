@@ -24,9 +24,9 @@ struct ImageView: View {
                                 showsFullScreen = true
                             }
                     } else if state.error != nil {
-                        imagePlaceholder(icon: "exclamationmark.triangle", text: "Image failed to load")
+                        imagePlaceholder(icon: "exclamationmark.triangle", text: String(localized: "image.loadFailed", defaultValue: "Image failed to load"))
                     } else {
-                        imagePlaceholder(icon: "photo", text: "Loading...")
+                        imagePlaceholder(icon: "photo", text: String(localized: "image.loading", defaultValue: "Loading..."))
                             .overlay {
                                 ProgressView()
                             }
@@ -36,7 +36,7 @@ struct ImageView: View {
                     ImageViewerOverlay(url: url, altText: altText)
                 }
             } else {
-                imagePlaceholder(icon: "photo.badge.exclamationmark", text: "Invalid image URL")
+                imagePlaceholder(icon: "photo.badge.exclamationmark", text: String(localized: "image.invalidURL", defaultValue: "Invalid image URL"))
             }
 
             // Alt text caption

@@ -104,12 +104,14 @@ func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req Submi
 		SourceType: string(sourceType),
 	})
 	if err != nil {
+		_ = s.quotaService.DecrementQuota(ctx, userID)
 		return nil, fmt.Errorf("create task: %w", err)
 	}
 
 	// Enqueue async crawl
 	crawlTask := worker.NewCrawlTask(article.ID, task.ID, req.URL, userID)
 	if _, err := s.asynqClient.EnqueueContext(ctx, crawlTask); err != nil {
+		_ = s.quotaService.DecrementQuota(ctx, userID)
 		return nil, fmt.Errorf("enqueue crawl: %w", err)
 	}
 

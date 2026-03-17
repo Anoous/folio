@@ -2,7 +2,7 @@ FROM node:22-slim AS build
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json* reader-local.tgz* ./
 RUN npm install
 
 COPY tsconfig.json ./
@@ -13,13 +13,15 @@ FROM node:22-slim
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json* reader-local.tgz* ./
 RUN npm install --omit=dev
 
 COPY --from=build /app/dist ./dist
 
 ENV NODE_ENV=production
 ENV PORT=3000
+
+USER node
 
 EXPOSE 3000
 

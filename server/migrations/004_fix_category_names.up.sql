@@ -1,0 +1,2 @@
+-- 004_fix_category_names.up.sql — No longer needed (categories are no longer pre-seeded).
+-- Kept as empty migration to preserve ordering.

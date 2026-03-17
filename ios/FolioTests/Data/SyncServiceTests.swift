@@ -28,6 +28,10 @@ private final class MockURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+private final class RequestPathRecorder: @unchecked Sendable {
+    var values: [String] = []
+}
+
 // MARK: - SyncService Tests
 
 final class SyncServiceTests: XCTestCase {
@@ -230,5 +234,84 @@ final class SyncServiceTests: XCTestCase {
         XCTAssertEqual(localTag.serverID, "tag-srv-swift")
         XCTAssertTrue(localTag.isAIGenerated)
         XCTAssertEqual(localTag.articleCount, 10)
+    }
+
+    // MARK: - performFullSync
+
+    @MainActor
+    func testPerformFullSync_pushesPendingUpdatesBeforeListingArticles() async throws {
+        let article = Article(url: "https://example.com/pending-update")
+        article.serverID = "server-1"
+        article.syncState = .pendingUpdate
+        article.isFavorite = true
+        context.insert(article)
+        try context.save()
+
+        let recorder = RequestPathRecorder()
+        MockURLProtocol.requestHandler = { request in
+            let path = request.url?.path ?? ""
+            recorder.values.append("\(request.httpMethod ?? "GET") \(path)")
+
+            switch (request.httpMethod ?? "GET", path) {
+            case ("PUT", "/api/v1/articles/server-1"):
+                return (Data(), self.makeResponse(statusCode: 200))
+            case ("GET", "/api/v1/categories"):
+                let json = """
+                {"data":[],"pagination":{"page":1,"per_page":20,"total":0}}
+                """.data(using: .utf8)!
+                return (json, self.makeResponse(statusCode: 200))
+            case ("GET", "/api/v1/tags"):
+                let json = """
+                {"data":[],"pagination":{"page":1,"per_page":20,"total":0}}
+                """.data(using: .utf8)!
+                return (json, self.makeResponse(statusCode: 200))
+            case ("GET", "/api/v1/articles"):
+                let json = """
+                {
+                  "data": [],
+                  "pagination": {"page": 1, "per_page": 50, "total": 0},
+                  "server_time": "2025-01-01T00:00:00Z",
+                  "sync_epoch": 1
+                }
+                """.data(using: .utf8)!
+                return (json, self.makeResponse(statusCode: 200))
+            case ("POST", "/api/v1/auth/refresh"):
+                let json = """
+                {
+                  "access_token":"new-token",
+                  "refresh_token":"new-refresh",
+                  "expires_in":3600,
+                  "user":{
+                    "id":"user-1",
+                    "email":"test@example.com",
+                    "nickname":"tester",
+                    "avatar_url":null,
+                    "subscription":"free",
+                    "subscription_expires_at":null,
+                    "monthly_quota":100,
+                    "current_month_count":1,
+                    "preferred_language":"en",
+                    "created_at":"2025-01-01T00:00:00Z",
+                    "updated_at":"2025-01-01T00:00:00Z",
+                    "sync_epoch":1
+                  }
+                }
+                """.data(using: .utf8)!
+                return (json, self.makeResponse(statusCode: 200))
+            default:
+                XCTFail("Unexpected request: \(request.httpMethod ?? "GET") \(path)")
+                return (Data(), self.makeResponse(statusCode: 500))
+            }
+        }
+
+        let syncService = SyncService(apiClient: apiClient, context: context)
+        await syncService.performFullSync()
+
+        let updateIndex = recorder.values.firstIndex(of: "PUT /api/v1/articles/server-1")
+        let listIndex = recorder.values.firstIndex(of: "GET /api/v1/articles")
+
+        XCTAssertNotNil(updateIndex)
+        XCTAssertNotNil(listIndex)
+        XCTAssertLessThan(updateIndex!, listIndex!)
     }
 }
