@@ -13,8 +13,8 @@ struct MarkdownRenderer: View {
     let textColor: Color
     let secondaryTextColor: Color
 
-    /// Pre-parsed views — computed once during init instead of on every `body` call.
-    private let parsedViews: [AnyView]
+    /// Pre-parsed blocks — computed once during init.
+    private let parsedBlocks: [MarkdownBlock]
 
     init(
         markdownText: String,
@@ -31,7 +31,6 @@ struct MarkdownRenderer: View {
         self.textColor = textColor
         self.secondaryTextColor = secondaryTextColor
 
-        // Parse the markdown document once and cache the resulting views.
         let document = Document(parsing: markdownText)
         var visitor = MarkdownSwiftUIVisitor(
             fontSize: fontSize,
@@ -40,13 +39,20 @@ struct MarkdownRenderer: View {
             textColor: textColor,
             secondaryTextColor: secondaryTextColor
         )
-        self.parsedViews = visitor.visitDocument(document)
+        self.parsedBlocks = visitor.visitDocument(document)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
-            ForEach(Array(parsedViews.enumerated()), id: \.offset) { _, view in
-                view
+            ForEach(parsedBlocks) { block in
+                MarkdownBlockView(
+                    block: block,
+                    fontSize: fontSize,
+                    lineSpacing: lineSpacing,
+                    fontFamily: fontFamily,
+                    textColor: textColor,
+                    secondaryTextColor: secondaryTextColor
+                )
             }
         }
     }
@@ -54,10 +60,10 @@ struct MarkdownRenderer: View {
 
 // MARK: - Visitor
 
-/// A `MarkupVisitor` that produces an array of `AnyView` for each top-level
+/// A `MarkupVisitor` that produces an array of `MarkdownBlock` for each top-level
 /// block element in the Markdown document.
 struct MarkdownSwiftUIVisitor: MarkupVisitor {
-    typealias Result = [AnyView]
+    typealias Result = [MarkdownBlock]
 
     let fontSize: CGFloat
     let lineSpacing: CGFloat
@@ -65,18 +71,39 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
     let textColor: Color
     let secondaryTextColor: Color
 
+    private var nextID = 0
+
+    init(
+        fontSize: CGFloat,
+        lineSpacing: CGFloat,
+        fontFamily: ReadingFontFamily,
+        textColor: Color,
+        secondaryTextColor: Color
+    ) {
+        self.fontSize = fontSize
+        self.lineSpacing = lineSpacing
+        self.fontFamily = fontFamily
+        self.textColor = textColor
+        self.secondaryTextColor = secondaryTextColor
+    }
+
+    private mutating func makeID() -> Int {
+        defer { nextID += 1 }
+        return nextID
+    }
+
     // MARK: - Document
 
-    mutating func defaultVisit(_ markup: any Markup) -> [AnyView] {
-        var result: [AnyView] = []
+    mutating func defaultVisit(_ markup: any Markup) -> [MarkdownBlock] {
+        var result: [MarkdownBlock] = []
         for child in markup.children {
             result.append(contentsOf: visit(child))
         }
         return result
     }
 
-    mutating func visitDocument(_ document: Document) -> [AnyView] {
-        var result: [AnyView] = []
+    mutating func visitDocument(_ document: Document) -> [MarkdownBlock] {
+        var result: [MarkdownBlock] = []
         for child in document.children {
             result.append(contentsOf: visit(child))
         }
@@ -85,159 +112,93 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
 
     // MARK: - Headings
 
-    mutating func visitHeading(_ heading: Heading) -> [AnyView] {
+    mutating func visitHeading(_ heading: Heading) -> [MarkdownBlock] {
         let text = collectInlineText(heading)
-        let font = Typography.readerHeadingFont(level: heading.level, family: fontFamily)
-        let view = text
-            .font(font)
-            .foregroundStyle(textColor)
-            .padding(.top, heading.level <= 2 ? Spacing.md : Spacing.sm)
-            .padding(.bottom, Spacing.xxs)
-
-        return [AnyView(view)]
+        return [.heading(id: makeID(), text: text, level: heading.level)]
     }
 
     // MARK: - Paragraph
 
-    mutating func visitParagraph(_ paragraph: Paragraph) -> [AnyView] {
+    mutating func visitParagraph(_ paragraph: Paragraph) -> [MarkdownBlock] {
         let hasImages = paragraph.children.contains { $0 is Markdown.Image }
 
         if !hasImages {
-            // Fast path: no images — render as single Text (links stay inline)
             let text = collectInlineText(paragraph)
-            let view = text
-                .font(fontFamily.font(size: fontSize))
-                .foregroundStyle(textColor)
-                .lineSpacing(lineSpacing)
-                .fixedSize(horizontal: false, vertical: true)
-            return [AnyView(view)]
+            return [.paragraph(id: makeID(), text: text)]
         }
 
-        // Split paragraph only at image boundaries; links stay inline with text
-        var result: [AnyView] = []
+        var result: [MarkdownBlock] = []
         var pendingInline: [any Markup] = []
 
         for child in paragraph.children {
             if let image = child as? Markdown.Image {
-                // Flush accumulated inline content as Text
                 flushInlineContent(&pendingInline, into: &result)
-                // Render image as ImageView
                 let urlString = image.source ?? ""
                 let altText = image.plainText
-                result.append(AnyView(ImageView(urlString: urlString, altText: altText)))
+                result.append(.image(id: makeID(), urlString: urlString, altText: altText))
             } else {
                 pendingInline.append(child)
             }
         }
-
-        // Flush any remaining inline content
         flushInlineContent(&pendingInline, into: &result)
-
         return result
     }
 
-    private mutating func flushInlineContent(_ pending: inout [any Markup], into result: inout [AnyView]) {
+    private mutating func flushInlineContent(_ pending: inout [any Markup], into result: inout [MarkdownBlock]) {
         guard !pending.isEmpty else { return }
         let text = pending.reduce(SwiftUI.Text("")) { acc, node in
             acc + inlineText(node)
         }
-        let view = text
-            .font(fontFamily.font(size: fontSize))
-            .foregroundStyle(textColor)
-            .lineSpacing(lineSpacing)
-            .fixedSize(horizontal: false, vertical: true)
-        result.append(AnyView(view))
+        result.append(.paragraph(id: makeID(), text: text))
         pending.removeAll()
     }
 
     // MARK: - Code Block
 
-    mutating func visitCodeBlock(_ codeBlock: CodeBlock) -> [AnyView] {
+    mutating func visitCodeBlock(_ codeBlock: CodeBlock) -> [MarkdownBlock] {
         let language = codeBlock.language ?? ""
         let code = codeBlock.code.trimmingCharacters(in: .newlines)
-
-        let view = CodeBlockView(code: code, language: language)
-        return [AnyView(view)]
+        return [.codeBlock(id: makeID(), code: code, language: language)]
     }
 
     // MARK: - Block Quote
 
-    mutating func visitBlockQuote(_ blockQuote: BlockQuote) -> [AnyView] {
-        var innerViews: [AnyView] = []
+    mutating func visitBlockQuote(_ blockQuote: BlockQuote) -> [MarkdownBlock] {
+        var children: [MarkdownBlock] = []
         for child in blockQuote.children {
-            innerViews.append(contentsOf: visit(child))
+            children.append(contentsOf: visit(child))
         }
-
-        let view = HStack(alignment: .top, spacing: Spacing.sm) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color.folio.accent.opacity(0.6))
-                .frame(width: 3)
-
-            VStack(alignment: .leading, spacing: Spacing.xs) {
-                ForEach(Array(innerViews.enumerated()), id: \.offset) { _, innerView in
-                    innerView
-                }
-            }
-        }
-        .padding(.vertical, Spacing.xs)
-
-        return [AnyView(view)]
+        return [.blockQuote(id: makeID(), children: children)]
     }
 
     // MARK: - Ordered List
 
-    mutating func visitOrderedList(_ orderedList: OrderedList) -> [AnyView] {
-        var views: [AnyView] = []
+    mutating func visitOrderedList(_ orderedList: OrderedList) -> [MarkdownBlock] {
+        var blocks: [MarkdownBlock] = []
         for (index, item) in orderedList.children.enumerated() {
             guard let listItem = item as? ListItem else { continue }
-            let itemViews = visitListItem(listItem)
-
-            let view = HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
-                Text("\(index + 1).")
-                    .font(fontFamily.font(size: fontSize))
-                    .foregroundStyle(secondaryTextColor)
-                    .frame(width: 24, alignment: .trailing)
-
-                VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    ForEach(Array(itemViews.enumerated()), id: \.offset) { _, itemView in
-                        itemView
-                    }
-                }
-            }
-            views.append(AnyView(view))
+            let itemBlocks = visitListItem(listItem)
+            blocks.append(.orderedListItem(id: makeID(), index: index + 1, children: itemBlocks))
         }
-        return views
+        return blocks
     }
 
     // MARK: - Unordered List
 
-    mutating func visitUnorderedList(_ unorderedList: UnorderedList) -> [AnyView] {
-        var views: [AnyView] = []
+    mutating func visitUnorderedList(_ unorderedList: UnorderedList) -> [MarkdownBlock] {
+        var blocks: [MarkdownBlock] = []
         for item in unorderedList.children {
             guard let listItem = item as? ListItem else { continue }
-            let itemViews = visitListItem(listItem)
-
-            let view = HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
-                Text("\u{2022}")
-                    .font(fontFamily.font(size: fontSize))
-                    .foregroundStyle(secondaryTextColor)
-                    .frame(width: 24, alignment: .trailing)
-
-                VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    ForEach(Array(itemViews.enumerated()), id: \.offset) { _, itemView in
-                        itemView
-                    }
-                }
-            }
-            views.append(AnyView(view))
+            let itemBlocks = visitListItem(listItem)
+            blocks.append(.unorderedListItem(id: makeID(), children: itemBlocks))
         }
-        return views
+        return blocks
     }
 
     // MARK: - List Item
 
-    mutating func visitListItem(_ listItem: ListItem) -> [AnyView] {
-        var result: [AnyView] = []
+    mutating func visitListItem(_ listItem: ListItem) -> [MarkdownBlock] {
+        var result: [MarkdownBlock] = []
         for child in listItem.children {
             result.append(contentsOf: visit(child))
         }
@@ -246,15 +207,13 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
 
     // MARK: - Thematic Break
 
-    mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) -> [AnyView] {
-        let view = Divider()
-            .padding(.vertical, Spacing.sm)
-        return [AnyView(view)]
+    mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) -> [MarkdownBlock] {
+        [.thematicBreak(id: makeID())]
     }
 
     // MARK: - Table
 
-    mutating func visitTable(_ table: Markdown.Table) -> [AnyView] {
+    mutating func visitTable(_ table: Markdown.Table) -> [MarkdownBlock] {
         var headerRow: [String] = []
         var bodyRows: [[String]] = []
 
@@ -280,32 +239,25 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
             }
         }
 
-        let view = TableView(headers: headerRow, rows: bodyRows)
-        return [AnyView(view)]
+        return [.table(id: makeID(), headers: headerRow, rows: bodyRows)]
     }
 
     // MARK: - Image
 
-    mutating func visitImage(_ image: Markdown.Image) -> [AnyView] {
+    mutating func visitImage(_ image: Markdown.Image) -> [MarkdownBlock] {
         let urlString = image.source ?? ""
         let altText = image.plainText
-
-        let view = ImageView(urlString: urlString, altText: altText)
-        return [AnyView(view)]
+        return [.image(id: makeID(), urlString: urlString, altText: altText)]
     }
 
-    // MARK: - HTML Block (pass through as text)
+    // MARK: - HTML Block
 
-    mutating func visitHTMLBlock(_ html: HTMLBlock) -> [AnyView] {
-        let view = Text(html.rawHTML)
-            .font(Typography.articleCode)
-            .foregroundStyle(secondaryTextColor)
-        return [AnyView(view)]
+    mutating func visitHTMLBlock(_ html: HTMLBlock) -> [MarkdownBlock] {
+        [.htmlBlock(id: makeID(), rawHTML: html.rawHTML)]
     }
 
     // MARK: - Inline Text Collection
 
-    /// Recursively collects inline markup children into a single SwiftUI `Text`.
     private func collectInlineText(_ markup: any Markup) -> SwiftUI.Text {
         var result = SwiftUI.Text("")
         for child in markup.children {
@@ -327,12 +279,10 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
                 .foregroundStyle(Color.folio.accent)
         } else if let link = markup as? Markdown.Link {
             if let dest = link.destination, let url = URL(string: dest) {
-                // Tappable inline link via AttributedString
                 var attrStr = AttributedString(plainText(link))
                 attrStr.link = url
                 return Text(attrStr)
             }
-            // Fallback: style link text distinctly when URL is invalid
             return collectInlineText(link)
                 .foregroundStyle(Color.folio.link)
                 .underline()
@@ -341,13 +291,11 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
         } else if markup is LineBreak {
             return Text("\n")
         } else if let image = markup as? Markdown.Image {
-            // Inline image reference — display alt text
             return Text("[\(image.plainText)]")
                 .foregroundStyle(Color.folio.link)
         } else if let strikethrough = markup as? Strikethrough {
             return collectInlineText(strikethrough).strikethrough()
         } else {
-            // Fallback: collect children
             var result = SwiftUI.Text("")
             for child in markup.children {
                 result = result + inlineText(child)
@@ -373,26 +321,16 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
 // MARK: - Content Preprocessing
 
 extension MarkdownRenderer {
-    /// Cleans up scraped markdown before rendering:
-    /// - Strips leading text that duplicates the article title
-    /// - Removes trailing social-media metadata (timestamps, view counts)
     static func preprocessed(
         _ markdown: String,
         title: String?
     ) -> String {
         var text = markdown
 
-        // 1. Strip leading duplicate title
-        //    Scrapers often emit "Author on X: \"full tweet...\" / X" followed
-        //    by the same content again.  Detect and remove the prefix.
         if let title, !title.isEmpty {
-            // Normalize for comparison (trim, collapse whitespace)
             let normalizedTitle = title
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-
             let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            // Case 1: markdown starts with "Title\n" — strip that first line
             if trimmedText.hasPrefix(normalizedTitle) {
                 let afterTitle = trimmedText.dropFirst(normalizedTitle.count)
                 text = afterTitle
@@ -400,11 +338,9 @@ extension MarkdownRenderer {
             }
         }
 
-        // 2. Strip trailing social-media metadata lines
-        //    e.g. "[5:15 AM · Feb 22, 2026](…)" or "[1,934 Views](…/analytics)"
         let metadataPatterns: [String] = [
-            #"\[[\d,]+ Views?\]\([^\)]+/analytics\)"#,      // view counts
-            #"\[\d{1,2}:\d{2} [AP]M · .+?\]\([^\)]+\)"#,   // timestamps
+            #"\[[\d,]+ Views?\]\([^\)]+/analytics\)"#,
+            #"\[\d{1,2}:\d{2} [AP]M · .+?\]\([^\)]+\)"#,
         ]
         for pattern in metadataPatterns {
             if let regex = try? NSRegularExpression(pattern: pattern) {

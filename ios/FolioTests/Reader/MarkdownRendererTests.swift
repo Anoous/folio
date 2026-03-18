@@ -134,7 +134,7 @@ final class MarkdownRendererTests: XCTestCase {
 
     // MARK: - Visitor Tests
 
-    private func visitMarkdown(_ md: String) -> [AnyView] {
+    private func visitMarkdown(_ md: String) -> [MarkdownBlock] {
         let doc = Document(parsing: md)
         var visitor = MarkdownSwiftUIVisitor(
             fontSize: 17,
@@ -146,59 +146,88 @@ final class MarkdownRendererTests: XCTestCase {
         return visitor.visitDocument(doc)
     }
 
-    func testVisitParagraph_returnsOneView() {
-        let views = visitMarkdown("Hello world")
-        XCTAssertEqual(views.count, 1)
+    func testVisitParagraph_returnsOneBlock() {
+        let blocks = visitMarkdown("Hello world")
+        XCTAssertEqual(blocks.count, 1)
+        if case .paragraph = blocks.first {} else {
+            XCTFail("Expected paragraph block")
+        }
     }
 
     func testVisitParagraph_mixedTextAndImage() {
-        let views = visitMarkdown("Before ![alt](https://example.com/img.png) After")
-        // Should produce: text("Before "), image, text(" After")
-        XCTAssertEqual(views.count, 3)
+        let blocks = visitMarkdown("Before ![alt](https://example.com/img.png) After")
+        XCTAssertEqual(blocks.count, 3)
     }
 
     func testVisitHeading_allLevels() {
         for level in 1...6 {
             let hashes = String(repeating: "#", count: level)
-            let views = visitMarkdown("\(hashes) Heading \(level)")
-            XCTAssertEqual(views.count, 1, "H\(level) should produce 1 view")
+            let blocks = visitMarkdown("\(hashes) Heading \(level)")
+            XCTAssertEqual(blocks.count, 1, "H\(level) should produce 1 block")
+            if case .heading(_, _, let blockLevel) = blocks.first {
+                XCTAssertEqual(blockLevel, level)
+            } else {
+                XCTFail("Expected heading block for H\(level)")
+            }
         }
     }
 
-    func testVisitCodeBlock_returnsView() {
-        let views = visitMarkdown("```swift\nlet x = 1\n```")
-        XCTAssertEqual(views.count, 1)
+    func testVisitCodeBlock_returnsBlock() {
+        let blocks = visitMarkdown("```swift\nlet x = 1\n```")
+        XCTAssertEqual(blocks.count, 1)
+        if case .codeBlock(_, let code, let lang) = blocks.first {
+            XCTAssertEqual(lang, "swift")
+            XCTAssertTrue(code.contains("let x = 1"))
+        } else {
+            XCTFail("Expected codeBlock")
+        }
     }
 
-    func testVisitBlockQuote_returnsView() {
-        let views = visitMarkdown("> This is a quote")
-        XCTAssertEqual(views.count, 1)
+    func testVisitBlockQuote_returnsBlock() {
+        let blocks = visitMarkdown("> This is a quote")
+        XCTAssertEqual(blocks.count, 1)
+        if case .blockQuote = blocks.first {} else {
+            XCTFail("Expected blockQuote block")
+        }
     }
 
     func testVisitOrderedList_itemCount() {
-        let views = visitMarkdown("1. A\n2. B\n3. C")
-        XCTAssertEqual(views.count, 3)
+        let blocks = visitMarkdown("1. A\n2. B\n3. C")
+        XCTAssertEqual(blocks.count, 3)
+        if case .orderedListItem(_, let index, _) = blocks.first {
+            XCTAssertEqual(index, 1)
+        } else {
+            XCTFail("Expected orderedListItem")
+        }
     }
 
     func testVisitUnorderedList_itemCount() {
-        let views = visitMarkdown("- A\n- B")
-        XCTAssertEqual(views.count, 2)
+        let blocks = visitMarkdown("- A\n- B")
+        XCTAssertEqual(blocks.count, 2)
+        if case .unorderedListItem = blocks.first {} else {
+            XCTFail("Expected unorderedListItem")
+        }
     }
 
-    func testVisitThematicBreak_returnsView() {
-        let views = visitMarkdown("---")
-        XCTAssertEqual(views.count, 1)
+    func testVisitThematicBreak_returnsBlock() {
+        let blocks = visitMarkdown("---")
+        XCTAssertEqual(blocks.count, 1)
+        if case .thematicBreak = blocks.first {} else {
+            XCTFail("Expected thematicBreak")
+        }
     }
 
     func testEmptyMarkdown_returnsEmpty() {
-        let views = visitMarkdown("")
-        XCTAssertEqual(views.count, 0)
+        let blocks = visitMarkdown("")
+        XCTAssertEqual(blocks.count, 0)
     }
 
-    func testInlineFormatting_singleTextView() {
-        // No images = fast path: single Text view
-        let views = visitMarkdown("**bold** *italic* `code`")
-        XCTAssertEqual(views.count, 1)
+    func testInlineFormatting_singleBlock() {
+        let blocks = visitMarkdown("**bold** *italic* `code`")
+        XCTAssertEqual(blocks.count, 1)
+        if case .paragraph = blocks.first {} else {
+            XCTFail("Expected paragraph block")
+        }
     }
 
     func testVisitDocument_complexDoc() {
@@ -214,8 +243,7 @@ final class MarkdownRendererTests: XCTestCase {
         - item1
         - item2
         """
-        let views = visitMarkdown(md)
-        // heading(1) + paragraph(1) + code block(1) + 2 list items(2) = 5
-        XCTAssertEqual(views.count, 5)
+        let blocks = visitMarkdown(md)
+        XCTAssertEqual(blocks.count, 5)
     }
 }
