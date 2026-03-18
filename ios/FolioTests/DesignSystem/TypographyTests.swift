@@ -56,4 +56,13 @@ final class TypographyTests: XCTestCase {
         // Article body line spacing
         XCTAssertEqual(Typography.articleBodyLineSpacing, 11.9, accuracy: 0.1)
     }
+
+    func testScaledArticleMetricsDefaults() {
+        let metrics = ScaledArticleMetrics()
+        XCTAssertEqual(metrics.titleSize, 28)
+        XCTAssertEqual(metrics.bodySize, 17)
+        XCTAssertEqual(metrics.codeSize, 14)
+        XCTAssertEqual(metrics.quoteSize, 16)
+        XCTAssertEqual(metrics.lineSpacing, 11.9, accuracy: 0.1)
+    }
 }

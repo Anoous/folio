@@ -15,6 +15,7 @@ struct ReaderView: View {
     @State private var showsDeleteConfirmation = false
     @Environment(\.openURL) private var openURL
     @State private var summaryExpanded = false
+    @State private var metrics = ScaledArticleMetrics()
 
     // Reading preferences
     @AppStorage(ReadingPreferenceKeys.fontSize) private var fontSize: Double = 17
@@ -106,7 +107,7 @@ struct ReaderView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     // Article title
                     Text(article.displayTitle)
-                        .font(Typography.articleTitle)
+                        .font(.custom("NotoSerifSC-Bold", size: metrics.titleSize))
                         .foregroundStyle(readingTheme.textColor)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 40)

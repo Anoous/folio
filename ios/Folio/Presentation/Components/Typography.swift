@@ -74,3 +74,13 @@ enum Typography {
         }
     }
 }
+
+/// Dynamic Type–aware article metrics.
+/// Instantiate with `@State private var metrics = ScaledArticleMetrics()` in reader views.
+struct ScaledArticleMetrics {
+    @ScaledMetric(relativeTo: .title) var titleSize: CGFloat = 28
+    @ScaledMetric(relativeTo: .body)  var bodySize: CGFloat = 17
+    @ScaledMetric(relativeTo: .caption) var codeSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .body)  var quoteSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .body)  var lineSpacing: CGFloat = 11.9
+}
