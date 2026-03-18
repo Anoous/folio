@@ -3,3 +3,5 @@ pytest>=8.0,<9.0
 pytest-html>=4.0,<5.0
 pytest-timeout>=2.3,<3.0
 pytest-ordering>=0.6
+psycopg2-binary>=2.9,<3.0
+PyJWT>=2.8,<3.0

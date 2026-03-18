@@ -44,10 +44,6 @@ class FolioAPIClient:
     def health(self) -> httpx.Response:
         return self.get("/health", authenticated=False)
 
-    def dev_login(self, alias: str | None = None) -> httpx.Response:
-        body = {"alias": alias} if alias else None
-        return self.post("/api/v1/auth/dev", json=body, authenticated=False)
-
     def refresh_token(self, refresh_token: str) -> httpx.Response:
         return self.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token}, authenticated=False)
 

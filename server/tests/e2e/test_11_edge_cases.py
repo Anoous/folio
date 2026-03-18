@@ -3,7 +3,6 @@
 import pytest
 
 from helpers.api_client import FolioAPIClient
-from helpers.auth import dev_login
 from helpers.test_urls import unique_url, UNICODE_URL, URL_WITH_PARAMS, VERY_LONG_URL
 
 

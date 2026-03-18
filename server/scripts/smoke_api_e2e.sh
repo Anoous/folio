@@ -6,6 +6,9 @@ POLL_INTERVAL_SECONDS="${POLL_INTERVAL_SECONDS:-2}"
 POLL_MAX_SECONDS="${POLL_MAX_SECONDS:-90}"
 TEST_URL="${TEST_URL:-https://example.com/?folio_smoke=$(date +%s)}"
 
+# JWT secret must match the running server
+JWT_SECRET="${JWT_SECRET:-dev-jwt-secret-change-in-production}"
+
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "missing required command: $1" >&2
@@ -15,15 +18,34 @@ require_cmd() {
 
 require_cmd curl
 require_cmd jq
+require_cmd python3
 
 echo "[1/7] health"
 curl -fsS "$BASE_URL/health" | jq -e '.status == "ok"' >/dev/null
 
-echo "[2/7] auth/dev"
-AUTH_JSON="$(curl -fsS -X POST "$BASE_URL/api/v1/auth/dev")"
-ACCESS_TOKEN="$(echo "$AUTH_JSON" | jq -r '.access_token')"
-if [[ -z "$ACCESS_TOKEN" || "$ACCESS_TOKEN" == "null" ]]; then
-  echo "auth/dev failed: $AUTH_JSON" >&2
+echo "[2/7] generate test user + token"
+# Create a test user in the database and generate a JWT
+SMOKE_USER_ID="$(python3 -c "import uuid; print(uuid.uuid4())")"
+
+# Insert user via docker exec (psql is not installed on host)
+PG_CONTAINER="$(docker ps --filter "publish=5432" -q 2>/dev/null || true)"
+if [[ -n "$PG_CONTAINER" ]]; then
+  docker exec "$PG_CONTAINER" psql -U folio -d folio -c \
+    "INSERT INTO users (id, apple_id, email, nickname) VALUES ('$SMOKE_USER_ID', 'smoke-test-user', 'smoke@folio.test', 'Smoke') ON CONFLICT (apple_id) DO UPDATE SET id = users.id RETURNING id" \
+    -t -A 2>/dev/null | head -1 | read SMOKE_USER_ID || true
+fi
+
+ACCESS_TOKEN="$(python3 -c "
+import json, hmac, hashlib, base64, time
+header = base64.urlsafe_b64encode(json.dumps({'alg':'HS256','typ':'JWT'}).encode()).rstrip(b'=').decode()
+now = int(time.time())
+payload = base64.urlsafe_b64encode(json.dumps({'uid': '$SMOKE_USER_ID', 'type':'access','iss':'folio','iat':now,'exp':now+7200}).encode()).rstrip(b'=').decode()
+msg = f'{header}.{payload}'.encode()
+sig = base64.urlsafe_b64encode(hmac.new('$JWT_SECRET'.encode(), msg, hashlib.sha256).digest()).rstrip(b'=').decode()
+print(f'{header}.{payload}.{sig}')
+")"
+if [[ -z "$ACCESS_TOKEN" ]]; then
+  echo "token generation failed" >&2
   exit 1
 fi
 

@@ -128,7 +128,6 @@ start_api() {
   READER_URL="$READER_URL" \
   AI_SERVICE_URL="$AI_URL" \
   JWT_SECRET="e2e-test-secret-key-not-for-production" \
-  DEV_MODE="true" \
   PORT="18080" \
   /tmp/folio-e2e-server 2>&1 | sed 's/^/  [api] /' &
   PIDS+=($!)
@@ -192,6 +191,10 @@ fi
 if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
   PYTEST_ARGS+=("${EXTRA_ARGS[@]}")
 fi
+
+# Export DB URL and JWT secret so test helpers can create users + tokens directly
+export E2E_DATABASE_URL="postgresql://folio:folio_test@localhost:15432/folio_test"
+export E2E_JWT_SECRET="e2e-test-secret-key-not-for-production"
 
 info "Running E2E tests ..."
 echo ""

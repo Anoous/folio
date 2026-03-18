@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from helpers.api_client import FolioAPIClient
-from helpers.auth import dev_login
+from helpers.test_auth import test_login
 from helpers.polling import submit_and_wait
 from helpers.test_urls import unique_url
 
@@ -44,9 +44,9 @@ def ai_url(request) -> str:
 
 @pytest.fixture(scope="session")
 def api(base_url) -> FolioAPIClient:
-    """Session-scoped authenticated API client (default dev user)."""
+    """Session-scoped authenticated API client (default test user)."""
     client = FolioAPIClient(base_url)
-    dev_login(client)
+    test_login(client)
     yield client
     client.close()
 
@@ -54,16 +54,14 @@ def api(base_url) -> FolioAPIClient:
 @pytest.fixture(scope="session")
 def auth_data(api) -> dict:
     """Re-login to capture the full auth response (tokens + user)."""
-    resp = api.dev_login()
-    assert resp.status_code == 200
-    return resp.json()
+    return test_login(api)
 
 
 @pytest.fixture(scope="function")
 def fresh_api(base_url) -> FolioAPIClient:
     """Function-scoped authenticated API client (fresh per test)."""
     client = FolioAPIClient(base_url)
-    dev_login(client)
+    test_login(client)
     yield client
     client.close()
 

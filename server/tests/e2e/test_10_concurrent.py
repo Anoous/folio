@@ -4,7 +4,7 @@ import concurrent.futures
 import pytest
 
 from helpers.api_client import FolioAPIClient
-from helpers.auth import dev_login
+from helpers.test_auth import test_login
 from helpers.polling import poll_until_done
 from helpers.test_urls import unique_urls
 
@@ -15,7 +15,7 @@ class TestConcurrent:
     def test_concurrent_submissions(self, base_url):
         """Submit 5 URLs concurrently; all should be accepted."""
         client = FolioAPIClient(base_url)
-        dev_login(client)
+        test_login(client)
 
         urls = unique_urls(5, prefix="concurrent")
         results = []
@@ -40,7 +40,7 @@ class TestConcurrent:
     def test_concurrent_pipelines(self, base_url):
         """Submit 3 URLs concurrently and verify all pipelines complete."""
         client = FolioAPIClient(base_url)
-        dev_login(client)
+        test_login(client)
 
         urls = unique_urls(3, prefix="conc-pipe")
         task_ids = []
