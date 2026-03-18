@@ -57,6 +57,7 @@ struct WebViewContainer: View {
                             .foregroundStyle(canGoBack ? Color.folio.accent : Color.folio.textTertiary)
                     }
                     .disabled(!canGoBack)
+                    .accessibilityLabel(String(localized: "web.goBack", defaultValue: "Go back"))
 
                     Button {
                         webView?.goForward()
@@ -65,6 +66,7 @@ struct WebViewContainer: View {
                             .foregroundStyle(canGoForward ? Color.folio.accent : Color.folio.textTertiary)
                     }
                     .disabled(!canGoForward)
+                    .accessibilityLabel(String(localized: "web.goForward", defaultValue: "Go forward"))
 
                     Spacer()
 
@@ -75,6 +77,7 @@ struct WebViewContainer: View {
                             Image(systemName: "xmark")
                                 .foregroundStyle(Color.folio.textSecondary)
                         }
+                        .accessibilityLabel(String(localized: "web.stopLoading", defaultValue: "Stop loading"))
                     } else {
                         Button {
                             webView?.reload()
@@ -82,6 +85,7 @@ struct WebViewContainer: View {
                             Image(systemName: "arrow.clockwise")
                                 .foregroundStyle(Color.folio.textSecondary)
                         }
+                        .accessibilityLabel(String(localized: "web.reload", defaultValue: "Reload"))
                     }
 
                     Button {
@@ -91,6 +95,7 @@ struct WebViewContainer: View {
                         Image(systemName: "safari")
                             .foregroundStyle(Color.folio.textSecondary)
                     }
+                    .accessibilityLabel(String(localized: "web.openInSafari", defaultValue: "Open in Safari"))
                 }
             }
         }

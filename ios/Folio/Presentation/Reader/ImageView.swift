@@ -20,6 +20,10 @@ struct ImageView: View {
                             .aspectRatio(contentMode: .fit)
                             .frame(maxWidth: .infinity, minHeight: 1)
                             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityLabel(altText.isEmpty
+                                ? String(localized: "image.viewFull", defaultValue: "View full size")
+                                : altText)
                             .onTapGesture {
                                 showsFullScreen = true
                             }
