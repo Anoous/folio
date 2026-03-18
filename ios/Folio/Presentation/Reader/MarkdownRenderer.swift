@@ -120,7 +120,7 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
     // MARK: - Paragraph
 
     mutating func visitParagraph(_ paragraph: Paragraph) -> [MarkdownBlock] {
-        let hasImages = paragraph.children.contains { $0 is Markdown.Image }
+        let hasImages = paragraph.children.contains { containsImage($0) }
 
         if !hasImages {
             let text = collectInlineText(paragraph)
@@ -131,7 +131,7 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
         var pendingInline: [any Markup] = []
 
         for child in paragraph.children {
-            if let image = child as? Markdown.Image {
+            if let image = extractImage(child) {
                 flushInlineContent(&pendingInline, into: &result)
                 let urlString = image.source ?? ""
                 let altText = image.plainText
@@ -142,6 +142,24 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
         }
         flushInlineContent(&pendingInline, into: &result)
         return result
+    }
+
+    /// Check if a node is or contains an image (e.g. `[![alt](img)](link)`).
+    private func containsImage(_ node: any Markup) -> Bool {
+        if node is Markdown.Image { return true }
+        if let link = node as? Markdown.Link {
+            return link.children.contains { $0 is Markdown.Image }
+        }
+        return false
+    }
+
+    /// Extract the image from a node — either a direct Image or an Image inside a Link.
+    private func extractImage(_ node: any Markup) -> Markdown.Image? {
+        if let image = node as? Markdown.Image { return image }
+        if let link = node as? Markdown.Link {
+            return link.children.first { $0 is Markdown.Image } as? Markdown.Image
+        }
+        return nil
     }
 
     private mutating func flushInlineContent(_ pending: inout [any Markup], into result: inout [MarkdownBlock]) {
@@ -278,6 +296,12 @@ struct MarkdownSwiftUIVisitor: MarkupVisitor {
                 .font(Typography.articleCode)
                 .foregroundStyle(Color.folio.accent)
         } else if let link = markup as? Markdown.Link {
+            // Link wrapping an image — show as image placeholder text
+            if link.children.contains(where: { $0 is Markdown.Image }),
+               let image = link.children.first(where: { $0 is Markdown.Image }) as? Markdown.Image {
+                return Text("[\(image.plainText)]")
+                    .foregroundStyle(Color.folio.link)
+            }
             if let dest = link.destination, let url = URL(string: dest) {
                 var attrStr = AttributedString(plainText(link))
                 attrStr.link = url

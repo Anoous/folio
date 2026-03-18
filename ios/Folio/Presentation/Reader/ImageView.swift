@@ -10,6 +10,8 @@ struct ImageView: View {
 
     @State private var showsFullScreen = false
 
+    private static let genericAltTexts: Set<String> = ["image", "img", "photo", "picture", "图片", "图像"]
+
     var body: some View {
         VStack(spacing: Spacing.xxs) {
             if let url = URL(string: urlString) {
@@ -43,8 +45,8 @@ struct ImageView: View {
                 imagePlaceholder(icon: "photo.badge.exclamationmark", text: String(localized: "image.invalidURL", defaultValue: "Invalid image URL"))
             }
 
-            // Alt text caption
-            if !altText.isEmpty {
+            // Alt text caption — hide generic placeholders like "Image", "image", "图片"
+            if !altText.isEmpty, !Self.genericAltTexts.contains(altText.lowercased()) {
                 Text(altText)
                     .font(Typography.caption)
                     .foregroundStyle(Color.folio.textTertiary)

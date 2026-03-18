@@ -1,266 +1,330 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件为 Claude Code (claude.ai/code) 提供本仓库的开发指引。
 
-## Project Overview
+## 项目概述
 
-Folio (页集) is a local-first personal knowledge curation iOS app. Users share links from any app (WeChat, Twitter, browsers), and Folio extracts content, auto-classifies, tags, summarizes via AI, and stores everything locally on-device with full-text search.
+Folio（页集）是一款本地优先的个人知识策展 iOS 应用。用户从任意 App（微信、Twitter、浏览器）分享链接，Folio 自动提取内容、分类、打标签、AI 摘要，并在设备本地存储，支持全文搜索。
 
-**Core flow**: Collect → Organize → Find (zero configuration)
+**核心流程**：收集 → 整理 → 查找（零配置）
 
-**Status**: MVP implementation complete — iOS app (58 source files + 5 shared), Go backend, Reader service, AI service, E2E test suite (14 test files), iOS unit tests (35 test files).
+**当前状态**：MVP 实现完成 — iOS 应用（58 源文件 + 5 共享文件）、Go 后端、Reader 服务、AI 服务、E2E 测试套件（14 个测试文件）、iOS 单元测试（35 个测试文件）。
 
-## Repository Structure
+## 仓库结构
 
 ```
 folio/
 ├── CLAUDE.md
 ├── docs/
-│   ├── design/prd.md              # PRD: 9 features (F1-F9), subscription tiers
+│   ├── design/prd.md              # PRD：9 个功能（F1-F9）、订阅等级
 │   ├── architecture/
-│   │   ├── system-design.md       # System architecture, data models
-│   │   └── api-contract.md        # API contracts
-│   ├── interaction/core-flows.md  # UI/UX flows, screen mockups
-│   ├── ios-mvp-plan.md            # MVP task breakdown (50 iOS + 22 backend tasks)
-│   └── local-deploy.md            # Local deployment guide
-├── ios/                           # iOS app
-│   ├── project.yml                # XcodeGen project definition
+│   │   ├── system-design.md       # 系统架构、数据模型
+│   │   └── api-contract.md        # API 契约
+│   ├── interaction/core-flows.md  # UI/UX 流程、界面原型
+│   ├── ios-mvp-plan.md            # MVP 任务拆解（50 iOS + 22 后端任务）
+│   └── local-deploy.md            # 本地部署指南
+├── ios/                           # iOS 应用
+│   ├── project.yml                # XcodeGen 项目定义
 │   ├── Folio.xcodeproj/
-│   ├── Folio/                     # Main app target (58 Swift files)
-│   ├── ShareExtension/            # Share Extension target (2 Swift files)
-│   ├── FolioTests/                # Unit tests (35 Swift files)
-│   └── Shared/                    # Shared code between app & extension (5 Swift files)
+│   ├── Folio/                     # 主 App Target（58 个 Swift 文件）
+│   ├── ShareExtension/            # Share Extension Target（2 个 Swift 文件）
+│   ├── FolioTests/                # 单元测试（35 个 Swift 文件）
+│   └── Shared/                    # App 与 Extension 共享代码（5 个 Swift 文件）
 └── server/
-    ├── cmd/server/main.go         # Go API + Worker entry point
-    ├── internal/                   # Go packages (api, service, repository, worker, client, config, domain)
-    ├── migrations/                 # PostgreSQL migrations (001_init.up.sql)
-    ├── reader-service/             # Node.js content scraping (TypeScript + Express)
-    ├── ai-service/                 # Python AI analysis (FastAPI + DeepSeek)
-    ├── tests/e2e/                  # E2E test suite (Python pytest, 14 test files)
+    ├── cmd/server/main.go         # Go API + Worker 入口
+    ├── internal/                   # Go 包（api, service, repository, worker, client, config, domain）
+    ├── migrations/                 # PostgreSQL 迁移（001_init.up.sql）
+    ├── reader-service/             # Node.js 内容抓取（TypeScript + Express）
+    ├── ai-service/                 # Python AI 分析（FastAPI + DeepSeek）
+    ├── tests/e2e/                  # E2E 测试套件（Python pytest，14 个测试文件）
     ├── scripts/
-    │   ├── dev-start.sh            # One-command local dev startup
-    │   ├── run_e2e.sh              # Full E2E test runner
-    │   ├── smoke_api_e2e.sh        # Quick API smoke test
-    │   └── mock_ai_service.py      # Deterministic mock AI for local testing
-    ├── docker-compose.yml          # Production (Caddy + API + Reader + AI + PG + Redis)
-    ├── docker-compose.dev.yml      # Dev (PostgreSQL :5432 + Redis :6380 only)
-    ├── docker-compose.test.yml     # E2E test (isolated ports 15432/16379)
-    ├── Dockerfile                  # Multi-stage Go API build
-    ├── Caddyfile                   # Reverse proxy config
-    └── .env.example                # Environment variable template
+    │   ├── dev-start.sh            # 一键本地开发启动
+    │   ├── run_e2e.sh              # 完整 E2E 测试运行器
+    │   ├── smoke_api_e2e.sh        # 快速 API 冒烟测试
+    │   └── mock_ai_service.py      # 本地测试用确定性 Mock AI
+    ├── docker-compose.yml          # 生产环境（Caddy + API + Reader + AI + PG + Redis）
+    ├── docker-compose.dev.yml      # 开发环境（PostgreSQL :5432 + Redis :6380）
+    ├── docker-compose.test.yml     # E2E 测试（隔离端口 15432/16379）
+    ├── Dockerfile                  # 多阶段 Go API 构建
+    ├── Caddyfile                   # 反向代理配置
+    └── .env.example                # 环境变量模板
 ```
 
-## Architecture
+## 架构
 
-Four-tier system:
+四层系统：
 
-### 1. iOS Client
+### 1. iOS 客户端
 
-- **Stack**: Swift 5.9+ / SwiftUI / SwiftData / SQLite FTS5
-- **Pattern**: MVVM + Clean Architecture (Presentation → Domain → Data)
-- **Deployment target**: iOS 17.0
-- **Xcode**: 16.2, project generated via XcodeGen (`ios/project.yml`)
-- **Bundle IDs**: `com.folio.app` (main), `com.folio.app.share-extension`
-- **App Group**: `group.com.folio.app` (shared data between app & extension)
+- **技术栈**：Swift 5.9+ / SwiftUI / SwiftData / SQLite FTS5
+- **架构模式**：MVVM + Clean Architecture（Presentation → Domain → Data）
+- **部署目标**：iOS 17.0
+- **Xcode**：16.2，通过 XcodeGen 生成项目（`ios/project.yml`）
+- **Bundle IDs**：`com.folio.app`（主应用）、`com.folio.app.share-extension`
+- **App Group**：`group.com.folio.app`（主应用与 Extension 共享数据）
 
-**Targets**:
-- `Folio` — main app (SwiftUI lifecycle, AppDelegate adapter)
-- `ShareExtension` — share sheet entry point (120MB memory limit)
-- `FolioTests` — unit tests
+**Targets**：
+- `Folio` — 主应用（SwiftUI 生命周期，AppDelegate 适配器）
+- `ShareExtension` — 分享面板入口（120MB 内存限制）
+- `FolioTests` — 单元测试
 
-**Dependencies** (Swift Package Manager):
-- `apple/swift-markdown` ≥ 0.5.0 — Markdown rendering
-- `kean/Nuke` ≥ 12.8.0 — Image loading (Nuke + NukeUI)
-- `kishikawakatsumi/KeychainAccess` ≥ 4.2.2 — Secure credential storage
-- `scinfu/SwiftSoup` ≥ 2.7.0 — HTML parsing for client-side content extraction
+**依赖**（Swift Package Manager）：
+- `apple/swift-markdown` ≥ 0.5.0 — Markdown 渲染
+- `kean/Nuke` ≥ 12.8.0 — 图片加载（Nuke + NukeUI）
+- `kishikawakatsumi/KeychainAccess` ≥ 4.2.2 — 安全凭证存储
+- `scinfu/SwiftSoup` ≥ 2.7.0 — HTML 解析，用于客户端内容提取
 
-**App structure**:
-- Single NavigationStack (no TabView): HomeView with inline `.searchable()` for search, SettingsView accessible via toolbar gear icon
-- Onboarding flow (4 pages + PermissionView) → Dev Login button available in DEBUG builds
-- `APIClient.defaultBaseURL` = `http://localhost:8080` in DEBUG, `https://api.folio.app` in RELEASE
-- OfflineQueueManager for pending articles, SyncService for server sync
+**应用结构**：
+- 单 NavigationStack（无 TabView）：HomeView 内联 `.searchable()` 搜索，SettingsView 通过工具栏齿轮图标进入
+- 引导流程（4 页 + PermissionView）→ DEBUG 构建下可用 Dev Login 按钮
+- `APIClient.defaultBaseURL` = DEBUG 下 `http://localhost:8080`，RELEASE 下 `https://api.folio.app`
+- OfflineQueueManager 管理待处理文章，SyncService 负责服务器同步
 
-**Key iOS source paths**:
-- `ios/Folio/App/` — FolioApp.swift (entry), MainTabView.swift (NavigationStack root), AppDelegate.swift
-- `ios/Folio/Presentation/` — Auth/, Home/, Reader/, Search/, Settings/, Onboarding/, Components/
-- `ios/Folio/Domain/Models/` — Article, Tag, Category, User value types
-- `ios/Folio/Data/SwiftData/` — DataManager.swift, SharedDataManager.swift
-- `ios/Folio/Data/Network/` — Network.swift (APIClient + all DTOs), OfflineQueueManager.swift
-- `ios/Folio/Data/Search/` — SQLite FTS5 full-text search
-- `ios/Folio/Data/Repository/` — Repository pattern abstractions
-- `ios/Folio/Data/KeyChain/` — KeyChainManager (token storage)
-- `ios/Folio/Data/Sync/` — SyncService (CloudKit + backend sync)
-- `ios/Shared/Extraction/` — ContentExtractor, HTMLFetcher, ReadabilityExtractor, HTMLToMarkdownConverter, ExtractionResult (shared between app & Share Extension)
+**iOS 关键源码路径**：
+- `ios/Folio/App/` — FolioApp.swift（入口）、MainTabView.swift（NavigationStack 根）、AppDelegate.swift
+- `ios/Folio/Presentation/` — Auth/、Home/、Reader/、Search/、Settings/、Onboarding/、Components/
+- `ios/Folio/Domain/Models/` — Article、Tag、Category、User 值类型
+- `ios/Folio/Data/SwiftData/` — DataManager.swift、SharedDataManager.swift
+- `ios/Folio/Data/Network/` — Network.swift（APIClient + 全部 DTO）、OfflineQueueManager.swift
+- `ios/Folio/Data/Search/` — SQLite FTS5 全文搜索
+- `ios/Folio/Data/Repository/` — Repository 模式抽象层
+- `ios/Folio/Data/KeyChain/` — KeyChainManager（Token 存储）
+- `ios/Folio/Data/Sync/` — SyncService（CloudKit + 后端同步）
+- `ios/Shared/Extraction/` — ContentExtractor、HTMLFetcher、ReadabilityExtractor、HTMLToMarkdownConverter、ExtractionResult（App 与 Share Extension 共享）
 
-### 2. Go Backend
+### 2. Go 后端
 
-- **Stack**: Go 1.24+ / chi v5 router / asynq task queue / pgx v5 / JWT
-- **Entry point**: `server/cmd/server/main.go` — starts HTTP server + Worker server in single process
-- **Pattern**: Handler → Service → Repository → Domain
+- **技术栈**：Go 1.24+ / chi v5 路由 / asynq 任务队列 / pgx v5 / JWT
+- **入口**：`server/cmd/server/main.go` — 单进程启动 HTTP 服务器 + Worker 服务器
+- **架构模式**：Handler → Service → Repository → Domain
 
-**API routes** (chi router, `server/internal/api/router.go`):
-- `GET /health` — health check
-- `POST /api/v1/auth/apple` — Apple Sign In
-- `POST /api/v1/auth/refresh` — token refresh
-- `POST /api/v1/auth/dev` — dev login (DEV_MODE only)
-- `GET /api/v1/articles` — list (paginated, filterable by category/status/favorite)
-- `POST /api/v1/articles` — submit URL → creates article + crawl task
-- `GET /api/v1/articles/{id}` — detail
-- `PUT /api/v1/articles/{id}` — update (favorite, archive, read progress)
-- `DELETE /api/v1/articles/{id}` — delete
-- `GET /api/v1/articles/search?q=` — full-text search
-- `GET /api/v1/tags` — list tags
-- `POST /api/v1/tags` — create tag
-- `DELETE /api/v1/tags/{id}` — delete tag
-- `GET /api/v1/categories` — list categories
-- `GET /api/v1/tasks/{id}` — poll task status
-- `POST /api/v1/subscription/verify` — verify subscription
+**API 路由**（chi 路由，`server/internal/api/router.go`）：
+- `GET /health` — 健康检查
+- `POST /api/v1/auth/apple` — Apple 登录
+- `POST /api/v1/auth/email/code` — 发送邮箱验证码（打印到日志）
+- `POST /api/v1/auth/email/verify` — 验证码登录/注册（邮箱不存在则创建）
+- `POST /api/v1/auth/refresh` — 刷新 Token
+- `GET /api/v1/articles` — 列表（分页，可按分类/状态/收藏筛选）
+- `POST /api/v1/articles` — 提交 URL → 创建文章 + 抓取任务
+- `GET /api/v1/articles/{id}` — 详情
+- `PUT /api/v1/articles/{id}` — 更新（收藏、归档、阅读进度）
+- `DELETE /api/v1/articles/{id}` — 删除
+- `GET /api/v1/articles/search?q=` — 全文搜索
+- `GET /api/v1/tags` — 标签列表
+- `POST /api/v1/tags` — 创建标签
+- `DELETE /api/v1/tags/{id}` — 删除标签
+- `GET /api/v1/categories` — 分类列表
+- `GET /api/v1/tasks/{id}` — 轮询任务状态
+- `POST /api/v1/subscription/verify` — 验证订阅
 
-**Middleware**: JWT auth (`server/internal/api/middleware/auth.go`) — extracts userID into request context.
+**中间件**：JWT 认证（`server/internal/api/middleware/auth.go`）— 从请求上下文中提取 userID。
 
-**Worker tasks** (asynq, Redis-backed, `server/internal/worker/`):
-1. `article:crawl` — calls Reader service, stores markdown, enqueues AI task; falls back to client-extracted content if Reader fails (Critical queue, 3 retries, 90s timeout)
-2. `article:ai` — calls AI service, stores classification/tags/summary (Default queue, 3 retries, 60s timeout)
-3. `article:images` — rehosts images to R2 (Low queue, 2 retries, 5min timeout)
+**Worker 任务**（asynq，Redis 支撑，`server/internal/worker/`）：
+1. `article:crawl` — 调用 Reader 服务，存储 markdown，入队 AI 任务；Reader 失败时回退到客户端提取的内容（Critical 队列，3 次重试，90 秒超时）
+2. `article:ai` — 调用 AI 服务，存储分类/标签/摘要（Default 队列，3 次重试，60 秒超时）
+3. `article:images` — 将图片转存到 R2（Low 队列，2 次重试，5 分钟超时）
 
-**External clients** (`server/internal/client/`):
-- `reader.go` — Reader service HTTP client
-- `ai.go` — AI service HTTP client
-- `r2.go` — Cloudflare R2 S3-compatible client (optional)
+**外部客户端**（`server/internal/client/`）：
+- `reader.go` — Reader 服务 HTTP 客户端
+- `ai.go` — AI 服务 HTTP 客户端
+- `r2.go` — Cloudflare R2 S3 兼容客户端（可选）
 
-**Configuration** (`server/internal/config/config.go`):
+**配置**（`server/internal/config/config.go`）：
 
-| Env var | Required | Default | Description |
-|---------|----------|---------|-------------|
-| `DATABASE_URL` | yes | — | PostgreSQL connection string |
-| `JWT_SECRET` | yes | — | JWT signing key |
-| `PORT` | no | 8080 | HTTP port |
-| `REDIS_ADDR` | no | localhost:6379 | Redis address (dev uses 6380, see docker-compose.dev.yml) |
-| `READER_URL` | no | http://localhost:3000 | Reader service URL |
-| `AI_SERVICE_URL` | no | http://localhost:8000 | AI service URL |
-| `DEV_MODE` | no | false | Enables /auth/dev endpoint |
-| `R2_ENDPOINT` | no | — | Cloudflare R2 endpoint |
-| `R2_ACCESS_KEY` | no | — | R2 access key |
-| `R2_SECRET_KEY` | no | — | R2 secret key |
-| `R2_BUCKET_NAME` | no | folio-images | R2 bucket name |
-| `R2_PUBLIC_URL` | no | — | R2 public URL prefix |
+| 环境变量 | 必需 | 默认值 | 说明 |
+|---------|------|--------|------|
+| `DATABASE_URL` | 是 | — | PostgreSQL 连接字符串 |
+| `JWT_SECRET` | 是 | — | JWT 签名密钥 |
+| `PORT` | 否 | 8080 | HTTP 端口 |
+| `REDIS_ADDR` | 否 | localhost:6379 | Redis 地址（开发环境用 6380，见 docker-compose.dev.yml） |
+| `READER_URL` | 否 | http://localhost:3000 | Reader 服务 URL |
+| `AI_SERVICE_URL` | 否 | http://localhost:8000 | AI 服务 URL |
+| `APPLE_BUNDLE_ID` | 否 | com.7WSH9CR7KS.folio.app | Apple 登录 audience 验证 |
+| `R2_ENDPOINT` | 否 | — | Cloudflare R2 端点 |
+| `R2_ACCESS_KEY` | 否 | — | R2 访问密钥 |
+| `R2_SECRET_KEY` | 否 | — | R2 秘密密钥 |
+| `R2_BUCKET_NAME` | 否 | folio-images | R2 存储桶名称 |
+| `R2_PUBLIC_URL` | 否 | — | R2 公开 URL 前缀 |
 
-### 3. Reader Service
+### 3. Reader 服务
 
-- **Stack**: Node.js / TypeScript / Express / `@vakra-dev/reader`
-- **Location**: `server/reader-service/`
-- **Endpoints**: `POST /scrape` (url → markdown + metadata), `GET /health`
-- **Local dependency**: `@vakra-dev/reader` linked via `file:../../../reader` (requires `/Users/mac/github/reader` to exist with `dist/` built)
-- **Updating reader**: When the reader library at `/Users/mac/github/reader` is updated, run `cd /Users/mac/github/reader && npm run build` to rebuild, then `cd server/reader-service && rm -rf node_modules/@vakra-dev && npm install` to pick up the new version, and restart the reader service.
-- **Dev command**: `npm run dev` (uses tsx), **Build**: `npm run build` (tsc → dist/)
+- **技术栈**：Node.js / TypeScript / Express / `@vakra-dev/reader`
+- **位置**：`server/reader-service/`
+- **端点**：`POST /scrape`（url → markdown + 元数据）、`GET /health`
+- **本地依赖**：`@vakra-dev/reader` 通过 `file:../../../reader` 链接（需要 `/Users/mac/github/reader` 存在且 `dist/` 已构建）
+- **更新 reader**：当 `/Users/mac/github/reader` 的 reader 库更新后，运行 `cd /Users/mac/github/reader && npm run build` 重新构建，然后 `cd server/reader-service && rm -rf node_modules/@vakra-dev && npm install` 拉取新版本，并重启 reader 服务。
+- **开发命令**：`npm run dev`（使用 tsx），**构建**：`npm run build`（tsc → dist/）
 
-### 4. AI Service
+### 4. AI 服务
 
-- **Stack**: Python 3.12+ / FastAPI / DeepSeek API (via openai SDK)
-- **Location**: `server/ai-service/`
-- **Endpoints**: `POST /api/analyze` (title + content + source + author → analysis), `GET /health`
-- **Model**: `deepseek-chat`, temperature=0.3, max_tokens=1024, JSON output format
-- **Dependencies**: `server/ai-service/requirements.txt` (fastapi, uvicorn, openai, redis, pydantic, pytest, httpx)
-- **Env**: `DEEPSEEK_API_KEY` (required), `REDIS_URL` (optional, for caching)
-- **Mock for local dev**: `server/scripts/mock_ai_service.py` — deterministic responses based on URL patterns, no API key needed
+- **技术栈**：Python 3.12+ / FastAPI / DeepSeek API（通过 openai SDK）
+- **位置**：`server/ai-service/`
+- **端点**：`POST /api/analyze`（title + content + source + author → 分析结果）、`GET /health`
+- **模型**：`deepseek-chat`，temperature=0.3，max_tokens=1024，JSON 输出格式
+- **依赖**：`server/ai-service/requirements.txt`（fastapi, uvicorn, openai, redis, pydantic, pytest, httpx）
+- **环境变量**：`DEEPSEEK_API_KEY`（必需）、`REDIS_URL`（可选，用于缓存）
+- **本地开发 Mock**：`server/scripts/mock_ai_service.py` — 基于 URL 模式的确定性响应，无需 API Key
 
-**9 categories**: tech, business, science, culture, lifestyle, news, education, design, other
+**9 个分类**：tech、business、science、culture、lifestyle、news、education、design、other
 
-**Single API call returns**: category (slug + name), confidence (0-1), tags (3-5), summary, key_points (3-5), language (zh/en)
+**单次 API 调用返回**：category（slug + name）、confidence（0-1）、tags（3-5 个）、summary、key_points（3-5 条）、language（zh/en）
 
-## Database
+## 数据库
 
-PostgreSQL 16 with migrations at `server/migrations/001_init.up.sql`.
+PostgreSQL 16，迁移文件位于 `server/migrations/001_init.up.sql`。
 
-**Tables**: users, categories (9 pre-inserted), articles, tags, article_tags, crawl_tasks, activity_logs
+**表**：users、categories（预插入 9 条）、articles、tags、article_tags、crawl_tasks、activity_logs
 
-**Extensions**: uuid-ossp, pg_trgm (trigram full-text search)
+**扩展**：uuid-ossp、pg_trgm（三元组全文搜索）
 
-**Key constraints**:
-- articles: unique (user_id, url) — no duplicate URLs per user
-- tags: unique (user_id, name)
-- articles.status: pending → processing → ready | failed
-- crawl_tasks.status: queued → running → done | failed
-- users.subscription: free | pro | pro+, monthly_quota default 30
+**关键约束**：
+- articles：unique (user_id, url) — 每用户不允许重复 URL
+- tags：unique (user_id, name)
+- articles.status：pending → processing → ready | failed
+- crawl_tasks.status：queued → running → done | failed
+- users.subscription：free | pro | pro+，monthly_quota 默认 30
 
-## Local Development
+## 本地开发
 
-**IMPORTANT — Database access**: `psql` is NOT installed on the host machine. PostgreSQL runs inside Docker. Always use `docker exec` to run database commands:
+**重要 — 数据库访问**：宿主机上**未安装** `psql`。PostgreSQL 运行在 Docker 内。始终使用 `docker exec` 执行数据库命令：
 ```bash
-# Dev database (docker-compose.dev.yml)
+# 开发数据库（docker-compose.dev.yml）
 docker exec $(docker ps --filter "publish=5432" -q) psql -U folio -d folio -c "YOUR SQL HERE"
 
-# E2E test database (docker-compose.test.yml)
+# E2E 测试数据库（docker-compose.test.yml）
 docker exec $(docker ps --filter "publish=15432" -q) psql -U folio -d folio -c "YOUR SQL HERE"
 ```
-Similarly, `redis-cli` is not available on the host. Use `docker exec` for Redis access as well.
+同样，宿主机上也没有 `redis-cli`。Redis 访问也需通过 `docker exec`。
 
-**One-command startup**:
+**一键启动**：
 
 ```bash
 cd server && ./scripts/dev-start.sh
 ```
 
-This automatically: checks/installs Go 1.24 via gvm, starts PostgreSQL (:5432) + Redis (:6380) via Docker, builds reader local dependency if needed, starts Reader (:3000) + Mock AI (:8000) + Go API (:8080, DEV_MODE=true), opens Xcode.
+自动完成：通过 gvm 检查/安装 Go 1.24、Docker 启动 PostgreSQL (:5432) + Redis (:6380)、按需构建 reader 本地依赖、启动 Reader (:3000) + Mock AI (:8000) + Go API (:8080)、打开 Xcode。
 
-**Dev ports**:
-- Go API: 8080
-- Reader: 3000
-- Mock AI: 8000
-- PostgreSQL: 5432 (user: folio, password: folio, db: folio)
-- Redis: 6380 (note: NOT 6379, mapped in docker-compose.dev.yml)
+**开发端口**：
+- Go API：8080
+- Reader：3000
+- Mock AI：8000
+- PostgreSQL：5432（用户：folio，密码：folio，数据库：folio）
+- Redis：6380（注意：不是 6379，在 docker-compose.dev.yml 中映射）
 
-**iOS in simulator**: Cmd+R in Xcode → tap "Dev Login" button (DEBUG builds only) → test features.
+**iOS 模拟器调试**：在 Xcode 中 Cmd+R → 点击 "Dev Login" 按钮（仅 DEBUG 构建可用）→ 测试功能。
 
-**Stopping**: Ctrl+C in script terminal (stops Reader/AI/Go), then `docker compose -f docker-compose.dev.yml down` for DB/Redis.
+**iOS 真机部署**（当 Xcode 显示设备为 unknown 时使用命令行）：
+```bash
+# 1. 编译（真机 Device ID: 00008130-000A61483EC0001C）
+xcodebuild build -project ios/Folio.xcodeproj -scheme Folio \
+  -destination 'id=00008130-000A61483EC0001C' -allowProvisioningUpdates
 
-See `docs/local-deploy.md` for full details.
+# 2. 安装
+xcrun devicectl device install app --device 00008130-000A61483EC0001C \
+  /Users/mac/Library/Developer/Xcode/DerivedData/Folio-doibwjteeqeddrcbskywtleokllf/Build/Products/Debug-iphoneos/Folio.app
 
-## Testing
+# 3. 启动
+xcrun devicectl device process launch --device 00008130-000A61483EC0001C com.7WSH9CR7KS.folio.app
+```
 
-**iOS unit tests** (35 files in `ios/FolioTests/`):
+**查看日志**：Go 服务器日志输出到 `/tmp/folio-server.log`。常用查询：
+```bash
+# 查看邮箱验证码
+grep 'verification code' /tmp/folio-server.log | tail -5
+
+# 查看文章抓取结果
+grep 'crawl task completed' /tmp/folio-server.log | tail -10
+```
+
+**停止服务**：在脚本终端 Ctrl+C（停止 Reader/AI/Go），然后 `docker compose -f docker-compose.dev.yml down` 停止数据库/Redis。
+
+详见 `docs/local-deploy.md`。
+
+## 测试
+
+**iOS 单元测试**（35 个文件，位于 `ios/FolioTests/`）：
 ```bash
 xcodebuild test -project ios/Folio.xcodeproj -scheme Folio -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-**E2E tests** (14 test files in `server/tests/e2e/`, Python pytest):
+**E2E 测试**（14 个测试文件，位于 `server/tests/e2e/`，Python pytest）：
 ```bash
 cd server && ./scripts/run_e2e.sh
 ```
-Uses isolated docker-compose.test.yml (PostgreSQL :15432, Redis :16379, API :18080, Reader :13000, AI :18000). Reports generated in `server/tests/e2e/reports/`.
+使用隔离的 docker-compose.test.yml（PostgreSQL :15432、Redis :16379、API :18080、Reader :13000、AI :18000）。报告生成在 `server/tests/e2e/reports/`。
 
-**Quick smoke test**:
+**快速冒烟测试**：
 ```bash
 cd server && ./scripts/smoke_api_e2e.sh
 ```
 
-## Key Design Decisions
+**iOS UI 自动化测试**（Appium + XCUITest）：
 
-- **Local-first**: All user content stored on device; only AI processing content sent to server
-- **Offline-first save**: Share Extension writes URL + metadata to local SwiftData immediately, then attempts client-side content extraction (ContentExtractor pipeline); backend processing happens async when network available
-- **Single AI call**: Classification + tags + summary extracted in one DeepSeek API request for efficiency
-- **AI model**: DeepSeek Chat (deepseek-chat) for classification/summarization; confidence threshold at 70%
-- **Content sources prioritized**: P0 = blogs, WeChat public accounts, Twitter/X; P1 = Zhihu, Weibo; P2 = newsletters, YouTube
-- **WeChat special handling**: proxy scraping, anti-hotlink image rehosting
-- **Subscription tiers**: Free (30 saves/month), Pro ($68/yr), Pro+ ($128/yr)
-- **Not-to-do list**: No notes editor, no batch editing, no multi-level folders, no RSS, no social features, no recommendations
+用于模拟器上的 UI 交互验证，与后端 E2E 测试独立。
 
-## Build Commands
+前置条件：后端服务已通过 `dev-start.sh` 启动，App 已安装到模拟器。
 
-| What | Command |
-|------|---------|
-| Go server (dev) | `cd server && go run ./cmd/server` |
-| Go server (build) | `cd server && go build -o folio-server ./cmd/server` |
-| Reader service (dev) | `cd server/reader-service && npm run dev` |
-| Reader service (build) | `cd server/reader-service && npm run build && npm start` |
-| AI service | `cd server/ai-service && uvicorn app.main:app --port 8000` |
-| Mock AI service | `python3 server/scripts/mock_ai_service.py` |
-| iOS (Xcode) | Open `ios/Folio.xcodeproj`, scheme Folio, Cmd+R |
-| iOS (CLI build) | `xcodebuild build -project ios/Folio.xcodeproj -scheme Folio -destination 'generic/platform=iOS Simulator'` |
-| XcodeGen regenerate | `cd ios && xcodegen generate` |
-| Docker prod stack | `cd server && docker compose up -d` |
-| Docker dev infra | `cd server && docker compose -f docker-compose.dev.yml up -d` |
+```bash
+# 启动 Appium 服务器
+nohup /Users/mac/.npm-global/bin/appium --relaxed-security > /tmp/appium.log 2>&1 &
 
-## Language & i18n
+# 构建并安装最新 iOS App 到模拟器
+xcodebuild build -project ios/Folio.xcodeproj -scheme Folio -destination 'platform=iOS Simulator,id=7910EBEA-1F8E-47B3-9AF4-7A30F48407C9' -quiet
+xcrun simctl terminate booted com.folio.app
+xcrun simctl install booted /Users/mac/Library/Developer/Xcode/DerivedData/Folio-doibwjteeqeddrcbskywtleokllf/Build/Products/Debug-iphonesimulator/Folio.app
+xcrun simctl launch booted com.folio.app
+```
 
-Documentation is in Chinese. The product targets global users (Chinese + English bilingual). AI output language matches the article's language. iOS app localized for en + zh-Hans.
+连接模板（Python）：
+```python
+from appium import webdriver
+from appium.options.ios import XCUITestOptions
+
+options = XCUITestOptions()
+options.platform_name = "iOS"
+options.device_name = "iPhone 17 Pro"
+options.udid = "7910EBEA-1F8E-47B3-9AF4-7A30F48407C9"
+options.bundle_id = "com.folio.app"
+options.no_reset = True
+options.set_capability("appium:automationName", "XCUITest")
+options.set_capability("appium:usePreinstalledApp", True)
+
+driver = webdriver.Remote("http://localhost:4723", options=options)
+```
+
+注意事项：
+- 每次 `webdriver.Remote()` 会创建新会话（重启 WDA），约需 5 秒
+- `xcrun simctl install` 替换 bundle 但不会重启运行中的进程——必须先 `terminate` 再 `launch`
+- Reader 页面返回按钮名称是 `chevron.left`（非 `BackButton`），Home 页从设置返回是 `BackButton`
+
+## 关键设计决策
+
+- **本地优先**：所有用户内容存储在设备上；仅 AI 处理时将内容发送到服务器
+- **离线优先保存**：Share Extension 立即将 URL + 元数据写入本地 SwiftData，然后尝试客户端内容提取（ContentExtractor 管线）；后端处理在网络可用时异步进行
+- **单次 AI 调用**：分类 + 标签 + 摘要在一次 DeepSeek API 请求中完成，提高效率
+- **AI 模型**：DeepSeek Chat (deepseek-chat) 用于分类/摘要；置信度阈值 70%
+- **内容来源优先级**：P0 = 博客、微信公众号、Twitter/X；P1 = 知乎、微博；P2 = Newsletter、YouTube
+- **微信特殊处理**：代理抓取、防盗链图片转存
+- **订阅等级**：Free（30 次/月）、Pro（¥68/年）、Pro+（¥128/年）
+- **不做清单**：不做笔记编辑器、不做批量编辑、不做多级文件夹、不做 RSS、不做社交功能、不做推荐
+
+## 构建命令
+
+| 项目 | 命令 |
+|------|------|
+| Go 服务器（开发） | `cd server && go run ./cmd/server` |
+| Go 服务器（构建） | `cd server && go build -o folio-server ./cmd/server` |
+| Reader 服务（开发） | `cd server/reader-service && npm run dev` |
+| Reader 服务（构建） | `cd server/reader-service && npm run build && npm start` |
+| AI 服务 | `cd server/ai-service && uvicorn app.main:app --port 8000` |
+| Mock AI 服务 | `python3 server/scripts/mock_ai_service.py` |
+| iOS（Xcode） | 打开 `ios/Folio.xcodeproj`，选择 Folio scheme，Cmd+R |
+| iOS（命令行构建 - 模拟器） | `xcodebuild build -project ios/Folio.xcodeproj -scheme Folio -destination 'generic/platform=iOS Simulator'` |
+| iOS（命令行构建 - 真机） | `xcodebuild build -project ios/Folio.xcodeproj -scheme Folio -destination 'id=00008130-000A61483EC0001C' -allowProvisioningUpdates` |
+| XcodeGen 重新生成 | `cd ios && xcodegen generate` |
+| Docker 生产环境 | `cd server && docker compose up -d` |
+| Docker 开发基础设施 | `cd server && docker compose -f docker-compose.dev.yml up -d` |
+
+## 语言与国际化
+
+文档使用中文。产品面向全球用户（中英双语）。AI 输出语言与文章语言匹配。iOS 应用本地化支持 en + zh-Hans。

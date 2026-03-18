@@ -15,7 +15,7 @@ cd /Users/mac/github/folio/server
 4. 构建 reader 本地依赖（如果 `dist/` 不存在）
 5. 启动 Reader Service（:3000）
 6. 安装 fastapi/uvicorn（如果没装）并启动 Mock AI Service（:8000）
-7. 启动 Go API Server（:8080，DEV_MODE=true）
+7. 启动 Go API Server（:8080）
 8. 打开 Xcode 项目
 
 全部就绪后在终端会看到：
@@ -38,7 +38,7 @@ cd /Users/mac/github/folio/server
 
 1. Xcode 中选择 **Folio** scheme + **iPhone 16 Pro**（或任意 iOS 17+ 模拟器）
 2. `Cmd + R` 运行
-3. App 启动后进入 Onboarding 页面，点击 **「Dev Login」** 按钮登录（DEBUG 专用，无需 Apple ID）
+3. App 启动后进入 Onboarding 页面，通过 **Sign In with Apple** 登录
 4. 登录成功后进入主页，开始测试
 
 ### 测试清单
@@ -65,8 +65,15 @@ cd /Users/mac/github/folio/server
 不想开模拟器，直接在终端测 API：
 
 ```bash
-# 登录
-TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/dev | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+# 生成测试 token（需要 JWT_SECRET 与服务端一致）
+JWT_SECRET="dev-jwt-secret-change-in-production"
+TOKEN=$(python3 -c "
+import json,hmac,hashlib,base64,time,uuid
+h=base64.urlsafe_b64encode(json.dumps({'alg':'HS256','typ':'JWT'}).encode()).rstrip(b'=').decode()
+p=base64.urlsafe_b64encode(json.dumps({'uid':str(uuid.uuid4()),'type':'access','iss':'folio','iat':int(time.time()),'exp':int(time.time())+7200}).encode()).rstrip(b'=').decode()
+s=base64.urlsafe_b64encode(hmac.new('$JWT_SECRET'.encode(),f'{h}.{p}'.encode(),hashlib.sha256).digest()).rstrip(b'=').decode()
+print(f'{h}.{p}.{s}')
+")
 
 # 查看分类
 curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/categories | python3 -m json.tool
@@ -105,7 +112,7 @@ docker compose -f docker-compose.dev.yml down -v    # 清除数据
 iOS Simulator (Folio App)
     │  DEBUG 模式自动连接 localhost:8080
     ▼
-Go API Server (:8080)   ← DEV_MODE=true，开启 /auth/dev 端点
+Go API Server (:8080)   ← Apple Sign In + JWT auth
     ├── PostgreSQL (:5432)   ← Docker，自动建表
     ├── Redis (:6380)        ← Docker，Worker 任务队列
     ├── Reader Service (:3000) ← 网页抓取 → Markdown

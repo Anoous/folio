@@ -42,18 +42,7 @@ struct ReaderView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .foregroundStyle(Color.folio.textPrimary)
-                }
-                .accessibilityLabel(String(localized: "button.back", defaultValue: "Back"))
-            }
-
             ToolbarItem(placement: .topBarTrailing) {
                 moreMenuButton
             }
