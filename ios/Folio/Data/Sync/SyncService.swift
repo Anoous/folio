@@ -9,7 +9,7 @@ final class SyncService {
     private let context: ModelContext
 
     private static let pollMaxAttempts = 10
-    private static let pollIntervalNanoseconds: UInt64 = 5_000_000_000
+    private static let pollInterval: Duration = .seconds(5)
     private static let lastSyncedAtKey = "com.folio.lastSyncedAt"
     private static let lastEpochKey = "com.folio.lastSyncEpoch"
 
@@ -90,7 +90,7 @@ final class SyncService {
 
     private func pollTask(taskId: String, articleLocalId: UUID) async {
         for _ in 0..<Self.pollMaxAttempts {
-            try? await Task.sleep(nanoseconds: Self.pollIntervalNanoseconds)
+            try? await Task.sleep(for: Self.pollInterval)
 
             do {
                 let task = try await apiClient.getTask(id: taskId)

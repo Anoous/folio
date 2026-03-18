@@ -15,7 +15,7 @@ struct ReadingPreferenceView: View {
             .navigationTitle(String(localized: "reader.prefs.title", defaultValue: "Reading"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         dismiss()
                     } label: {

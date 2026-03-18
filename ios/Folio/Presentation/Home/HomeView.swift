@@ -380,7 +380,7 @@ struct HomeView: View {
         .task(id: viewModel?.hasProcessingArticles) {
             guard viewModel?.hasProcessingArticles == true else { return }
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled else { break }
                 await syncService?.fetchProcessingArticles()
                 viewModel?.fetchArticles()

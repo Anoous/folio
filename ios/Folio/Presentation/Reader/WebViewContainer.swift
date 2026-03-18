@@ -40,7 +40,7 @@ struct WebViewContainer: View {
             .navigationTitle(currentTitle.isEmpty ? url.host ?? "" : currentTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button {
                         dismiss()
                     } label: {

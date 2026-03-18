@@ -178,7 +178,7 @@ struct ListResponse<T: Decodable>: Decodable {
 
 // MARK: - APIClient
 
-final class APIClient {
+final class APIClient: @unchecked Sendable {
     static let shared = APIClient()
 
     private let baseURL: URL

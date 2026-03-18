@@ -43,7 +43,7 @@ struct ReaderView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
+            ToolbarItem(placement: .topBarLeading) {
                 Button {
                     dismiss()
                 } label: {
@@ -53,7 +53,7 @@ struct ReaderView: View {
                 .accessibilityLabel(String(localized: "button.back", defaultValue: "Back"))
             }
 
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: .topBarTrailing) {
                 moreMenuButton
             }
         }

@@ -94,7 +94,7 @@ struct ImageViewerOverlay: View {
                 }
             }
         }
-        .statusBarHidden()
+        .persistentSystemOverlays(.hidden)
     }
 
     // MARK: - Gestures

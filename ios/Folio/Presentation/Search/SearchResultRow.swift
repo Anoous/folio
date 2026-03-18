@@ -100,7 +100,7 @@ struct SearchResultRow: View {
                 if subparts.count == 2 {
                     result = result
                         + Text(subparts[0])
-                            .foregroundColor(Color.folio.accent)
+                            .foregroundStyle(Color.folio.accent)
                             .bold()
                         + Text(subparts[1])
                 } else {
