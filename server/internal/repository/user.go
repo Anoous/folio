@@ -64,8 +64,31 @@ func (r *UserRepo) GetByAppleID(ctx context.Context, appleID string) (*domain.Us
 	return &u, nil
 }
 
+func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
+	var u domain.User
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, apple_id, email, nickname, avatar_url,
+		       subscription, subscription_expires_at, monthly_quota,
+		       current_month_count, quota_reset_at, preferred_language,
+		       created_at, updated_at, sync_epoch
+		FROM users WHERE email = $1`, email,
+	).Scan(
+		&u.ID, &u.AppleID, &u.Email, &u.Nickname, &u.AvatarURL,
+		&u.Subscription, &u.SubscriptionExpiresAt, &u.MonthlyQuota,
+		&u.CurrentMonthCount, &u.QuotaResetAt, &u.PreferredLanguage,
+		&u.CreatedAt, &u.UpdatedAt, &u.SyncEpoch,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get user by email: %w", err)
+	}
+	return &u, nil
+}
+
 type CreateUserParams struct {
-	AppleID  string
+	AppleID  *string
 	Email    *string
 	Nickname *string
 }

@@ -99,26 +99,45 @@ final class AuthViewModel {
         }
     }
 
-    // MARK: - Dev Login
+    // MARK: - Email Auth
 
-    #if DEBUG
-    func loginDev() async {
+    func sendEmailCode(email: String) async {
         isLoading = true
         errorMessage = nil
-
         defer { isLoading = false }
 
         do {
-            let response = try await apiClient.loginDev()
-            currentUser = response.user
-            authState = .signedIn
-            FolioLogger.auth.info("dev login succeeded")
+            try await apiClient.sendEmailCode(email: email)
+            FolioLogger.auth.info("verification code sent to \(email)")
         } catch {
-            FolioLogger.auth.error("dev login failed: \(error)")
-            errorMessage = "Dev login failed: \(error.localizedDescription)"
+            FolioLogger.auth.error("send code failed: \(error)")
+            errorMessage = String(localized: "auth.error.sendCode", defaultValue: "Failed to send verification code. Please try again.")
         }
     }
-    #endif
+
+    func verifyEmailCode(email: String, code: String) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            let response = try await apiClient.verifyEmailCode(email: email, code: code)
+            currentUser = response.user
+            authState = .signedIn
+            FolioLogger.auth.info("email login succeeded")
+        } catch let error as APIError {
+            FolioLogger.auth.error("email verify failed: \(error)")
+            switch error {
+            case .unauthorized:
+                errorMessage = String(localized: "auth.error.invalidCode", defaultValue: "Invalid or expired code. Please try again.")
+            default:
+                errorMessage = String(localized: "auth.error.network", defaultValue: "Could not connect to the server. Please check your network and try again.")
+            }
+        } catch {
+            FolioLogger.auth.error("email verify failed: \(error)")
+            errorMessage = String(localized: "auth.error.network", defaultValue: "Could not connect to the server. Please check your network and try again.")
+        }
+    }
 
     // MARK: - Sign Out
 

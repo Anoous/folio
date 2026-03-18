@@ -192,8 +192,8 @@ final class APIClient: @unchecked Sendable {
         #if targetEnvironment(simulator)
         static let defaultBaseURL = URL(string: "http://localhost:8080")!
         #else
-        // Tailscale IP — stable across networks, no Wi-Fi dependency
-        static let defaultBaseURL = URL(string: "http://100.79.57.66:8080")!
+        // Local network IP for real device debugging
+        static let defaultBaseURL = URL(string: "http://192.168.115.123:8080")!
         #endif
     #else
     static let defaultBaseURL = URL(string: "https://api.folio.app")!
@@ -422,10 +422,32 @@ final class APIClient: @unchecked Sendable {
         return response
     }
 
-    func loginDev() async throws -> AuthResponse {
+    // MARK: - Email Auth
+
+    func sendEmailCode(email: String) async throws {
+        struct SendCodeRequest: Encodable {
+            let email: String
+        }
+        struct MessageResponse: Decodable {
+            let message: String
+        }
+        let _: MessageResponse = try await request(
+            method: "POST",
+            path: "/api/v1/auth/email/code",
+            body: SendCodeRequest(email: email),
+            requiresAuth: false
+        )
+    }
+
+    func verifyEmailCode(email: String, code: String) async throws -> AuthResponse {
+        struct VerifyCodeRequest: Encodable {
+            let email: String
+            let code: String
+        }
         let response: AuthResponse = try await request(
             method: "POST",
-            path: "/api/v1/auth/dev",
+            path: "/api/v1/auth/email/verify",
+            body: VerifyCodeRequest(email: email, code: code),
             requiresAuth: false
         )
         try keychainManager.saveTokens(access: response.accessToken, refresh: response.refreshToken)

@@ -7,6 +7,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 READER_PKG_DIR="$(cd "$ROOT_DIR/../../reader" 2>/dev/null && pwd || echo "")"
 PIDS=()
+LOG_DIR="$ROOT_DIR/logs"
+mkdir -p "$LOG_DIR"
 
 # 颜色
 RED='\033[0;31m'
@@ -163,8 +165,9 @@ log "构建 @vakra-dev/reader..."
 cd "$ROOT_DIR/reader-service"
 rm -rf node_modules/@vakra-dev
 /opt/homebrew/bin/npm install --silent 2>/dev/null
-npm run dev &
+npm run dev > "$LOG_DIR/reader.log" 2>&1 &
 PIDS+=($!)
+log "Reader 日志: $LOG_DIR/reader.log"
 
 # 等待 Reader 就绪
 for i in $(seq 1 30); do
@@ -187,8 +190,9 @@ python3 -c "import fastapi, uvicorn" 2>/dev/null || {
     python3 -m pip install -q fastapi uvicorn pydantic
 }
 
-python3 scripts/mock_ai_service.py &
+python3 scripts/mock_ai_service.py > "$LOG_DIR/mock-ai.log" 2>&1 &
 PIDS+=($!)
+log "Mock AI 日志: $LOG_DIR/mock-ai.log"
 
 for i in $(seq 1 15); do
     if curl -s http://localhost:8000/health 2>/dev/null | grep -q ok; then
@@ -209,14 +213,14 @@ export REDIS_ADDR="localhost:6380"
 export JWT_SECRET="dev-jwt-secret-change-in-production"
 export READER_URL="http://localhost:3000"
 export AI_SERVICE_URL="http://localhost:8000"
-export DEV_MODE="true"
 export LOG_LEVEL="debug"
 export PORT="8080"
 
 log "编译 Go server..."
 go build -o "$ROOT_DIR/.bin/folio-server" ./cmd/server
-"$ROOT_DIR/.bin/folio-server" &
+"$ROOT_DIR/.bin/folio-server" > "$LOG_DIR/api-server.log" 2>&1 &
 PIDS+=($!)
+log "API Server 日志: $LOG_DIR/api-server.log"
 
 for i in $(seq 1 30); do
     if curl -s http://localhost:8080/health 2>/dev/null | grep -q ok; then
@@ -250,9 +254,16 @@ echo "  Mock AI      http://localhost:8000"
 echo "  PostgreSQL   localhost:5432  (folio/folio)"
 echo "  Redis        localhost:6380"
 echo ""
+echo "  日志文件:"
+echo "    API Server   $LOG_DIR/api-server.log"
+echo "    Reader       $LOG_DIR/reader.log"
+echo "    Mock AI      $LOG_DIR/mock-ai.log"
+echo ""
+echo "  实时查看日志:  tail -f $LOG_DIR/*.log"
+echo ""
 echo "  iOS 测试步骤:"
 echo "    1. Xcode 中选择 iPhone 模拟器，Cmd+R 运行"
-echo "    2. App 启动后点击 「Dev Login」按钮登录"
+echo "    2. App 启动后通过 Apple 登录"
 echo "    3. 开始测试：提交文章、浏览、搜索..."
 echo ""
 echo -e "  ${YELLOW}按 Ctrl+C 停止所有服务${NC}"

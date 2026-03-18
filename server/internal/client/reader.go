@@ -46,7 +46,7 @@ func NewReaderClient(baseURL string) *ReaderClient {
 }
 
 func (c *ReaderClient) Scrape(ctx context.Context, url string) (*ScrapeResponse, error) {
-	body, _ := json.Marshal(ScrapeRequest{URL: url, TimeoutMs: 30000})
+	body, _ := json.Marshal(ScrapeRequest{URL: url, TimeoutMs: 55000})
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/scrape", bytes.NewReader(body))
 	if err != nil {

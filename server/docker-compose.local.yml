@@ -8,7 +8,6 @@ services:
       dockerfile: Dockerfile
     environment:
       - APP_MODE=all
-      - DEV_MODE=true
       - DATABASE_URL=postgresql://folio:${DB_PASSWORD:-folio}@postgres:5432/folio
       - REDIS_ADDR=redis:6379
       - READER_URL=http://reader:3000

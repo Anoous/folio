@@ -14,7 +14,6 @@ import (
 
 type RouterDeps struct {
 	AuthService *service.AuthService
-	DevMode     bool
 
 	AuthHandler         *handler.AuthHandler
 	ArticleHandler      *handler.ArticleHandler
@@ -51,9 +50,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// Public routes
 		r.Post("/auth/apple", deps.AuthHandler.HandleAppleLogin)
 		r.Post("/auth/refresh", deps.AuthHandler.HandleRefreshToken)
-		if deps.DevMode {
-			r.Post("/auth/dev", deps.AuthHandler.HandleDevLogin)
-		}
+		r.Post("/auth/email/code", deps.AuthHandler.HandleSendCode)
+		r.Post("/auth/email/verify", deps.AuthHandler.HandleVerifyCode)
 
 		// Protected routes
 		r.Group(func(r chi.Router) {

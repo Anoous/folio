@@ -873,6 +873,9 @@
         }
       }
     },
+    "Resend (%@s)" : {
+
+    },
     "search.clearAll" : {
       "extractionState" : "manual",
       "localizations" : {

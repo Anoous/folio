@@ -12,6 +12,7 @@ struct FolioApp: App {
     @State private var authViewModel = AuthViewModel()
     @State private var offlineQueueManager: OfflineQueueManager?
     @State private var syncService: SyncService?
+    @State private var navigationPath = NavigationPath()
 
     init() {
         do {
@@ -44,7 +45,7 @@ struct FolioApp: App {
         WindowGroup {
             Group {
                 if hasCompletedOnboarding {
-                    NavigationStack {
+                    NavigationStack(path: $navigationPath) {
                         HomeView()
                     }
                 } else {
@@ -60,6 +61,9 @@ struct FolioApp: App {
                 await authViewModel.checkExistingAuth()
             }
             .onChange(of: authViewModel.authState) { _, newValue in
+                if newValue == .signedIn {
+                    navigationPath = NavigationPath()
+                }
                 if newValue == .signedIn, let manager = offlineQueueManager, let sync = syncService {
                     // 将服务端配额同步到 UserDefaults，Share Extension 依赖此值
                     if let user = authViewModel.currentUser {

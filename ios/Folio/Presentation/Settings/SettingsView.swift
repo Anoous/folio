@@ -134,10 +134,6 @@ struct SettingsView: View {
     #if DEBUG
     private var devToolsSection: some View {
         Section("Dev Tools") {
-            Button("Dev Login") {
-                Task { await authViewModel?.loginDev() }
-            }
-
             Button("Clear Keychain") {
                 try? KeyChainManager.shared.clearTokens()
                 authViewModel?.signOut()

@@ -128,16 +128,6 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(keychainManager.refreshToken, "new_refresh")
     }
 
-    func testLoginDev_decodesResponse() async throws {
-        MockURLProtocol.requestHandler = { _ in
-            (self.authResponseJSON(), self.makeResponse(statusCode: 200))
-        }
-
-        let response = try await client.loginDev()
-        XCTAssertEqual(response.accessToken, "new_access")
-        XCTAssertEqual(keychainManager.accessToken, "new_access")
-    }
-
     func testSubmitArticle_returns202() async throws {
         try keychainManager.saveTokens(access: "token", refresh: "r")
         let json = """
@@ -345,7 +335,7 @@ final class APIClientTests: XCTestCase {
             return (self.authResponseJSON(), self.makeResponse(statusCode: 200))
         }
 
-        _ = try await client.loginDev()
+        _ = try await client.loginWithApple(identityToken: "tok", email: nil, nickname: nil)
         XCTAssertNil(capturedRequest?.value(forHTTPHeaderField: "Authorization"))
     }
 

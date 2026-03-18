@@ -17,9 +17,9 @@ type Config struct {
 	R2SecretKey  string
 	R2BucketName string
 	R2PublicURL  string
-	JinaAPIKey   string
-	DevMode      bool
-	AppMode      string // "api" | "worker" | "all" (default "all")
+	JinaAPIKey     string
+	AppleBundleID  string
+	AppMode        string // "api" | "worker" | "all" (default "all")
 }
 
 func Load() (*Config, error) {
@@ -35,8 +35,8 @@ func Load() (*Config, error) {
 		R2SecretKey:  os.Getenv("R2_SECRET_KEY"),
 		R2BucketName: envOrDefault("R2_BUCKET_NAME", "folio-images"),
 		R2PublicURL:  os.Getenv("R2_PUBLIC_URL"),
-		JinaAPIKey:   os.Getenv("JINA_API_KEY"),
-		DevMode:      os.Getenv("DEV_MODE") == "true",
+		JinaAPIKey:    os.Getenv("JINA_API_KEY"),
+		AppleBundleID: envOrDefault("APPLE_BUNDLE_ID", "com.7WSH9CR7KS.folio.app"),
 	}
 
 	if cfg.DatabaseURL == "" {

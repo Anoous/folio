@@ -139,7 +139,6 @@ cmd_up() {
   info "=== Folio local stack is running ==="
   info "  API:      http://localhost:8080"
   info "  Health:   http://localhost:8080/health"
-  info "  Dev Login: POST http://localhost:8080/api/v1/auth/dev"
   info ""
   info "Logs:   ./scripts/deploy-local.sh logs"
   info "Stop:   ./scripts/deploy-local.sh down"

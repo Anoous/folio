@@ -42,73 +42,97 @@ struct OnboardingView: View {
                 completeOnboarding()
             }
         } else {
-            VStack {
-                TabView(selection: $currentPage) {
-                    ForEach(0..<pages.count, id: \.self) { index in
-                        OnboardingPage(data: pages[index])
-                            .tag(index)
-                    }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .always))
-
-                VStack(spacing: Spacing.sm) {
-                    if currentPage < pages.count - 1 {
-                        FolioButton(title: String(localized: "onboarding.continue", defaultValue: "Continue"), style: .primary) {
-                            withAnimation {
-                                currentPage += 1
-                            }
+            NavigationStack {
+                VStack {
+                    TabView(selection: $currentPage) {
+                        ForEach(0..<pages.count, id: \.self) { index in
+                            OnboardingPage(data: pages[index])
+                                .tag(index)
                         }
-                    } else {
-                        SignInWithAppleButton(.signIn) { request in
-                            request.requestedScopes = [.email, .fullName]
-                        } onCompletion: { result in
-                            Task {
-                                await authViewModel?.handleAppleSignIn(result: result)
-                                if authViewModel?.isAuthenticated == true {
-                                    showPermission = true
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .always))
+
+                    VStack(spacing: Spacing.sm) {
+                        if currentPage < pages.count - 1 {
+                            FolioButton(title: String(localized: "onboarding.continue", defaultValue: "Continue"), style: .primary) {
+                                withAnimation {
+                                    currentPage += 1
                                 }
                             }
-                        }
-                        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                        .frame(height: 50)
-                        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
+                        } else {
+                            SignInWithAppleButton(.signIn) { request in
+                                request.requestedScopes = [.email, .fullName]
+                            } onCompletion: { result in
+                                Task {
+                                    await authViewModel?.handleAppleSignIn(result: result)
+                                    if authViewModel?.isAuthenticated == true {
+                                        showPermission = true
+                                    }
+                                }
+                            }
+                            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                            .frame(height: 50)
+                            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
 
-                        if let error = authViewModel?.errorMessage {
-                            Text(error)
+                            // 分隔线
+                            HStack {
+                                Rectangle()
+                                    .frame(height: 1)
+                                    .foregroundStyle(Color.folio.textTertiary.opacity(0.3))
+                                Text(String(localized: "signin.or", defaultValue: "or"))
+                                    .font(Typography.caption)
+                                    .foregroundStyle(Color.folio.textTertiary)
+                                Rectangle()
+                                    .frame(height: 1)
+                                    .foregroundStyle(Color.folio.textTertiary.opacity(0.3))
+                            }
+
+                            NavigationLink {
+                                EmailAuthView()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "envelope")
+                                    Text(String(localized: "signin.emailLogin", defaultValue: "Sign in with Email"))
+                                }
+                                .font(Typography.listTitle)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(Color.folio.textTertiary.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
+                            }
+                            .buttonStyle(.plain)
+
+                            if let error = authViewModel?.errorMessage {
+                                Text(error)
+                                    .font(Typography.caption)
+                                    .foregroundStyle(Color.folio.error)
+                                    .multilineTextAlignment(.center)
+                            }
+
+                            Button {
+                                showPermission = true
+                            } label: {
+                                Text(String(localized: "onboarding.skipSignIn", defaultValue: "Use without account"))
+                                    .font(Typography.body)
+                                    .foregroundStyle(Color.folio.textTertiary)
+                            }
+
+                            Text(String(localized: "onboarding.skipNote", defaultValue: "You can sign in later in Settings to enable cloud sync"))
                                 .font(Typography.caption)
-                                .foregroundStyle(Color.folio.error)
+                                .foregroundStyle(Color.folio.textTertiary)
                                 .multilineTextAlignment(.center)
                         }
-
-                        #if DEBUG
-                        FolioButton(title: "Dev Login", style: .secondary) {
-                            Task {
-                                await authViewModel?.loginDev()
-                                if authViewModel?.isAuthenticated == true {
-                                    showPermission = true
-                                }
-                            }
-                        }
-                        #endif
-
-                        Button {
-                            showPermission = true
-                        } label: {
-                            Text(String(localized: "onboarding.skipSignIn", defaultValue: "Use without account"))
-                                .font(Typography.body)
-                                .foregroundStyle(Color.folio.textTertiary)
-                        }
-
-                        Text(String(localized: "onboarding.skipNote", defaultValue: "You can sign in later in Settings to enable cloud sync"))
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.folio.textTertiary)
-                            .multilineTextAlignment(.center)
                     }
+                    .padding(.horizontal, Spacing.xl)
+                    .padding(.bottom, Spacing.xl)
                 }
-                .padding(.horizontal, Spacing.xl)
-                .padding(.bottom, Spacing.xl)
+                .background(Color.folio.background)
             }
-            .background(Color.folio.background)
+            .onChange(of: authViewModel?.isAuthenticated) { _, isAuthenticated in
+                if isAuthenticated == true {
+                    showPermission = true
+                }
+            }
         }
     }
 

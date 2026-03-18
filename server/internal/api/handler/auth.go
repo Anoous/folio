@@ -36,23 +36,45 @@ func (h *AuthHandler) HandleAppleLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (h *AuthHandler) HandleDevLogin(w http.ResponseWriter, r *http.Request) {
-	// Support optional alias for multi-user testing.
-	var alias string
-	if r.Body != nil && r.ContentLength > 0 {
-		var req struct {
-			Alias string `json:"alias"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err == nil {
-			alias = req.Alias
-		}
+func (h *AuthHandler) HandleSendCode(w http.ResponseWriter, r *http.Request) {
+	var req service.SendCodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
 	}
 
-	resp, err := h.authService.DevLogin(r.Context(), alias)
+	if req.Email == "" {
+		writeError(w, http.StatusBadRequest, "email is required")
+		return
+	}
+
+	err := h.authService.SendEmailCode(r.Context(), req)
 	if err != nil {
 		handleServiceError(w, r, err)
 		return
 	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "verification code sent"})
+}
+
+func (h *AuthHandler) HandleVerifyCode(w http.ResponseWriter, r *http.Request) {
+	var req service.VerifyCodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Email == "" || req.Code == "" {
+		writeError(w, http.StatusBadRequest, "email and code are required")
+		return
+	}
+
+	resp, err := h.authService.VerifyEmailCode(r.Context(), req)
+	if err != nil {
+		handleServiceError(w, r, err)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, resp)
 }
 

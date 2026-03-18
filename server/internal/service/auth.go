@@ -2,13 +2,16 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math/big"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,14 +22,16 @@ import (
 )
 
 type AuthService struct {
-	userRepo  *repository.UserRepo
-	jwtSecret []byte
+	userRepo      *repository.UserRepo
+	jwtSecret     []byte
+	appleBundleID string
 }
 
-func NewAuthService(userRepo *repository.UserRepo, jwtSecret string) *AuthService {
+func NewAuthService(userRepo *repository.UserRepo, jwtSecret string, appleBundleID string) *AuthService {
 	return &AuthService{
-		userRepo:  userRepo,
-		jwtSecret: []byte(jwtSecret),
+		userRepo:      userRepo,
+		jwtSecret:     []byte(jwtSecret),
+		appleBundleID: appleBundleID,
 	}
 }
 
@@ -47,6 +52,27 @@ type AuthResponse struct {
 	RefreshToken string       `json:"refresh_token"`
 	ExpiresIn    int          `json:"expires_in"`
 	User         *domain.User `json:"user"`
+}
+
+// Verification code in-memory storage
+type emailCode struct {
+	code      string
+	expiresAt time.Time
+	attempts  int
+}
+
+var (
+	emailCodes   sync.Map // key: email, value: *emailCode
+	codeCooldown sync.Map // key: email, value: time.Time
+)
+
+type SendCodeRequest struct {
+	Email string `json:"email"`
+}
+
+type VerifyCodeRequest struct {
+	Email string `json:"email"`
+	Code  string `json:"code"`
 }
 
 // Apple JWKS cache
@@ -86,7 +112,7 @@ func (s *AuthService) LoginWithApple(ctx context.Context, req AppleAuthRequest) 
 	isNew := user == nil
 	if user == nil {
 		user, err = s.userRepo.Create(ctx, repository.CreateUserParams{
-			AppleID:  appleUserID,
+			AppleID:  &appleUserID,
 			Email:    req.Email,
 			Nickname: req.Nickname,
 		})
@@ -99,33 +125,91 @@ func (s *AuthService) LoginWithApple(ctx context.Context, req AppleAuthRequest) 
 	return s.issueTokenPair(user)
 }
 
-func (s *AuthService) DevLogin(ctx context.Context, alias string) (*AuthResponse, error) {
-	devAppleID := "dev-user-local"
-	devEmail := "dev@folio.local"
-	devNickname := "Dev User"
-
-	if alias != "" {
-		devAppleID = "dev-user-" + alias
-		devEmail = "dev-" + alias + "@folio.local"
-		devNickname = "Dev " + alias
+func (s *AuthService) SendEmailCode(ctx context.Context, req SendCodeRequest) error {
+	email := strings.TrimSpace(strings.ToLower(req.Email))
+	if email == "" || !strings.Contains(email, "@") {
+		return fmt.Errorf("invalid email address")
 	}
 
-	user, err := s.userRepo.GetByAppleID(ctx, devAppleID)
-	if err != nil {
-		return nil, fmt.Errorf("lookup dev user: %w", err)
-	}
-	if user == nil {
-		user, err = s.userRepo.Create(ctx, repository.CreateUserParams{
-			AppleID:  devAppleID,
-			Email:    &devEmail,
-			Nickname: &devNickname,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("create dev user: %w", err)
+	// Check 60s cooldown
+	if lastSent, ok := codeCooldown.Load(email); ok {
+		if time.Since(lastSent.(time.Time)) < 60*time.Second {
+			return ErrCodeRateLimit
 		}
 	}
-	slog.Info("dev login succeeded", "user_id", user.ID)
+
+	// Generate 6-digit code
+	code := fmt.Sprintf("%06d", cryptoRandInt(1000000))
+
+	// Store code with 5min TTL
+	emailCodes.Store(email, &emailCode{
+		code:      code,
+		expiresAt: time.Now().Add(5 * time.Minute),
+		attempts:  0,
+	})
+
+	// Store send time for cooldown
+	codeCooldown.Store(email, time.Now())
+
+	slog.Info("[AUTH] verification code", "email", email, "code", code)
+	return nil
+}
+
+func (s *AuthService) VerifyEmailCode(ctx context.Context, req VerifyCodeRequest) (*AuthResponse, error) {
+	email := strings.TrimSpace(strings.ToLower(req.Email))
+
+	val, ok := emailCodes.Load(email)
+	if !ok {
+		return nil, ErrInvalidCode
+	}
+	ec := val.(*emailCode)
+
+	// Check expiry
+	if time.Now().After(ec.expiresAt) {
+		emailCodes.Delete(email)
+		return nil, ErrInvalidCode
+	}
+
+	// Check max attempts
+	if ec.attempts >= 5 {
+		emailCodes.Delete(email)
+		return nil, ErrInvalidCode
+	}
+
+	// Compare code
+	if ec.code != req.Code {
+		ec.attempts++
+		return nil, ErrInvalidCode
+	}
+
+	// Success — delete code
+	emailCodes.Delete(email)
+
+	// Find or create user
+	user, err := s.userRepo.GetByEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("lookup user by email: %w", err)
+	}
+
+	isNew := user == nil
+	if user == nil {
+		emailPtr := email
+		user, err = s.userRepo.Create(ctx, repository.CreateUserParams{
+			Email: &emailPtr,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("create user: %w", err)
+		}
+	}
+
+	slog.Info("email login succeeded", "user_id", user.ID, "email", email, "new_user", isNew)
 	return s.issueTokenPair(user)
+}
+
+func cryptoRandInt(max int) int {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return int(binary.BigEndian.Uint32(b)) % max
 }
 
 func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*AuthResponse, error) {
@@ -241,7 +325,7 @@ func (s *AuthService) verifyAppleToken(tokenString string) (string, error) {
 		}
 		return publicKey, nil
 	}, jwt.WithIssuer("https://appleid.apple.com"),
-		jwt.WithAudience("com.folio.app"),
+		jwt.WithAudience(s.appleBundleID),
 	)
 	if err != nil || !verified.Valid {
 		return "", fmt.Errorf("token verification failed: %w", err)

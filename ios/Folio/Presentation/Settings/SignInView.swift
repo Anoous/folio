@@ -55,16 +55,33 @@ struct SignInView: View {
                     .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
                 }
 
-                #if DEBUG
-                FolioButton(title: "Dev Login", style: .secondary) {
-                    Task {
-                        await authViewModel?.loginDev()
-                        if authViewModel?.isAuthenticated == true {
-                            dismiss()
-                        }
-                    }
+                // 分隔线
+                HStack {
+                    Rectangle()
+                        .frame(height: 1)
+                        .foregroundStyle(Color.folio.textTertiary.opacity(0.3))
+                    Text(String(localized: "signin.or", defaultValue: "or"))
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.folio.textTertiary)
+                    Rectangle()
+                        .frame(height: 1)
+                        .foregroundStyle(Color.folio.textTertiary.opacity(0.3))
                 }
-                #endif
+
+                NavigationLink {
+                    EmailAuthView()
+                } label: {
+                    HStack {
+                        Image(systemName: "envelope")
+                        Text(String(localized: "signin.emailLogin", defaultValue: "Sign in with Email"))
+                    }
+                    .font(Typography.listTitle)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color.folio.textTertiary.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
+                }
+                .buttonStyle(.plain)
 
                 if let error = authViewModel?.errorMessage {
                     Text(error)

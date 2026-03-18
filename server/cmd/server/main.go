@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -69,7 +70,7 @@ func main() {
 
 	// Services
 	quotaService := service.NewQuotaService(userRepo)
-	authService := service.NewAuthService(userRepo, cfg.JWTSecret)
+	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.AppleBundleID)
 	tagService := service.NewTagService(tagRepo)
 	articleService := service.NewArticleService(
 		articleRepo, taskRepo, tagRepo, categoryRepo,
@@ -88,7 +89,6 @@ func main() {
 	// Router
 	router := api.NewRouter(api.RouterDeps{
 		AuthService:         authService,
-		DevMode:             cfg.DevMode,
 		AuthHandler:         authHandler,
 		ArticleHandler:      articleHandler,
 		SearchHandler:       searchHandler,
@@ -116,7 +116,7 @@ func main() {
 
 	// HTTP server
 	httpServer := &http.Server{
-		Addr:         ":" + cfg.Port,
+		Addr:         "0.0.0.0:" + cfg.Port,
 		Handler:      router,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -152,8 +152,13 @@ func runHTTPServer(server *http.Server, port string, workerServer *worker.Worker
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		slog.Info("folio api server listening", "port", port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		ln, err := net.Listen("tcp4", server.Addr)
+		if err != nil {
+			slog.Error("listen failed", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("folio api server listening", "addr", server.Addr)
+		if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
 			slog.Error("server failed", "error", err)
 			os.Exit(1)
 		}

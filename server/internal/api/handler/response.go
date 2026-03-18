@@ -32,6 +32,10 @@ func handleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, service.ErrQuotaExceeded):
 		slog.Info("quota exceeded", "path", r.URL.Path)
 		writeError(w, http.StatusTooManyRequests, "monthly quota exceeded")
+	case errors.Is(err, service.ErrInvalidCode):
+		writeError(w, http.StatusUnauthorized, "invalid or expired verification code")
+	case errors.Is(err, service.ErrCodeRateLimit):
+		writeError(w, http.StatusTooManyRequests, "please wait before requesting another code")
 	case errors.Is(err, service.ErrDuplicateURL):
 		slog.Debug("duplicate URL", "path", r.URL.Path)
 		writeError(w, http.StatusConflict, "url already saved")
