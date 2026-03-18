@@ -34,3 +34,11 @@ DerivedData/
 
 # Worktrees
 .worktrees/
+
+# Agent/IDE skills
+.agent/
+.kiro/
+.windsurf/
+skills/
+skills-lock.json
+docs/superpowers/
