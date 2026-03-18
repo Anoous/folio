@@ -16,6 +16,7 @@ struct ReaderView: View {
     @Environment(\.openURL) private var openURL
     @State private var summaryExpanded = false
     @State private var metrics = ScaledArticleMetrics()
+    @State private var showToastState = false
 
     // Reading preferences
     @AppStorage(ReadingPreferenceKeys.fontSize) private var fontSize: Double = 17
@@ -57,10 +58,13 @@ struct ReaderView: View {
                 moreMenuButton
             }
         }
-        .toast(isPresented: Binding(
-            get: { viewModel?.showToast ?? false },
-            set: { viewModel?.showToast = $0 }
-        ), message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
+        .toast(isPresented: $showToastState, message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
+        .onChange(of: viewModel?.showToast) { _, newValue in
+            showToastState = newValue ?? false
+        }
+        .onChange(of: showToastState) { _, newValue in
+            viewModel?.showToast = newValue
+        }
         .onAppear {
             if viewModel == nil {
                 let vm = ReaderViewModel(

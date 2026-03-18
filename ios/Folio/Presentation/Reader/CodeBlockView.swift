@@ -23,10 +23,6 @@ struct CodeBlockView: View {
                 Button {
                     UIPasteboard.general.string = code
                     copied = true
-                    Task {
-                        try? await Task.sleep(for: .seconds(1.5))
-                        copied = false
-                    }
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
@@ -57,6 +53,11 @@ struct CodeBlockView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.folio.codeBackground)
         .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
+        .task(id: copied) {
+            guard copied else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            copied = false
+        }
     }
 }
 

@@ -128,13 +128,13 @@ struct WebViewRepresentable: UIViewRepresentable {
 
         // Observe loading progress
         context.coordinator.progressObservation = webView.observe(\.estimatedProgress) { view, _ in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.progress = view.estimatedProgress
             }
         }
 
         context.coordinator.loadingObservation = webView.observe(\.isLoading) { view, _ in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.isLoading = view.isLoading
                 self.canGoBack = view.canGoBack
                 self.canGoForward = view.canGoForward
@@ -142,7 +142,7 @@ struct WebViewRepresentable: UIViewRepresentable {
             }
         }
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             self.webView = webView
         }
 

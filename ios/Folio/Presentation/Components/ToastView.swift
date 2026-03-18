@@ -44,11 +44,10 @@ struct ToastModifier: ViewModifier {
                                 isPresented = false
                             }
                         }
-                        .onAppear {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
-                                withAnimation(.easeOut(duration: 0.3)) {
-                                    isPresented = false
-                                }
+                        .task {
+                            try? await Task.sleep(for: .seconds(duration))
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                isPresented = false
                             }
                         }
                 }

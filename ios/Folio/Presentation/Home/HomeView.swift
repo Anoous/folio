@@ -20,6 +20,7 @@ struct HomeView: View {
     @State private var showShareSheet = false
     @State private var shareItems: [Any]? = nil
     @State private var showAIAnswer = false
+    @State private var showToastState = false
 
     private let mockTopics: [(name: String, count: Int)] = [
         ("AI & Machine Learning", 12),
@@ -161,10 +162,13 @@ struct HomeView: View {
                 SettingsView()
             }
         }
-        .toast(isPresented: Binding(
-            get: { viewModel?.showToast ?? false },
-            set: { viewModel?.showToast = $0 }
-        ), message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
+        .toast(isPresented: $showToastState, message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
+        .onChange(of: viewModel?.showToast) { _, newValue in
+            showToastState = newValue ?? false
+        }
+        .onChange(of: showToastState) { _, newValue in
+            viewModel?.showToast = newValue
+        }
         .alert(
             deleteConfirmTitle,
             isPresented: $showDeleteConfirmation
@@ -562,10 +566,10 @@ struct HomeView: View {
 
         Button {
             UIPasteboard.general.string = article.url
+            vm.toastMessage = String(localized: "home.article.linkCopied", defaultValue: "Link copied")
+            vm.toastIcon = "doc.on.doc"
             vm.showToast = false
-            DispatchQueue.main.async {
-                vm.toastMessage = String(localized: "home.article.linkCopied", defaultValue: "Link copied")
-                vm.toastIcon = "doc.on.doc"
+            Task { @MainActor in
                 vm.showToast = true
             }
         } label: {

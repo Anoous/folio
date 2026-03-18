@@ -21,6 +21,14 @@ final class HomeViewModel {
     var toastMessage = ""
     var toastIcon: String? = nil
 
+    private static let dateGroupFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.doesRelativeDateFormatting = false
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+
     private var currentPage = 0
     private let pageSize = 20
     private var hasMorePages = true
@@ -282,14 +290,6 @@ final class HomeViewModel {
         var groups: [String: [Article]] = [:]
         var order: [String] = []
 
-        let dateFormatter: DateFormatter = {
-            let f = DateFormatter()
-            f.doesRelativeDateFormatting = false
-            f.dateStyle = .medium
-            f.timeStyle = .none
-            return f
-        }()
-
         for article in articles {
             let key: String
             if calendar.isDateInToday(article.createdAt) {
@@ -297,7 +297,7 @@ final class HomeViewModel {
             } else if calendar.isDateInYesterday(article.createdAt) {
                 key = String(localized: "yesterday", defaultValue: "Yesterday")
             } else {
-                key = dateFormatter.string(from: article.createdAt)
+                key = Self.dateGroupFormatter.string(from: article.createdAt)
             }
 
             if groups[key] == nil {
