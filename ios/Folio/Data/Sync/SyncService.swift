@@ -37,7 +37,15 @@ final class SyncService {
         for article in articles {
             do {
                 let response: SubmitArticleResponse
-                if article.extractionSource == .client {
+                if article.sourceType == .manual {
+                    guard let content = article.markdownContent, !content.isEmpty else {
+                        continue
+                    }
+                    response = try await apiClient.submitManualContent(
+                        content: content,
+                        title: article.title
+                    )
+                } else if article.extractionSource == .client {
                     response = try await apiClient.submitArticle(
                         url: article.url,
                         title: article.title,

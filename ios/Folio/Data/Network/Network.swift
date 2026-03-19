@@ -78,6 +78,12 @@ struct SubmitArticleResponse: Decodable {
     let taskId: String
 }
 
+struct SubmitManualContentRequest: Encodable {
+    let content: String
+    var title: String?
+    var tagIds: [String]?
+}
+
 struct ArticleDTO: Decodable {
     let id: String
     let url: String?
@@ -472,6 +478,13 @@ final class APIClient: @unchecked Sendable {
         body.markdownContent = markdownContent
         body.wordCount = wordCount
         return try await request(method: "POST", path: "/api/v1/articles", body: body)
+    }
+
+    func submitManualContent(content: String, title: String? = nil, tagIds: [String] = []) async throws -> SubmitArticleResponse {
+        var body = SubmitManualContentRequest(content: content)
+        body.title = title
+        body.tagIds = tagIds.isEmpty ? nil : tagIds
+        return try await request(method: "POST", path: "/api/v1/articles/manual", body: body)
     }
 
     func listArticles(

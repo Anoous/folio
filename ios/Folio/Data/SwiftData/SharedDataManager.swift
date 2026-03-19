@@ -57,6 +57,16 @@ final class SharedDataManager {
         throw SharedDataError.invalidInput
     }
 
+    /// Save manual content (no URL required)
+    @MainActor
+    func saveManualContent(content: String) throws -> Article {
+        let article = Article(content: content)
+        context.insert(article)
+        try context.save()
+        FolioLogger.data.info("manual content saved: \(content.prefix(40))")
+        return article
+    }
+
     /// Check if URL already exists
     @MainActor
     func existsByURL(_ url: String) throws -> Bool {
