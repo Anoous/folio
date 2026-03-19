@@ -15,7 +15,7 @@ struct ArticleMerger {
         if dto.deletedAt != nil {
             if let existing = try articleRepo.fetchByServerID(dto.id) {
                 context.delete(existing)
-            } else if let byURL = try articleRepo.fetchByURL(dto.url) {
+            } else if let url = dto.url, let byURL = try articleRepo.fetchByURL(url) {
                 context.delete(byURL)
             }
             recordDeletion(serverID: dto.id)
@@ -35,7 +35,7 @@ struct ArticleMerger {
                 preservePendingLocalChanges: existing.syncState == .pendingUpdate
             )
             article = existing
-        } else if let byURL = try articleRepo.fetchByURL(dto.url) {
+        } else if let url = dto.url, let byURL = try articleRepo.fetchByURL(url) {
             byURL.updateFromDTO(
                 dto,
                 preservePendingLocalChanges: byURL.syncState == .pendingUpdate

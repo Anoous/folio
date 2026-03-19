@@ -81,7 +81,7 @@ final class ReaderViewModel {
         }
 
         // Fall back to client-side extraction
-        if let url = URL(string: article.url) {
+        if let urlString = article.url, let url = URL(string: urlString) {
             do {
                 let result = try await ContentExtractor().extract(url: url)
                 article.markdownContent = result.markdownContent
@@ -188,7 +188,7 @@ final class ReaderViewModel {
     // MARK: - Share
 
     func shareURL() -> URL? {
-        URL(string: article.url)
+        article.url.flatMap { URL(string: $0) }
     }
 
     // MARK: - Toast

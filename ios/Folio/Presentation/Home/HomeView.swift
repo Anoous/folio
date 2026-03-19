@@ -556,7 +556,7 @@ struct HomeView: View {
         }
 
         Button {
-            if let url = URL(string: article.url) {
+            if let urlString = article.url, let url = URL(string: urlString) {
                 shareItems = [url]
                 showShareSheet = true
             }
@@ -565,7 +565,7 @@ struct HomeView: View {
         }
 
         Button {
-            UIPasteboard.general.string = article.url
+            UIPasteboard.general.string = article.url ?? ""
             vm.toastMessage = String(localized: "home.article.linkCopied", defaultValue: "Link copied")
             vm.toastIcon = "doc.on.doc"
             vm.showToast = false

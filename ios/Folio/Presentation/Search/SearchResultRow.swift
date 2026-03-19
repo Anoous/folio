@@ -81,7 +81,7 @@ struct SearchResultRow: View {
             highlightedTextView(hlTitle)
                 .foregroundStyle(Color.folio.textPrimary)
         } else {
-            Text(item.article.title ?? item.article.url)
+            Text(item.article.displayTitle)
                 .foregroundStyle(Color.folio.textPrimary)
         }
     }

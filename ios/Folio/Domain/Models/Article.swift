@@ -25,10 +25,11 @@ enum SourceType: String, Codable {
     case zhihu
     case newsletter
     case youtube
+    case manual
 
     var supportsClientExtraction: Bool {
         switch self {
-        case .youtube: return false
+        case .youtube, .manual: return false
         default: return true
         }
     }
@@ -67,7 +68,7 @@ enum SyncState: String, Codable {
 @Model
 final class Article {
     @Attribute(.unique) var id: UUID
-    var url: String
+    var url: String?
     var title: String?
     var author: String?
     var siteName: String?
@@ -154,24 +155,27 @@ final class Article {
         if let title, !title.isEmpty {
             return title
         }
-        // Extract host + path from URL for a cleaner display
-        if let url = URL(string: url), let host = url.host() {
-            let path = url.path
+        if let url, let parsed = URL(string: url), let host = parsed.host() {
+            let path = parsed.path
             if path.isEmpty || path == "/" {
                 return host
             }
             // Show last meaningful path component
-            let lastComponent = url.lastPathComponent
+            let lastComponent = parsed.lastPathComponent
             if !lastComponent.isEmpty && lastComponent != "/" {
                 return "\(host) - \(lastComponent)"
             }
             return host
         }
-        return url
+        if let content = markdownContent, !content.isEmpty {
+            let preview = String(content.prefix(50))
+            return preview.count < content.count ? preview + "..." : preview
+        }
+        return String(localized: "article.untitled", defaultValue: "Untitled")
     }
 
     init(
-        url: String,
+        url: String?,
         title: String? = nil,
         author: String? = nil,
         siteName: String? = nil,
@@ -208,6 +212,13 @@ final class Article {
         self.extractionSourceRaw = ExtractionSource.none.rawValue
         self.clientExtractedAt = nil
     }
+
+    convenience init(content: String, title: String? = nil) {
+        self.init(url: nil, title: title, sourceType: .manual)
+        self.markdownContent = content
+        self.wordCount = content.count
+        self.statusRaw = ArticleStatus.pending.rawValue
+    }
 }
 
 // MARK: - SourceType Display
@@ -222,6 +233,7 @@ extension SourceType {
         case .youtube: "play.rectangle.fill"
         case .newsletter: "envelope.fill"
         case .web: "globe"
+        case .manual: "square.and.pencil"
         }
     }
 
@@ -234,6 +246,7 @@ extension SourceType {
         case .youtube: "YouTube"
         case .newsletter: "Newsletter"
         case .web: "Web"
+        case .manual: String(localized: "source.manual", defaultValue: "Manual")
         }
     }
 }

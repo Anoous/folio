@@ -195,7 +195,7 @@ final class HomeViewModel {
                     article.serverID = response.articleId
                     article.status = .processing
                 } catch {
-                    FolioLogger.sync.error("retryArticle failed: \(error) — \(article.url)")
+                    FolioLogger.sync.error("retryArticle failed: \(error) — \(article.url ?? "manual")")
                     article.status = .failed
                     article.fetchError = error.localizedDescription
                 }

@@ -73,7 +73,7 @@ struct ReaderView: View {
                 .presentationDetents([.medium])
         }
         .sheet(isPresented: $showsWebView) {
-            if let url = URL(string: article.url) {
+            if let urlString = article.url, let url = URL(string: urlString) {
                 WebViewContainer(url: url)
             }
         }
@@ -410,7 +410,7 @@ struct ReaderView: View {
     ]
 
     private func openOriginal() {
-        guard let url = URL(string: article.url) else { return }
+        guard let urlString = article.url, let url = URL(string: urlString) else { return }
         if let host = url.host(), Self.externalBrowserHosts.contains(host) {
             openURL(url)
         } else {

@@ -52,7 +52,7 @@ final class SyncService {
                 article.serverID = response.articleId
                 article.syncState = .synced
                 results[article.id] = true
-                FolioLogger.sync.info("article submitted: \(article.url)")
+                FolioLogger.sync.info("article submitted: \(article.url ?? "manual")")
 
                 // Start background polling for this article
                 let localID = article.id
@@ -68,16 +68,16 @@ final class SyncService {
                     article.status = .processing
                     results[article.id] = true
                 case .quotaExceeded:
-                    FolioLogger.sync.info("quota exceeded for article: \(article.url)")
+                    FolioLogger.sync.info("quota exceeded for article: \(article.url ?? "manual")")
                     article.status = .failed
                     article.fetchError = "Monthly quota exceeded"
                     results[article.id] = false
                 default:
-                    FolioLogger.sync.error("submit failed: \(error) — \(article.url)")
+                    FolioLogger.sync.error("submit failed: \(error) — \(article.url ?? "manual")")
                     results[article.id] = false
                 }
             } catch {
-                FolioLogger.sync.error("submit failed: \(error) — \(article.url)")
+                FolioLogger.sync.error("submit failed: \(error) — \(article.url ?? "manual")")
                 results[article.id] = false
             }
         }

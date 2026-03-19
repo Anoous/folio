@@ -64,7 +64,7 @@ struct UserDTO: Decodable {
 // MARK: Articles
 
 struct SubmitArticleRequest: Encodable {
-    let url: String
+    let url: String?
     let tagIds: [String]?
     var title: String?
     var author: String?
@@ -80,7 +80,7 @@ struct SubmitArticleResponse: Decodable {
 
 struct ArticleDTO: Decodable {
     let id: String
-    let url: String
+    let url: String?
     let title: String?
     let author: String?
     let siteName: String?
@@ -120,7 +120,7 @@ struct UpdateArticleRequest: Encodable {
 struct CrawlTaskDTO: Decodable {
     let id: String
     let articleId: String?
-    let url: String
+    let url: String?
     let sourceType: String?
     let status: String
     let errorMessage: String?
@@ -457,7 +457,7 @@ final class APIClient: @unchecked Sendable {
     // MARK: - Articles
 
     func submitArticle(
-        url: String,
+        url: String?,
         tagIds: [String] = [],
         title: String? = nil,
         author: String? = nil,
