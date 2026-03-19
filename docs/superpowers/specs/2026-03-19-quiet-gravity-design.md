@@ -1,8 +1,8 @@
 # Folio iOS 体验规格：沉静的分量感（Quiet Gravity）
 
-> 版本：1.0
+> 版本：1.1
 > 日期：2026-03-19
-> 状态：设计完成，待实现
+> 状态：设计完成，待实现（经 spec review 修订）
 
 ---
 
@@ -27,7 +27,9 @@
 
 新建文件 `ios/Folio/Presentation/Components/Motion.swift`：
 
-```
+```swift
+import SwiftUI
+
 enum Motion {
     // 主曲线：沉稳降落感，几乎无回弹
     static let settle = Animation.spring(duration: 0.4, bounce: 0.05)
@@ -44,16 +46,18 @@ enum Motion {
     // 缓慢推进：进度条、处理中状态
     static let slow = Animation.linear(duration: 2.0)
 
-    // 时长常量
-    enum Duration {
-        static let instant: Double = 0.1     // 状态切换
-        static let fast: Double = 0.2        // 按钮反馈
-        static let normal: Double = 0.35     // 标准过渡
-        static let slow: Double = 0.5        // 内容呈现
-        static let glacial: Double = 2.0     // 进度推进
+    /// 当用户开启"减弱动态效果"时，所有动画降级为瞬时过渡。
+    /// 使用方式：`withAnimation(Motion.resolved(Motion.settle, reduceMotion: reduceMotion))`
+    static func resolved(_ animation: Animation, reduceMotion: Bool) -> Animation? {
+        reduceMotion ? .none : animation
     }
 }
 ```
+
+**无障碍：Reduce Motion 支持**
+
+所有使用 `Motion` 的视图必须读取 `@Environment(\.accessibilityReduceMotion) private var reduceMotion`，
+并通过 `Motion.resolved(_:reduceMotion:)` 将动画降级为瞬时过渡。这不是可选项——是平台要求。
 
 ### 2.2 使用规则
 
@@ -115,8 +119,9 @@ enum Motion {
   - 元信息占位：高 10pt，宽 40%，圆角 3pt（摘要下方 8pt）
 
 使用场景：
-- 文章状态为 `.pending` 且 `markdownContent == nil` 时显示骨架屏替代正常卡片内容
+- 文章状态为 `.pending` 且 `title == nil` 且 `markdownContent == nil` 时显示骨架屏替代正常卡片内容
 - 不用于已有标题的文章（即使正在处理中）
+- 不用于手动内容文章（`sourceType == .manual`，创建时即有 content）
 
 ### 4.2 处理中状态
 
@@ -143,6 +148,13 @@ enum Motion {
 - 进度线变为 `Color.folio.error.opacity(0.4)`
 - 然后淡出
 - 触发 `.sensoryFeedback(.error)`
+
+### 4.4 clientReady 状态
+
+文章状态为 `.clientReady`（客户端已提取内容，服务端尚未处理）时：
+- 显示正常卡片布局（标题、摘要等正常显示——客户端提取的内容已可用）
+- 底部进度线同 `.processing`，但颜色使用 `Color.folio.success.opacity(0.3)`——暗示"内容已就绪，AI 整理中"
+- 保留当前的 `doc.richtext` 图标作为状态指示（区别于 processing 的进度线颜色已足够）
 
 ---
 
@@ -202,7 +214,7 @@ enum Motion {
 
 ### 5.4 收藏切换动画
 
-左滑收藏时的心形图标动画：
+右滑（`.leading` edge）收藏时的心形图标动画：
 - 收藏（空心 → 实心）：
   - 图标 scale 从 `1.0 → 1.3 → 1.0`，使用 `Motion.settle`
   - 同时颜色从 `.gray` 过渡到 `.pink`
@@ -263,8 +275,8 @@ Context menu 中的收藏按钮：同样的触觉，无 scale 动画（菜单内
 
 ### 6.1 搜索结果出现
 
-输入文字后搜索结果的呈现：
-- 结果列表整体：`opacity: 0 → 1`，使用 `Motion.ink`
+输入文字后，HomeView 通过 `if isSearching` 将整个 `HomeSearchResultsView` 组件替换进画面。动画作用于这次组件切换：
+- 整个 `HomeSearchResultsView` 作为一个整体：`opacity: 0 → 1`，使用 `Motion.ink`
 - 不做逐条入场动画——搜索结果应该"立刻在那里"，像翻到了书的索引页
 - 搜索结果的关键词高亮保持现有实现
 
@@ -303,17 +315,17 @@ Context menu 中的收藏按钮：同样的触觉，无 scale 动画（菜单内
 调整阅读页排版参数，增加"空气"：
 
 **标题区域：**
-- 标题上方留白：从当前值增加到 `40pt`
-- 标题下方到元信息：`24pt`（如果当前更小则调整）
+- 标题上方留白：保持当前 `40pt`（已合适）
+- 标题下方到元信息：从 `Spacing.xs`（8pt）增加到 `Spacing.lg`（24pt）
 - 标题字体保持不变（NotoSerifSC-Bold 或用户偏好字体）
 
 **元信息区域：**
-- 元信息块下方到正文分隔：`32pt`
+- 元信息块下方到正文分隔：从当前 `20pt` 增加到 `Spacing.xl`（32pt）
 - 分隔线颜色：`Color.folio.separator`
-- 分隔线上下各 `16pt` 呼吸空间
+- 分隔线上下各 `Spacing.md`（16pt）呼吸空间
 
 **正文：**
-- 段间距：增加到 `1.0em`（当前行高 1.7 保持，段落之间额外加空）
+- 段间距：增加到 `17pt`（即 1.0 × 正文字号，当用户调整字号时按比例缩放）
 - 引用块左边距：从默认增加到 `20pt`
 - 引用块左侧竖线：宽 `2.5pt`，颜色 `Color.folio.accent.opacity(0.3)`
 - 代码块上下外边距：各 `16pt`
@@ -364,14 +376,18 @@ Context menu 中的收藏按钮：同样的触觉，无 scale 动画（菜单内
 ### 8.2 视觉样式
 
 ```
-位置：距底部安全区 + 输入栏高度 + 8pt
+定位策略：在 HomeView 的 content 区域内使用 .overlay(alignment: .bottom)，
+         位于 .safeAreaInset(edge: .bottom) 的 UnifiedInputBar 之上。
+         这样 toast 自动浮在输入栏上方，无需计算动态高度。
+         底部偏移：Spacing.xs（8pt）— 与输入栏保持呼吸间距。
+
 宽度：自适应内容，最大不超过屏幕宽度 - 32pt
 高度：自适应，内边距 horizontal 16pt, vertical 10pt
-背景：.ultraThinMaterial（毛玻璃）
+背景：.ultraThinMaterial（毛玻璃）— 注意：这是从当前深色背景到毛玻璃的视觉变更
 圆角：CornerRadius.large（12pt）
 阴影：.shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
-图标：左侧，16pt，Color.folio.textPrimary
-文字：Typography.body，Color.folio.textPrimary
+图标：左侧，16pt，Color.folio.textPrimary（从当前的 cardBackground 色改为 textPrimary）
+文字：Typography.body（从当前的 Typography.caption 增大），Color.folio.textPrimary
 ```
 
 ### 8.3 动画
@@ -414,7 +430,7 @@ Context menu 中的收藏按钮：同样的触觉，无 scale 动画（菜单内
 
 保持系统默认，不自定义。
 
-删除确认 alert 出现时触发 `.sensoryFeedback(.warning)`——提醒用户这是破坏性操作。
+删除确认 alert 出现时触发 `.sensoryFeedback(.impact(.medium))`——提醒用户这是破坏性操作。
 
 ---
 
@@ -443,8 +459,7 @@ Share Extension 受 120MB 内存限制，保持极简：
 
 | 文件 | 用途 |
 |------|------|
-| `ios/Folio/Presentation/Components/Motion.swift` | 动画常量 |
-| `ios/Folio/Presentation/Components/Haptics.swift` | 触觉辅助修饰符（可选，如果 `.sensoryFeedback` 直接内联足够则不需要） |
+| `ios/Folio/Presentation/Components/Motion.swift` | 动画常量 + Reduce Motion 支持 |
 | `ios/Folio/Presentation/Components/ShimmerView.swift` | 骨架屏组件 |
 | `ios/Folio/Presentation/Components/ProcessingProgressBar.swift` | 处理中进度线组件 |
 | `ios/Folio/Presentation/Components/ReadingProgressBar.swift` | 阅读进度条组件 |
