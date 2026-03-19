@@ -5,6 +5,7 @@ struct EmptyStateView: View {
 
     @State private var clipboardURL: URL?
     @State private var appeared = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: Spacing.lg) {
@@ -52,6 +53,8 @@ struct EmptyStateView: View {
                     onPasteURL?(url)
                 }
                 .padding(.horizontal, Spacing.xl)
+                .transition(.opacity)
+                .animation(Motion.ink, value: clipboardURL != nil)
             } else {
                 Text(String(localized: "empty.addHint", defaultValue: "Tap + to add a link manually"))
                     .font(Typography.caption)
@@ -59,11 +62,11 @@ struct EmptyStateView: View {
             }
         }
         .padding(Spacing.screenPadding)
-        .offset(y: appeared ? 0 : 8)
+        .offset(y: appeared ? 0 : 12)
         .opacity(appeared ? 1 : 0)
         .onAppear {
             checkClipboard()
-            withAnimation(.easeOut(duration: 0.3)) {
+            withAnimation(Motion.resolved(Motion.settle, reduceMotion: reduceMotion) ?? .default) {
                 appeared = true
             }
         }
