@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
     @State private var showUpgradeAlert = false
+    @State private var logoutTrigger = false
 
     var body: some View {
         List {
@@ -15,6 +16,7 @@ struct SettingsView: View {
             #endif
         }
         .navigationTitle(String(localized: "settings.title", defaultValue: "Settings"))
+        .sensoryFeedback(.impact(weight: .medium), trigger: logoutTrigger)
         .alert(
             String(localized: "settings.upgrade.title", defaultValue: "Upgrade to Pro"),
             isPresented: $showUpgradeAlert
@@ -102,6 +104,7 @@ struct SettingsView: View {
         Section {
             if authViewModel?.isAuthenticated == true {
                 Button(role: .destructive) {
+                    logoutTrigger.toggle()
                     authViewModel?.signOut()
                 } label: {
                     Label(String(localized: "settings.signOut", defaultValue: "Sign Out"), systemImage: "rectangle.portrait.and.arrow.right")

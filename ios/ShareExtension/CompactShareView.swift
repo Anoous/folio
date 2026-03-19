@@ -9,6 +9,7 @@ enum ShareState {
 
 struct CompactShareView: View {
     let state: ShareState
+    @State private var saveCompleted = false
 
     var body: some View {
         VStack(spacing: Spacing.sm) {
@@ -38,6 +39,12 @@ struct CompactShareView: View {
         }
         .padding(Spacing.xl)
         .frame(maxWidth: .infinity)
+        .sensoryFeedback(.success, trigger: saveCompleted)
+        .onAppear {
+            if case .saved = state {
+                saveCompleted = true
+            }
+        }
     }
 
     private func statusIcon(_ name: String, color: Color) -> some View {
