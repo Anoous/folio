@@ -3,7 +3,10 @@ FROM node:22-slim AS build
 WORKDIR /app
 
 COPY package.json package-lock.json* reader-local.tgz* ./
-RUN npm install
+RUN if [ -f reader-local.tgz ]; then \
+      sed -i 's|"file:../../../reader"|"file:reader-local.tgz"|' package.json; \
+      rm -f package-lock.json; \
+    fi && npm install
 
 COPY tsconfig.json ./
 COPY src ./src
@@ -14,7 +17,10 @@ FROM node:22-slim
 WORKDIR /app
 
 COPY package.json package-lock.json* reader-local.tgz* ./
-RUN npm install --omit=dev
+RUN if [ -f reader-local.tgz ]; then \
+      sed -i 's|"file:../../../reader"|"file:reader-local.tgz"|' package.json; \
+      rm -f package-lock.json; \
+    fi && npm install --omit=dev
 
 COPY --from=build /app/dist ./dist
 
