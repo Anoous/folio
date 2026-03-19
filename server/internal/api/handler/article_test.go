@@ -52,6 +52,10 @@ func (m *mockArticleService) Search(ctx context.Context, userID, query string, p
 	return &repository.ListArticlesResult{}, nil
 }
 
+func (m *mockArticleService) SubmitManualContent(ctx context.Context, userID string, req service.SubmitManualContentRequest) (*service.SubmitURLResponse, error) {
+	return &service.SubmitURLResponse{ArticleID: "art-manual-1", TaskID: "task-manual-1"}, nil
+}
+
 // --- Mock user getter for handler tests ---
 
 type mockUserGetter struct{}

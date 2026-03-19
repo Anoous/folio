@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -20,6 +21,7 @@ import (
 // articleServicer defines the methods that ArticleHandler needs from the article service.
 type articleServicer interface {
 	SubmitURL(ctx context.Context, userID string, req service.SubmitURLRequest) (*service.SubmitURLResponse, error)
+	SubmitManualContent(ctx context.Context, userID string, req service.SubmitManualContentRequest) (*service.SubmitURLResponse, error)
 	ListByUser(ctx context.Context, params repository.ListArticlesParams) (*repository.ListArticlesResult, error)
 	GetByID(ctx context.Context, userID, articleID string) (*domain.Article, error)
 	Update(ctx context.Context, userID, articleID string, params repository.UpdateArticleParams) error
@@ -83,6 +85,49 @@ func (h *ArticleHandler) HandleSubmitURL(w http.ResponseWriter, r *http.Request)
 	}
 
 	resp, err := h.articleService.SubmitURL(r.Context(), userID, req)
+	if err != nil {
+		handleServiceError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, resp)
+}
+
+type submitManualRequest struct {
+	Content string   `json:"content"`
+	Title   *string  `json:"title,omitempty"`
+	TagIDs  []string `json:"tag_ids,omitempty"`
+}
+
+func (h *ArticleHandler) HandleSubmitManual(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+
+	var req submitManualRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Validate: reject empty/whitespace-only content
+	if strings.TrimSpace(req.Content) == "" {
+		writeError(w, http.StatusBadRequest, "content is required")
+		return
+	}
+
+	// Truncate content if it exceeds 500 KB, ensuring valid UTF-8 boundary
+	if len(req.Content) > maxMarkdownContentBytes {
+		truncated := req.Content[:maxMarkdownContentBytes]
+		for len(truncated) > 0 && !utf8.ValidString(truncated) {
+			truncated = truncated[:len(truncated)-1]
+		}
+		req.Content = truncated
+	}
+
+	resp, err := h.articleService.SubmitManualContent(r.Context(), userID, service.SubmitManualContentRequest{
+		Content: req.Content,
+		Title:   req.Title,
+		TagIDs:  req.TagIDs,
+	})
 	if err != nil {
 		handleServiceError(w, r, err)
 		return

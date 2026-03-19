@@ -60,6 +60,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 			// Articles — search BEFORE {id} for chi route priority
 			r.Get("/articles/search", deps.SearchHandler.HandleSearch)
 			r.Post("/articles", deps.ArticleHandler.HandleSubmitURL)
+			r.Post("/articles/manual", deps.ArticleHandler.HandleSubmitManual)
 			r.Get("/articles", deps.ArticleHandler.HandleListArticles)
 			r.Get("/articles/{id}", deps.ArticleHandler.HandleGetArticle)
 			r.Put("/articles/{id}", deps.ArticleHandler.HandleUpdateArticle)

@@ -54,6 +54,12 @@ type SubmitURLResponse struct {
 	TaskID    string `json:"task_id"`
 }
 
+type SubmitManualContentRequest struct {
+	Content string   `json:"content"`
+	Title   *string  `json:"title,omitempty"`
+	TagIDs  []string `json:"tag_ids,omitempty"`
+}
+
 func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req SubmitURLRequest) (*SubmitURLResponse, error) {
 	// Check for duplicate URL before consuming quota
 	if exists, err := s.articleRepo.ExistsByUserAndURL(ctx, userID, req.URL); err != nil {
@@ -116,6 +122,68 @@ func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req Submi
 	}
 
 	slog.Info("article submitted", "article_id", article.ID, "task_id", task.ID, "url", req.URL)
+
+	return &SubmitURLResponse{
+		ArticleID: article.ID,
+		TaskID:    task.ID,
+	}, nil
+}
+
+func (s *ArticleService) SubmitManualContent(ctx context.Context, userID string, req SubmitManualContentRequest) (*SubmitURLResponse, error) {
+	// Check quota
+	if err := s.quotaService.CheckAndIncrement(ctx, userID); err != nil {
+		return nil, err
+	}
+
+	// Compute word count
+	wordCount := repository.CountWords(req.Content)
+
+	// Create article
+	article, err := s.articleRepo.Create(ctx, repository.CreateArticleParams{
+		UserID:          userID,
+		URL:             nil,
+		SourceType:      domain.SourceManual,
+		Title:           req.Title,
+		MarkdownContent: &req.Content,
+		WordCount:       &wordCount,
+	})
+	if err != nil {
+		_ = s.quotaService.DecrementQuota(ctx, userID)
+		return nil, fmt.Errorf("create article: %w", err)
+	}
+
+	// Attach user-provided tags
+	for _, tagID := range req.TagIDs {
+		if err := s.tagRepo.AttachToArticle(ctx, article.ID, tagID); err != nil {
+			slog.Error("failed to attach tag", "article_id", article.ID, "tag_id", tagID, "error", err)
+			continue
+		}
+	}
+
+	// Create task for AI processing
+	task, err := s.taskRepo.Create(ctx, repository.CreateTaskParams{
+		ArticleID:  article.ID,
+		UserID:     userID,
+		URL:        nil,
+		SourceType: string(domain.SourceManual),
+	})
+	if err != nil {
+		_ = s.quotaService.DecrementQuota(ctx, userID)
+		return nil, fmt.Errorf("create task: %w", err)
+	}
+
+	// Enqueue AI processing directly (no crawl needed for manual content)
+	title := ""
+	if req.Title != nil {
+		title = *req.Title
+	}
+	aiTask := worker.NewAIProcessTask(article.ID, task.ID, userID, title, req.Content, string(domain.SourceManual), "")
+	if _, err := s.asynqClient.EnqueueContext(ctx, aiTask); err != nil {
+		_ = s.quotaService.DecrementQuota(ctx, userID)
+		return nil, fmt.Errorf("enqueue ai process: %w", err)
+	}
+
+	slog.Info("manual content submitted", "article_id", article.ID, "task_id", task.ID, "word_count", wordCount)
 
 	return &SubmitURLResponse{
 		ArticleID: article.ID,
