@@ -53,6 +53,15 @@ class FolioAPIClient:
             body["tag_ids"] = tag_ids
         return self.post("/api/v1/articles", json=body)
 
+    def submit_manual(self, content: str, title: str | None = None, tag_ids: list[str] | None = None) -> httpx.Response:
+        """Submit manual content (no URL)."""
+        payload: dict = {"content": content}
+        if title:
+            payload["title"] = title
+        if tag_ids:
+            payload["tag_ids"] = tag_ids
+        return self.post("/api/v1/articles/manual", json=payload)
+
     def list_articles(self, **params) -> httpx.Response:
         return self.get("/api/v1/articles", params=params)
 

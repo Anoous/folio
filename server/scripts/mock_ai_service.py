@@ -59,13 +59,33 @@ _STOP_WORDS = {
 }
 
 
-def _pick_category(source: str) -> tuple[str, str]:
-    """Deterministic category based on source URL."""
-    source_lower = source.lower()
-    for pattern, slug, name in CATEGORY_RULES:
-        if pattern in source_lower:
+CONTENT_KEYWORD_RULES = [
+    ({"code", "programming", "api", "software", "tech"}, "tech", "Technology"),
+    ({"science", "research", "study"}, "science", "Science"),
+    ({"design", "ui", "ux"}, "design", "Design"),
+    ({"business", "startup", "market"}, "business", "Business"),
+]
+
+
+def _pick_category(source: str, title: str = "", content: str = "") -> tuple[str, str]:
+    """Deterministic category based on source URL, falling back to content keywords."""
+    if source and source.strip():
+        source_lower = source.lower()
+        for pattern, slug, name in CATEGORY_RULES:
+            if pattern in source_lower:
+                return slug, name
+
+    # Fall back to keyword matching on title + content[:200]
+    text_lower = f"{title} {content[:200]}".lower()
+    for keywords, slug, name in CONTENT_KEYWORD_RULES:
+        if any(kw in text_lower for kw in keywords):
             return slug, name
-    return "tech", "Technology"
+
+    # Default when source is present but unmatched
+    if source and source.strip():
+        return "tech", "Technology"
+
+    return "other", "Other"
 
 
 def _extract_tags(title: str, content: str = "") -> list[str]:
@@ -129,7 +149,7 @@ def analyze(req: AnalyzeRequest):
     if not summary:
         summary = "Mock summary generated for local integration."
 
-    cat_slug, cat_name = _pick_category(req.source)
+    cat_slug, cat_name = _pick_category(req.source, req.title or "", req.content or "")
     tags = _extract_tags(title, req.content)
 
     return {
