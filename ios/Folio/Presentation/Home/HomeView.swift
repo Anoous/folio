@@ -21,21 +21,28 @@ struct HomeView: View {
     @State private var showDeleteConfirmation = false
     @State private var showShareSheet = false
     @State private var shareItems: [Any]? = nil
-    @State private var showAIAnswer = false
-    @State private var showToastState = false
+    @State private var saveSucceeded = false
+    @State private var saveFailed = false
+    @State private var deleteConfirmTrigger = false
+    @State private var refreshTrigger = false
 
     var body: some View {
-        Group {
-            if isSearching {
-                searchResultsContent
-            } else if viewModel?.articles.isEmpty ?? true {
-                EmptyStateView(onPasteURL: { url in
-                    saveURL(url.absoluteString)
-                })
-            } else {
-                articleList
-            }
+        coreView
+        .sensoryFeedback(.success, trigger: saveSucceeded)
+        .sensoryFeedback(.error, trigger: saveFailed)
+        .sensoryFeedback(.impact(weight: .medium), trigger: deleteConfirmTrigger)
+        .sensoryFeedback(.impact(weight: .light), trigger: refreshTrigger)
+        .onAppear(perform: initializeViewModels)
+        .onChange(of: authViewModel?.isAuthenticated) { _, newValue in
+            viewModel?.isAuthenticated = newValue ?? false
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            handleScenePhaseChange(newPhase)
+        }
+    }
+
+    private var coreView: some View {
+        mainContent
         .navigationTitle("Folio")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -59,7 +66,9 @@ struct HomeView: View {
         }
         .onChange(of: searchText) { _, newValue in
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            isSearching = !trimmed.isEmpty
+            withAnimation(Motion.quick) {
+                isSearching = !trimmed.isEmpty
+            }
             if trimmed.isEmpty {
                 viewModel?.fetchArticles()
             } else {
@@ -90,13 +99,7 @@ struct HomeView: View {
                 SettingsView()
             }
         }
-        .toast(isPresented: $showToastState, message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
-        .onChange(of: viewModel?.showToast) { _, newValue in
-            showToastState = newValue ?? false
-        }
-        .onChange(of: showToastState) { _, newValue in
-            viewModel?.showToast = newValue
-        }
+        .toast(isPresented: showToastBinding, message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
         .alert(
             deleteConfirmTitle,
             isPresented: $showDeleteConfirmation
@@ -113,183 +116,59 @@ struct HomeView: View {
         } message: {
             Text(String(localized: "reader.deleteMessage", defaultValue: "This article will be permanently removed."))
         }
-        .onAppear {
-            if viewModel == nil {
-                viewModel = HomeViewModel(
-                    context: modelContext,
-                    isAuthenticated: authViewModel?.isAuthenticated ?? false
-                )
-                viewModel?.fetchArticles()
-            }
-            if searchViewModel == nil {
-                guard let manager = try? FTS5SearchManager(inMemory: false) else { return }
-                let svm = SearchViewModel(searchManager: manager, context: modelContext)
-                searchViewModel = svm
-                svm.loadPopularTags()
-                svm.refreshSyncedCount(context: modelContext)
-            }
-        }
-        .onChange(of: authViewModel?.isAuthenticated) { _, newValue in
-            viewModel?.isAuthenticated = newValue ?? false
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            // Share Extension 在独立进程中写入 SQLite，主 App 的 ModelContext
-            // 不会自动感知跨进程变更。通过 UserDefaults 标志位检测后重新 fetch。
-            if newPhase == .active {
-                let flag = UserDefaults.appGroup.bool(forKey: AppConstants.shareExtensionDidSaveKey)
-                FolioLogger.data.info("home-debug: scenePhase=active, shareFlag=\(flag)")
-                if flag {
-                    UserDefaults.appGroup.set(false, forKey: AppConstants.shareExtensionDidSaveKey)
-                    viewModel?.fetchArticles()
-                    searchViewModel?.refreshSyncedCount(context: modelContext)
-                    FolioLogger.data.info("home-debug: fetchArticles called, vm.articles.count=\(viewModel?.articles.count ?? -1)")
-                }
-            }
+    }
+
+    // MARK: - Main Content
+
+    @ViewBuilder
+    private var mainContent: some View {
+        if isSearching, let svm = searchViewModel {
+            HomeSearchResultsView(searchViewModel: svm, searchText: $searchText)
+                .transition(.opacity)
+        } else if viewModel?.articles.isEmpty ?? true {
+            EmptyStateView(onPasteURL: { url in
+                saveURL(url.absoluteString)
+            })
+            .transition(.opacity)
+        } else {
+            articleList
+                .transition(.opacity)
         }
     }
+
+    // MARK: - Toast Binding
+
+    private var showToastBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel?.showToast ?? false },
+            set: { viewModel?.showToast = $0 }
+        )
+    }
+
+    // MARK: - Delete Confirmation
 
     private var deleteConfirmTitle: String {
         let title = articleToDelete?.displayTitle ?? ""
         return String(localized: "reader.deleteConfirm", defaultValue: "Delete this article?") + (title.isEmpty ? "" : "\n\"\(title)\"")
     }
 
+    // MARK: - Add Button
+
     private var addButton: some View {
-        Button {
-            urlInput = ""
-            if let url = UIPasteboard.general.url {
-                urlInput = url.absoluteString
-            } else if let string = UIPasteboard.general.string,
-                      let url = URL(string: string), url.scheme?.hasPrefix("http") == true {
-                urlInput = string
-            }
-            showAddURL = true
-        } label: {
+        Button(action: prepareAddURL) {
             Label(String(localized: "home.add", defaultValue: "Add"), systemImage: "plus")
         }
     }
 
-    // MARK: - Search Results
-
-    @ViewBuilder
-    private var searchResultsContent: some View {
-        if let svm = searchViewModel {
-            if svm.isSearching {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let error = svm.searchError {
-                searchErrorState(error: error)
-            } else if svm.showsEmptyState {
-                searchEmptyState
-            } else {
-                searchResultsList(svm: svm)
-            }
+    private func prepareAddURL() {
+        urlInput = ""
+        if let url = UIPasteboard.general.url {
+            urlInput = url.absoluteString
+        } else if let string = UIPasteboard.general.string,
+                  let url = URL(string: string), url.scheme?.hasPrefix("http") == true {
+            urlInput = string
         }
-    }
-
-    private func searchResultsList(svm: SearchViewModel) -> some View {
-        List {
-            Section {
-                ForEach(svm.results) { item in
-                    NavigationLink(value: item.article.id) {
-                        SearchResultRow(
-                            item: item,
-                            searchQuery: svm.searchText
-                        )
-                    }
-                    .listRowInsets(EdgeInsets())
-                }
-            } header: {
-                Text("\(svm.resultCount) " + (svm.resultCount == 1
-                    ? String(localized: "search.result", defaultValue: "result")
-                    : String(localized: "search.results", defaultValue: "results")))
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textTertiary)
-            }
-        }
-        .listStyle(.plain)
-    }
-
-    private func searchErrorState(error: String) -> some View {
-        VStack(spacing: Spacing.md) {
-            Image(systemName: "exclamationmark.magnifyingglass")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.folio.error)
-
-            Text(String(localized: "search.error", defaultValue: "Search failed"))
-                .font(Typography.listTitle)
-                .foregroundStyle(Color.folio.textPrimary)
-
-            Text(error)
-                .font(Typography.caption)
-                .foregroundStyle(Color.folio.textTertiary)
-                .multilineTextAlignment(.center)
-
-            FolioButton(
-                title: String(localized: "search.retry", defaultValue: "Retry"),
-                style: .secondary
-            ) {
-                searchViewModel?.performSearch()
-            }
-            .frame(width: 160)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(Spacing.screenPadding)
-    }
-
-    private var searchEmptyState: some View {
-        VStack(spacing: Spacing.md) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.folio.textTertiary)
-
-            Text(String(localized: "search.noResults", defaultValue: "No results found"))
-                .font(Typography.listTitle)
-                .foregroundStyle(Color.folio.textPrimary)
-
-            Text(String(localized: "search.noResultsHint", defaultValue: "Try different keywords or check spelling"))
-                .font(Typography.body)
-                .foregroundStyle(Color.folio.textSecondary)
-                .multilineTextAlignment(.center)
-
-            if showAIAnswer {
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    HStack(spacing: Spacing.xxs) {
-                        Text("\u{2726}")
-                            .font(.caption)
-                            .foregroundStyle(Color.folio.accent)
-                        Text("AI")
-                            .font(Typography.tag)
-                            .foregroundStyle(Color.folio.accent)
-                    }
-                    Text(String(localized: "search.aiMockAnswer", defaultValue: "Based on 4 articles in your collection, here are some relevant insights on this topic..."))
-                        .font(Typography.body)
-                        .foregroundStyle(Color.folio.textSecondary)
-                        .lineSpacing(4)
-                }
-                .padding(Spacing.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.folio.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
-            } else {
-                Button {
-                    withAnimation { showAIAnswer = true }
-                } label: {
-                    HStack(spacing: Spacing.xs) {
-                        Text("\u{2728}")
-                        Text(String(localized: "search.askAI", defaultValue: "Ask AI about your collection"))
-                            .font(Typography.body)
-                    }
-                    .foregroundStyle(Color.folio.accent)
-                }
-                .buttonStyle(.plain)
-                .padding(.top, Spacing.sm)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(Spacing.screenPadding)
-        .onChange(of: searchText) { _, _ in
-            showAIAnswer = false
-        }
+        showAddURL = true
     }
 
     // MARK: - Article List
@@ -299,11 +178,34 @@ struct HomeView: View {
             statusBanners
 
             if let vm = viewModel {
-                articleSections(vm: vm)
+                ForEach(vm.groupedArticles, id: \.0) { group in
+                    Section {
+                        ForEach(group.1) { article in
+                            HomeArticleRow(
+                                article: article,
+                                isLast: article.id == group.1.last?.id
+                            ) { action in
+                                handleArticleAction(action, article: article, vm: vm)
+                            }
+                        }
+                    } header: {
+                        Text(group.0)
+                            .font(Typography.caption)
+                            .foregroundStyle(Color.folio.textTertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, Spacing.screenPadding)
+                            .padding(.vertical, 8)
+                            .background(Color.folio.background)
+                            .listRowInsets(EdgeInsets())
+                    }
+                }
+                .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
+                .listRowSeparatorTint(Color.folio.separator)
             }
         }
         .listStyle(.plain)
         .refreshable {
+            refreshTrigger.toggle()
             if let syncService {
                 await syncService.incrementalSync()
             }
@@ -389,128 +291,29 @@ struct HomeView: View {
         .padding(.vertical, Spacing.xxs)
     }
 
-    // MARK: - Article Sections
+    // MARK: - Article Actions
 
-    @ViewBuilder
-    private func articleSections(vm: HomeViewModel) -> some View {
-        ForEach(vm.groupedArticles, id: \.0) { group in
-            Section {
-                ForEach(group.1) { article in
-                    articleRow(article: article, vm: vm, isLast: article.id == group.1.last?.id)
-                }
-            } header: {
-                Text(group.0)
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textTertiary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, Spacing.screenPadding)
-                    .padding(.vertical, 8)
-                    .background(Color.folio.background)
-                    .listRowInsets(EdgeInsets())
-            }
-        }
-        .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
-        .listRowSeparatorTint(Color.folio.separator)
-    }
-
-    private func articleRow(article: Article, vm: HomeViewModel, isLast: Bool) -> some View {
-        NavigationLink(value: article.id) {
-            ArticleCardView(article: article, onRetry: article.status == .failed ? {
-                vm.retryArticle(article)
-            } : nil)
-        }
-        .onAppear {
-            if isLast { vm.loadNextPage() }
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                articleToDelete = article
-                showDeleteConfirmation = true
-            } label: {
-                Label(String(localized: "reader.delete", defaultValue: "Delete"), systemImage: "trash")
-            }
-        }
-        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            Button {
-                vm.toggleFavorite(article)
-            } label: {
-                Label(
-                    article.isFavorite
-                        ? String(localized: "reader.unfavorite", defaultValue: "Remove Favorite")
-                        : String(localized: "reader.favorite", defaultValue: "Favorite"),
-                    systemImage: article.isFavorite ? "heart.slash" : "heart"
-                )
-            }
-            .tint(article.isFavorite ? .gray : .pink)
-        }
-        .contextMenu {
-            articleContextMenu(article: article, vm: vm)
-        }
-    }
-
-    @ViewBuilder
-    private func articleContextMenu(article: Article, vm: HomeViewModel) -> some View {
-        // Retry (only for failed articles)
-        if article.status == .failed {
-            Button {
-                vm.retryArticle(article)
-            } label: {
-                Label(String(localized: "article.retry", defaultValue: "Retry"), systemImage: "arrow.clockwise")
-            }
-
-            Divider()
-        }
-
-        Button {
+    private func handleArticleAction(_ action: ArticleRowAction, article: Article, vm: HomeViewModel) {
+        switch action {
+        case .loadMore:
+            vm.loadNextPage()
+        case .toggleFavorite:
             vm.toggleFavorite(article)
-        } label: {
-            Label(
-                article.isFavorite
-                    ? String(localized: "reader.unfavorite", defaultValue: "Remove Favorite")
-                    : String(localized: "reader.favorite", defaultValue: "Favorite"),
-                systemImage: article.isFavorite ? "heart.fill" : "heart"
-            )
-        }
-
-        Button {
-            vm.archiveArticle(article)
-        } label: {
-            Label(
-                article.isArchived
-                    ? String(localized: "reader.unarchive", defaultValue: "Unarchive")
-                    : String(localized: "reader.archive", defaultValue: "Archive"),
-                systemImage: article.isArchived ? "archivebox.fill" : "archivebox"
-            )
-        }
-
-        Button {
-            if let urlString = article.url, let url = URL(string: urlString) {
-                shareItems = [url]
-                showShareSheet = true
-            }
-        } label: {
-            Label(String(localized: "reader.share", defaultValue: "Share"), systemImage: "square.and.arrow.up")
-        }
-
-        Button {
-            UIPasteboard.general.string = article.url ?? ""
-            vm.toastMessage = String(localized: "home.article.linkCopied", defaultValue: "Link copied")
-            vm.toastIcon = "doc.on.doc"
-            vm.showToast = false
-            Task { @MainActor in
-                vm.showToast = true
-            }
-        } label: {
-            Label(String(localized: "home.article.copyLink", defaultValue: "Copy Link"), systemImage: "link")
-        }
-
-        Divider()
-
-        Button(role: .destructive) {
+        case .retry:
+            vm.retryArticle(article)
+        case .delete:
             articleToDelete = article
             showDeleteConfirmation = true
-        } label: {
-            Label(String(localized: "reader.delete", defaultValue: "Delete"), systemImage: "trash")
+            deleteConfirmTrigger.toggle()
+        case .archive:
+            vm.archiveArticle(article)
+        case .share(let url):
+            shareItems = [url]
+            showShareSheet = true
+        case .copyLink(let urlString):
+            UIPasteboard.general.string = urlString
+            showToast(String(localized: "home.article.linkCopied", defaultValue: "Link copied"), icon: "doc.on.doc")
+            saveSucceeded.toggle()
         }
     }
 
@@ -523,46 +326,42 @@ struct HomeView: View {
             SharedDataManager.incrementQuota()
             viewModel?.fetchArticles()
             showToast(String(localized: "home.addURL.saved", defaultValue: "Link saved"), icon: "checkmark.circle.fill")
+            saveSucceeded.toggle()
 
             Task {
                 await offlineQueueManager?.processPendingArticles()
             }
         } catch SharedDataError.duplicateURL {
             showToast(String(localized: "home.addURL.duplicate", defaultValue: "Link already exists"), icon: "exclamationmark.triangle.fill")
+            saveFailed.toggle()
         } catch {
             showToast(String(localized: "home.addURL.error", defaultValue: "Failed to save"), icon: "xmark.circle.fill")
+            saveFailed.toggle()
         }
     }
 
     private func saveManualContent(_ content: String) {
+        let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
+        guard SharedDataManager.canSave(isPro: isPro) else {
+            showToast(String(localized: "home.quotaExceeded", defaultValue: "Monthly quota exceeded"), icon: "exclamationmark.triangle.fill")
+            saveFailed.toggle()
+            return
+        }
+
         let manager = SharedDataManager(context: modelContext)
         do {
-            let article = try manager.saveManualContent(content: content)
+            _ = try manager.saveManualContent(content: content)
+            SharedDataManager.incrementQuota()
             viewModel?.fetchArticles()
             showToast(String(localized: "home.manualSaved", defaultValue: "Saved"), icon: "checkmark.circle.fill")
+            saveSucceeded.toggle()
 
-            if let vm = viewModel, vm.isAuthenticated {
-                Task {
-                    await syncManualArticle(article)
-                }
+            Task {
+                await offlineQueueManager?.processPendingArticles()
             }
         } catch {
             showToast(String(localized: "home.manualSaveError", defaultValue: "Failed to save"), icon: "xmark.circle.fill")
-        }
-    }
-
-    private func syncManualArticle(_ article: Article) async {
-        guard let content = article.markdownContent else { return }
-        do {
-            let apiClient = APIClient.shared
-            let response = try await apiClient.submitManualContent(content: content, title: article.title)
-            await MainActor.run {
-                article.serverID = response.articleId
-                article.syncState = .synced
-                article.status = .processing
-            }
-        } catch {
-            // Will retry on next sync cycle
+            saveFailed.toggle()
         }
     }
 
@@ -570,6 +369,40 @@ struct HomeView: View {
         viewModel?.toastMessage = message
         viewModel?.toastIcon = icon
         withAnimation { viewModel?.showToast = true }
+    }
+
+    // MARK: - Lifecycle
+
+    private func initializeViewModels() {
+        if viewModel == nil {
+            viewModel = HomeViewModel(
+                context: modelContext,
+                isAuthenticated: authViewModel?.isAuthenticated ?? false
+            )
+            viewModel?.fetchArticles()
+        }
+        if searchViewModel == nil {
+            guard let manager = try? FTS5SearchManager(inMemory: false) else { return }
+            let svm = SearchViewModel(searchManager: manager, context: modelContext)
+            searchViewModel = svm
+            svm.loadPopularTags()
+            svm.refreshSyncedCount(context: modelContext)
+        }
+    }
+
+    private func handleScenePhaseChange(_ newPhase: ScenePhase) {
+        // Share Extension 在独立进程中写入 SQLite，主 App 的 ModelContext
+        // 不会自动感知跨进程变更。通过 UserDefaults 标志位检测后重新 fetch。
+        if newPhase == .active {
+            let flag = UserDefaults.appGroup.bool(forKey: AppConstants.shareExtensionDidSaveKey)
+            FolioLogger.data.info("home-debug: scenePhase=active, shareFlag=\(flag)")
+            if flag {
+                UserDefaults.appGroup.set(false, forKey: AppConstants.shareExtensionDidSaveKey)
+                viewModel?.fetchArticles()
+                searchViewModel?.refreshSyncedCount(context: modelContext)
+                FolioLogger.data.info("home-debug: fetchArticles called, vm.articles.count=\(viewModel?.articles.count ?? -1)")
+            }
+        }
     }
 
 }
