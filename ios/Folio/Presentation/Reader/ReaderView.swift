@@ -18,6 +18,12 @@ struct ReaderView: View {
     @State private var metrics = ScaledArticleMetrics()
     @State private var showToastState = false
 
+    // Ink entrance
+    @State private var titleVisible = false
+    @State private var metaVisible = false
+    @State private var contentVisible = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     // Reading preferences
     @AppStorage(ReadingPreferenceKeys.fontSize) private var fontSize: Double = 17
     @AppStorage(ReadingPreferenceKeys.lineSpacing) private var lineSpacing: Double = 11.9
@@ -104,6 +110,7 @@ struct ReaderView: View {
                         .foregroundStyle(readingTheme.textColor)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 40)
+                        .opacity(titleVisible ? 1 : 0)
 
                     // Inline meta info
                     ArticleMetaInfoView(
@@ -111,53 +118,57 @@ struct ReaderView: View {
                         readingTimeMinutes: viewModel.estimatedReadTimeMinutes,
                         textColor: readingTheme.secondaryTextColor
                     )
-                    .padding(.top, Spacing.xs)
+                    .padding(.top, Spacing.lg)
+                    .opacity(metaVisible ? 1 : 0)
 
                     // AI Summary
                     if let summary = article.displaySummary {
                         aiSummarySection(summary: summary)
                             .padding(.top, Spacing.lg)
+                            .opacity(metaVisible ? 1 : 0)
                     }
 
                     // Divider before body
                     Divider()
-                        .padding(.top, 20)
+                        .padding(.top, Spacing.md)
+                        .padding(.bottom, Spacing.md)
 
                     // Markdown body
-                    if let content = article.markdownContent {
-                        MarkdownRenderer(
-                            markdownText: MarkdownRenderer.preprocessed(content, title: article.title),
-                            fontSize: CGFloat(fontSize),
-                            lineSpacing: CGFloat(lineSpacing),
-                            fontFamily: readingFontFamily,
-                            textColor: readingTheme.textColor,
-                            secondaryTextColor: readingTheme.secondaryTextColor
-                        )
-                        .padding(.top, Spacing.lg)
-                    } else if viewModel.isLoadingContent {
-                        VStack(spacing: Spacing.md) {
-                            ProgressView()
-                            Text(String(localized: "reader.loadingContent", defaultValue: "Loading content..."))
-                                .font(Typography.caption)
-                                .foregroundStyle(Color.folio.textSecondary)
+                    Group {
+                        if let content = article.markdownContent {
+                            MarkdownRenderer(
+                                markdownText: MarkdownRenderer.preprocessed(content, title: article.title),
+                                fontSize: CGFloat(fontSize),
+                                lineSpacing: CGFloat(lineSpacing),
+                                fontFamily: readingFontFamily,
+                                textColor: readingTheme.textColor,
+                                secondaryTextColor: readingTheme.secondaryTextColor
+                            )
+                        } else if viewModel.isLoadingContent {
+                            VStack(spacing: Spacing.md) {
+                                ProgressView()
+                                Text(String(localized: "reader.loadingContent", defaultValue: "Loading content..."))
+                                    .font(Typography.caption)
+                                    .foregroundStyle(Color.folio.textSecondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Spacing.xl)
+                        } else {
+                            contentUnavailableView
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Spacing.xl)
-                    } else {
-                        contentUnavailableView
-                    }
 
-                    // Related articles
-                    if article.markdownContent != nil {
-                        RelatedArticlesSection()
-                            .padding(.top, Spacing.xl)
+                        // Related articles
+                        if article.markdownContent != nil {
+                            RelatedArticlesSection()
+                                .padding(.top, Spacing.xl)
+                        }
                     }
-
-                    Spacer(minLength: Spacing.xl)
+                    .opacity(contentVisible ? 1 : 0)
                 }
                 .frame(maxWidth: 600)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)
+                .padding(.bottom, 80)
                 .background(
                     GeometryReader { innerProxy in
                         Color.clear.preference(
@@ -172,6 +183,9 @@ struct ReaderView: View {
             }
             .background(readingTheme.backgroundColor)
             .coordinateSpace(name: "scroll")
+            .overlay(alignment: .top) {
+                ReadingProgressBar(progress: viewModel.readingProgress)
+            }
             .onPreferenceChange(ScrollMetricsPreferenceKey.self) { metrics in
                 let viewportHeight = outerProxy.size.height
                 let scrollableDistance = metrics.contentHeight - viewportHeight
@@ -183,6 +197,21 @@ struct ReaderView: View {
             .safeAreaInset(edge: .bottom) {
                 bottomToolbar
             }
+            .task {
+                guard !titleVisible else { return }
+                if reduceMotion {
+                    titleVisible = true
+                    metaVisible = true
+                    contentVisible = true
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(150))
+                withAnimation(Motion.ink) { titleVisible = true }
+                try? await Task.sleep(for: .milliseconds(100))
+                withAnimation(Motion.ink) { metaVisible = true }
+                try? await Task.sleep(for: .milliseconds(100))
+                withAnimation(Motion.ink) { contentVisible = true }
+            }
         }
     }
 
@@ -191,7 +220,7 @@ struct ReaderView: View {
     private func aiSummarySection(summary: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) { summaryExpanded.toggle() }
+                withAnimation(Motion.settle) { summaryExpanded.toggle() }
             } label: {
                 HStack(spacing: Spacing.xxs) {
                     Text("\u{2726}")
@@ -200,9 +229,11 @@ struct ReaderView: View {
                     Text("AI")
                         .font(Typography.tag)
                         .foregroundStyle(Color.folio.accent)
-                    Image(systemName: summaryExpanded ? "chevron.up" : "chevron.down")
+                    Image(systemName: "chevron.down")
                         .font(.caption2)
                         .foregroundStyle(Color.folio.textTertiary)
+                        .rotationEffect(.degrees(summaryExpanded ? 180 : 0))
+                        .animation(Motion.quick, value: summaryExpanded)
                     Spacer()
                 }
             }
