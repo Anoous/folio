@@ -16,7 +16,7 @@ type CrawlTask struct {
 	ID              string     `json:"id"`
 	ArticleID       *string    `json:"article_id,omitempty"`
 	UserID          string     `json:"user_id"`
-	URL             string     `json:"url"`
+	URL             *string    `json:"url,omitempty"`
 	SourceType      *string    `json:"source_type,omitempty"`
 	Status          TaskStatus `json:"status"`
 	CrawlStartedAt  *time.Time `json:"crawl_started_at,omitempty"`

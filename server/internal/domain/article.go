@@ -21,12 +21,13 @@ const (
 	SourceZhihu      SourceType = "zhihu"
 	SourceNewsletter SourceType = "newsletter"
 	SourceYoutube    SourceType = "youtube"
+	SourceManual     SourceType = "manual"
 )
 
 type Article struct {
 	ID              string        `json:"id"`
 	UserID          string        `json:"user_id"`
-	URL             string        `json:"url"`
+	URL             *string       `json:"url,omitempty"`
 	Title           *string       `json:"title,omitempty"`
 	Author          *string       `json:"author,omitempty"`
 	SiteName        *string       `json:"site_name,omitempty"`
