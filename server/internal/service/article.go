@@ -74,7 +74,7 @@ func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req Submi
 	// Create article
 	article, err := s.articleRepo.Create(ctx, repository.CreateArticleParams{
 		UserID:          userID,
-		URL:             req.URL,
+		URL:             &req.URL,
 		SourceType:      sourceType,
 		Title:           req.Title,
 		Author:          req.Author,
@@ -100,7 +100,7 @@ func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req Submi
 	task, err := s.taskRepo.Create(ctx, repository.CreateTaskParams{
 		ArticleID:  article.ID,
 		UserID:     userID,
-		URL:        req.URL,
+		URL:        &req.URL,
 		SourceType: string(sourceType),
 	})
 	if err != nil {

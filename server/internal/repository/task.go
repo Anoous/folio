@@ -29,7 +29,7 @@ func NewTaskRepo(pool *pgxpool.Pool) *TaskRepo {
 type CreateTaskParams struct {
 	ArticleID  string
 	UserID     string
-	URL        string
+	URL        *string
 	SourceType string
 }
 

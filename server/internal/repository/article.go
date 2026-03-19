@@ -24,7 +24,7 @@ func NewArticleRepo(pool *pgxpool.Pool) *ArticleRepo {
 
 type CreateArticleParams struct {
 	UserID          string
-	URL             string
+	URL             *string
 	SourceType      domain.SourceType
 	Title           *string
 	Author          *string
@@ -232,7 +232,7 @@ type CrawlResult struct {
 }
 
 func (r *ArticleRepo) UpdateCrawlResult(ctx context.Context, id string, cr CrawlResult) error {
-	wordCount := countWords(cr.Markdown)
+	wordCount := CountWords(cr.Markdown)
 	_, err := r.pool.Exec(ctx, `
 		UPDATE articles SET
 			title = COALESCE(NULLIF($1, ''), title),
@@ -260,9 +260,9 @@ func isCJK(r rune) bool {
 		unicode.Is(unicode.Hiragana, r)
 }
 
-// countWords counts words in text. CJK characters are counted individually;
+// CountWords counts words in text. CJK characters are counted individually;
 // non-CJK runs are counted by whitespace-separated tokens.
-func countWords(text string) int {
+func CountWords(text string) int {
 	count := 0
 	var nonCJK strings.Builder
 	for _, r := range text {
@@ -321,7 +321,7 @@ func (r *ArticleRepo) UpdateAIResult(ctx context.Context, id string, ai AIResult
 }
 
 func (r *ArticleRepo) UpdateMarkdownContent(ctx context.Context, id string, markdown string) error {
-	wordCount := countWords(markdown)
+	wordCount := CountWords(markdown)
 	_, err := r.pool.Exec(ctx,
 		`UPDATE articles SET markdown_content = $1, word_count = $2 WHERE id = $3`,
 		markdown, wordCount, id)

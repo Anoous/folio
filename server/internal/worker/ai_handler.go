@@ -153,12 +153,12 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	// Write to content cache for cross-user reuse
 	if h.cacheRepo != nil {
 		article, err := h.articleRepo.GetByID(ctx, p.ArticleID)
-		if err == nil && article != nil {
+		if err == nil && article != nil && article.URL != nil {
 			markdown := derefOrEmpty(article.MarkdownContent)
 			if domain.IsCacheWorthy(markdown, result.Confidence) {
 				now := time.Now()
 				h.cacheRepo.Upsert(ctx, &domain.ContentCache{
-					URL:             article.URL,
+					URL:             *article.URL,
 					Title:           article.Title,
 					Author:          article.Author,
 					SiteName:        article.SiteName,

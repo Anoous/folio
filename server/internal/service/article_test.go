@@ -30,7 +30,7 @@ func (m *mockArticleRepo) Create(ctx context.Context, p repository.CreateArticle
 	if m.createFn != nil {
 		return m.createFn(ctx, p)
 	}
-	return &domain.Article{ID: "article-123", UserID: p.UserID, URL: p.URL}, nil
+	return &domain.Article{ID: "article-123", UserID: p.UserID, URL: p.URL, KeyPoints: []string{}}, nil
 }
 
 func (m *mockArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, error) {
@@ -346,8 +346,8 @@ func TestSubmitURL_AllContentFields(t *testing.T) {
 	if p.UserID != "user-1" {
 		t.Errorf("CreateArticleParams.UserID = %q, want %q", p.UserID, "user-1")
 	}
-	if p.URL != "https://example.com/article" {
-		t.Errorf("CreateArticleParams.URL = %q, want %q", p.URL, "https://example.com/article")
+	if p.URL == nil || *p.URL != "https://example.com/article" {
+		t.Errorf("CreateArticleParams.URL = %v, want %q", p.URL, "https://example.com/article")
 	}
 	if p.SourceType != domain.SourceWeb {
 		t.Errorf("CreateArticleParams.SourceType = %q, want %q", p.SourceType, domain.SourceWeb)
@@ -696,7 +696,7 @@ func TestSubmitURL_TagAttachError_NonFatal(t *testing.T) {
 func TestSubmitURL_TaskRepoFields(t *testing.T) {
 	artRepo := &mockArticleRepo{
 		createFn: func(ctx context.Context, p repository.CreateArticleParams) (*domain.Article, error) {
-			return &domain.Article{ID: "art-xyz", UserID: p.UserID, URL: p.URL}, nil
+			return &domain.Article{ID: "art-xyz", UserID: p.UserID, URL: p.URL, KeyPoints: []string{}}, nil
 		},
 	}
 	taskRepo := &mockTaskRepo{}
@@ -726,8 +726,8 @@ func TestSubmitURL_TaskRepoFields(t *testing.T) {
 	if tp.UserID != "user-42" {
 		t.Errorf("CreateTaskParams.UserID = %q, want %q", tp.UserID, "user-42")
 	}
-	if tp.URL != "https://twitter.com/user/status/123" {
-		t.Errorf("CreateTaskParams.URL = %q, want %q", tp.URL, "https://twitter.com/user/status/123")
+	if tp.URL == nil || *tp.URL != "https://twitter.com/user/status/123" {
+		t.Errorf("CreateTaskParams.URL = %v, want %q", tp.URL, "https://twitter.com/user/status/123")
 	}
 	if tp.SourceType != string(domain.SourceTwitter) {
 		t.Errorf("CreateTaskParams.SourceType = %q, want %q", tp.SourceType, string(domain.SourceTwitter))
@@ -815,7 +815,7 @@ func TestSubmitURL_WordCountNilDefaultsToZero(t *testing.T) {
 			if wordCount != 0 {
 				t.Errorf("expected wordCount to default to 0 when nil, got %d", wordCount)
 			}
-			return &domain.Article{ID: "article-wc", UserID: p.UserID, URL: p.URL}, nil
+			return &domain.Article{ID: "article-wc", UserID: p.UserID, URL: p.URL, KeyPoints: []string{}}, nil
 		},
 	}
 	taskRepo := &mockTaskRepo{}
@@ -869,7 +869,7 @@ func TestSubmitURL_AllNilOptionalFields(t *testing.T) {
 			if p.WordCount != nil {
 				t.Errorf("expected WordCount to be nil, got %d", *p.WordCount)
 			}
-			return &domain.Article{ID: "article-nil", UserID: p.UserID, URL: p.URL}, nil
+			return &domain.Article{ID: "article-nil", UserID: p.UserID, URL: p.URL, KeyPoints: []string{}}, nil
 		},
 	}
 	taskRepo := &mockTaskRepo{}
@@ -901,8 +901,8 @@ func TestSubmitURL_AllNilOptionalFields(t *testing.T) {
 	if p.UserID != "user-1" {
 		t.Errorf("CreateArticleParams.UserID = %q, want %q", p.UserID, "user-1")
 	}
-	if p.URL != "https://example.com/nil-fields" {
-		t.Errorf("CreateArticleParams.URL = %q, want %q", p.URL, "https://example.com/nil-fields")
+	if p.URL == nil || *p.URL != "https://example.com/nil-fields" {
+		t.Errorf("CreateArticleParams.URL = %v, want %q", p.URL, "https://example.com/nil-fields")
 	}
 }
 
@@ -911,7 +911,7 @@ func TestCreateArticleParams_WordCountNilDefaultsToZero(t *testing.T) {
 	// (extracted from repository.Create)
 	p := repository.CreateArticleParams{
 		UserID:     "user-1",
-		URL:        "https://example.com",
+		URL:        strPtr("https://example.com"),
 		SourceType: domain.SourceWeb,
 		// WordCount is nil
 	}
@@ -931,7 +931,7 @@ func TestCreateArticleParams_WordCountExplicitValue(t *testing.T) {
 	wc := 42
 	p := repository.CreateArticleParams{
 		UserID:     "user-1",
-		URL:        "https://example.com",
+		URL:        strPtr("https://example.com"),
 		SourceType: domain.SourceWeb,
 		WordCount:  &wc,
 	}
@@ -951,7 +951,7 @@ func TestCreateArticleParams_AllNilOptionalFields(t *testing.T) {
 	// and applying the repository's default logic produces sensible values
 	p := repository.CreateArticleParams{
 		UserID:     "user-1",
-		URL:        "https://example.com/nil-everything",
+		URL:        strPtr("https://example.com/nil-everything"),
 		SourceType: domain.SourceWeb,
 		Title:      nil,
 		Author:     nil,
