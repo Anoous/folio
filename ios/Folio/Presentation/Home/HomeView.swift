@@ -13,6 +13,8 @@ struct HomeView: View {
     @State private var viewModel: HomeViewModel?
     @State private var searchViewModel: SearchViewModel?
     @State private var searchText = ""
+    @FocusState private var isInputFocused: Bool
+    @State private var isSearching = false
     @State private var showAddURL = false
     @State private var urlInput = ""
     @State private var articleToDelete: Article?
@@ -22,19 +24,9 @@ struct HomeView: View {
     @State private var showAIAnswer = false
     @State private var showToastState = false
 
-    private let mockTopics: [(name: String, count: Int)] = [
-        ("AI & Machine Learning", 12),
-        ("Swift & iOS Development", 8),
-        ("Product Design", 5),
-    ]
-
-    private var isSearchActive: Bool {
-        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
     var body: some View {
         Group {
-            if isSearchActive {
+            if isSearching {
                 searchResultsContent
             } else if viewModel?.articles.isEmpty ?? true {
                 EmptyStateView(onPasteURL: { url in
@@ -56,87 +48,23 @@ struct HomeView: View {
                 addButton
             }
         }
-        .searchable(
-            text: $searchText,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: String(localized: "search.placeholder", defaultValue: "Search saved articles...")
-        )
-        .searchSuggestions {
-            if !isSearchActive, let svm = searchViewModel {
-                Text(String(
-                    format: NSLocalizedString(
-                        "search.syncedScope",
-                        value: "Search %d saved articles",
-                        comment: "Search scope hint"
-                    ),
-                    svm.syncedArticleCount
-                ))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .listRowSeparator(.hidden)
-
-                if !svm.searchHistory.isEmpty {
-                    Section {
-                        ForEach(svm.searchHistory, id: \.self) { query in
-                            Label(query, systemImage: "clock.arrow.circlepath")
-                                .searchCompletion(query)
-                        }
-                    } header: {
-                        HStack {
-                            Text(String(localized: "search.recent", defaultValue: "Recent"))
-                            Spacer()
-                            Button(String(localized: "search.clearAll", defaultValue: "Clear")) {
-                                svm.clearHistory()
-                            }
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.folio.accent)
-                        }
-                    }
+        .safeAreaInset(edge: .bottom) {
+            UnifiedInputBar(text: $searchText, isFocused: $isInputFocused) { content in
+                if UnifiedInputBar.isURLOnly(content) {
+                    saveURL(content)
+                } else {
+                    saveManualContent(content)
                 }
-
-                if !svm.popularTags.isEmpty {
-                    Section(String(localized: "search.popularTags", defaultValue: "Tags")) {
-                        ForEach(svm.popularTags) { tag in
-                            Label(tag.name, systemImage: "tag")
-                                .searchCompletion(tag.name)
-                        }
-                    }
-                }
-
-                // Smart topics (mock data)
-                Section(String(localized: "search.topics", defaultValue: "Topics")) {
-                    ForEach(mockTopics, id: \.name) { topic in
-                        Label {
-                            HStack {
-                                Text(topic.name)
-                                Spacer()
-                                Text(String(
-                                    format: NSLocalizedString(
-                                        "search.topicCount",
-                                        value: "%d articles",
-                                        comment: "Number of articles in topic"
-                                    ),
-                                    topic.count
-                                ))
-                                .font(Typography.caption)
-                                .foregroundStyle(Color.folio.textTertiary)
-                            }
-                        } icon: {
-                            Image(systemName: "folder")
-                        }
-                        .searchCompletion(topic.name)
-                    }
-                }
-            }
-        }
-        .onSubmit(of: .search) {
-            let query = searchText.trimmingCharacters(in: .whitespaces)
-            if !query.isEmpty {
-                searchViewModel?.saveToHistory(query)
             }
         }
         .onChange(of: searchText) { _, newValue in
-            searchViewModel?.searchText = newValue
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            isSearching = !trimmed.isEmpty
+            if trimmed.isEmpty {
+                viewModel?.fetchArticles()
+            } else {
+                searchViewModel?.searchText = trimmed
+            }
         }
         .alert(String(localized: "home.addURL.title", defaultValue: "Add Link"), isPresented: $showAddURL) {
             TextField(String(localized: "home.addURL.placeholder", defaultValue: "https://"), text: $urlInput)
@@ -603,6 +531,38 @@ struct HomeView: View {
             showToast(String(localized: "home.addURL.duplicate", defaultValue: "Link already exists"), icon: "exclamationmark.triangle.fill")
         } catch {
             showToast(String(localized: "home.addURL.error", defaultValue: "Failed to save"), icon: "xmark.circle.fill")
+        }
+    }
+
+    private func saveManualContent(_ content: String) {
+        let manager = SharedDataManager(context: modelContext)
+        do {
+            let article = try manager.saveManualContent(content: content)
+            viewModel?.fetchArticles()
+            showToast(String(localized: "home.manualSaved", defaultValue: "Saved"), icon: "checkmark.circle.fill")
+
+            if let vm = viewModel, vm.isAuthenticated {
+                Task {
+                    await syncManualArticle(article)
+                }
+            }
+        } catch {
+            showToast(String(localized: "home.manualSaveError", defaultValue: "Failed to save"), icon: "xmark.circle.fill")
+        }
+    }
+
+    private func syncManualArticle(_ article: Article) async {
+        guard let content = article.markdownContent else { return }
+        do {
+            let apiClient = APIClient.shared
+            let response = try await apiClient.submitManualContent(content: content, title: article.title)
+            await MainActor.run {
+                article.serverID = response.articleId
+                article.syncState = .synced
+                article.status = .processing
+            }
+        } catch {
+            // Will retry on next sync cycle
         }
     }
 
