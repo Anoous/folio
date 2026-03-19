@@ -20,16 +20,13 @@ struct UnifiedInputBar: View {
             .padding(.vertical, Spacing.xs)
 
             if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Button {
-                    let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    text = ""
-                    isFocused = false
-                    onSend(content)
-                } label: {
+                Button(action: send) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title2)
                         .foregroundStyle(Color.accentColor)
                 }
+                .buttonStyle(ScaleButtonStyle())
+                .accessibilityLabel(String(localized: "input.send", defaultValue: "Send"))
                 .transition(.scale.combined(with: .opacity))
             }
         }
@@ -39,7 +36,14 @@ struct UnifiedInputBar: View {
         .overlay(alignment: .top) {
             Divider()
         }
-        .animation(.easeInOut(duration: 0.15), value: text.isEmpty)
+        .animation(Motion.settle, value: text.isEmpty)
+    }
+
+    private func send() {
+        let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        text = ""
+        isFocused = false
+        onSend(content)
     }
 }
 
