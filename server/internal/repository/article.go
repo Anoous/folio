@@ -293,6 +293,13 @@ func truncateUTF8(s string, maxLen int) string {
 	return string(runes[:maxLen])
 }
 
+func (r *ArticleRepo) UpdateTitle(ctx context.Context, articleID string, title string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE articles SET title = $1, updated_at = NOW() WHERE id = $2`,
+		title, articleID)
+	return err
+}
+
 type AIResult struct {
 	CategoryID string
 	Summary    string
