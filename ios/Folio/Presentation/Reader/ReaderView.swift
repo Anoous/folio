@@ -285,13 +285,15 @@ struct ReaderView: View {
                     .foregroundStyle(Color.folio.textSecondary)
             }
 
-            FolioButton(
-                title: String(localized: "reader.openOriginal", defaultValue: "Open Original"),
-                style: .secondary
-            ) {
-                openOriginal()
+            if article.url != nil {
+                FolioButton(
+                    title: String(localized: "reader.openOriginal", defaultValue: "Open Original"),
+                    style: .secondary
+                ) {
+                    openOriginal()
+                }
+                .frame(width: 200)
             }
-            .frame(width: 200)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.xl)
@@ -335,10 +337,12 @@ struct ReaderView: View {
                 )
             }
 
-            Button {
-                openOriginal()
-            } label: {
-                Label(String(localized: "reader.openInBrowser", defaultValue: "Open Original"), systemImage: "safari")
+            if article.url != nil {
+                Button {
+                    openOriginal()
+                } label: {
+                    Label(String(localized: "reader.openInBrowser", defaultValue: "Open Original"), systemImage: "safari")
+                }
             }
 
             Divider()
@@ -359,17 +363,19 @@ struct ReaderView: View {
 
     private var bottomToolbar: some View {
         HStack {
-            Button {
-                openOriginal()
-            } label: {
-                HStack(spacing: Spacing.xxs) {
-                    Image(systemName: "safari")
-                    Text(String(localized: "reader.original", defaultValue: "Original"))
-                        .font(Typography.caption)
+            if article.url != nil {
+                Button {
+                    openOriginal()
+                } label: {
+                    HStack(spacing: Spacing.xxs) {
+                        Image(systemName: "safari")
+                        Text(String(localized: "reader.original", defaultValue: "Original"))
+                            .font(Typography.caption)
+                    }
+                    .foregroundStyle(Color.folio.textSecondary)
                 }
-                .foregroundStyle(Color.folio.textSecondary)
+                .accessibilityLabel(String(localized: "reader.openOriginal", defaultValue: "Open Original"))
             }
-            .accessibilityLabel(String(localized: "reader.openOriginal", defaultValue: "Open Original"))
 
             Spacer()
 

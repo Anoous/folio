@@ -52,7 +52,7 @@ class ShareViewController: UIViewController {
                                 } else if let extracted = Self.extractURL(from: trimmed) {
                                     self?.saveURL(extracted)
                                 } else {
-                                    self?.dismiss()
+                                    self?.saveManualContent(trimmed)
                                 }
                             } else {
                                 FolioLogger.data.error("share: loadItem(text) failed — \(error?.localizedDescription ?? "nil item")")
@@ -99,6 +99,36 @@ class ShareViewController: UIViewController {
             showAndDismiss(.duplicate(domain: domain))
         } catch {
             FolioLogger.data.error("share: failed — \(error)")
+            showAndDismiss(.error, delay: 1.2)
+        }
+    }
+
+    @MainActor
+    private func saveManualContent(_ text: String) {
+        let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
+        guard SharedDataManager.canSave(isPro: isPro) else {
+            FolioLogger.data.info("share: quota exceeded — manual content")
+            showAndDismiss(.quotaExceeded, delay: 1.5)
+            return
+        }
+
+        guard let container = modelContainer else {
+            FolioLogger.data.error("share: ModelContainer unavailable")
+            showAndDismiss(.error, delay: 1.2)
+            return
+        }
+
+        do {
+            let manager = SharedDataManager(context: container.mainContext)
+            _ = try manager.saveManualContent(content: text)
+            SharedDataManager.incrementQuota()
+            UserDefaults.appGroup.set(true, forKey: AppConstants.shareExtensionDidSaveKey)
+
+            let preview = String(text.prefix(20))
+            FolioLogger.data.info("share: saved manual content — \(preview)")
+            showAndDismiss(.saved(domain: String(localized: "source.thought", defaultValue: "My Thought")))
+        } catch {
+            FolioLogger.data.error("share: manual content failed — \(error)")
             showAndDismiss(.error, delay: 1.2)
         }
     }

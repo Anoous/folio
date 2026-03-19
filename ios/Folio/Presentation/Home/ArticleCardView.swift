@@ -58,7 +58,16 @@ struct ArticleCardView: View {
             faviconView
 
             // Source name
-            if let siteName = article.siteName, !siteName.isEmpty {
+            if article.sourceType == .manual {
+                Text(article.wordCount < 200
+                    ? String(localized: "source.thought", defaultValue: "My Thought")
+                    : String(localized: "source.pasted", defaultValue: "Pasted Content"))
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.folio.textTertiary)
+
+                Text("\u{00B7}")
+                    .foregroundStyle(Color.folio.textTertiary)
+            } else if let siteName = article.siteName, !siteName.isEmpty {
                 Text(siteName)
                     .font(Typography.tag)
                     .foregroundStyle(Color.folio.textTertiary)
