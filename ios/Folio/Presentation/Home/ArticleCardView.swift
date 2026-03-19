@@ -14,40 +14,55 @@ struct ArticleCardView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: Spacing.xs) {
-            // Unread dot
-            if isUnread {
-                Circle()
-                    .fill(Color.folio.unread)
-                    .frame(width: 8, height: 8)
-                    .padding(.top, 6) // align with first line of title
-                    .accessibilityLabel(Text(String(localized: "status.unread", defaultValue: "Unread")))
-            }
-
-            VStack(alignment: .leading, spacing: 0) {
-                // Title
-                Text(article.displayTitle)
-                    .font(Typography.listTitle)
-                    .foregroundStyle(isFailed ? Color.folio.textSecondary : Color.folio.textPrimary)
-                    .lineLimit(2)
-
-                // Summary
-                if let summary = article.displaySummary {
-                    Text(summary)
-                        .font(Typography.body)
-                        .foregroundStyle(Color.folio.textSecondary)
-                        .lineLimit(2)
-                        .padding(.top, Spacing.xxs)
+        if article.status == .pending && article.title == nil && article.markdownContent == nil && article.sourceType != .manual {
+            ShimmerView()
+        } else {
+            HStack(alignment: .top, spacing: Spacing.xs) {
+                // Unread dot
+                if isUnread {
+                    Circle()
+                        .fill(Color.folio.unread)
+                        .frame(width: 8, height: 8)
+                        .shadow(color: Color.folio.unread.opacity(0.3), radius: 2, x: 0, y: 0)
+                        .padding(.top, 6) // align with first line of title
+                        .accessibilityLabel(Text(String(localized: "status.unread", defaultValue: "Unread")))
                 }
 
-                // Source line
-                sourceLine
-                    .padding(.top, Spacing.xs)
-            }
+                VStack(alignment: .leading, spacing: 0) {
+                    // Title
+                    Text(article.displayTitle)
+                        .font(Typography.listTitle)
+                        .fontWeight(isUnread ? .semibold : .regular)
+                        .foregroundStyle(isFailed ? Color.folio.textSecondary : (isUnread ? Color.folio.textPrimary : Color.folio.textSecondary))
+                        .lineLimit(2)
 
-            Spacer(minLength: 0)
+                    // Summary
+                    if let summary = article.displaySummary {
+                        Text(summary)
+                            .font(Typography.body)
+                            .foregroundStyle(Color.folio.textTertiary)
+                            .lineLimit(2)
+                            .padding(.top, Spacing.xxs)
+                    }
+
+                    // Source line
+                    sourceLine
+                        .padding(.top, Spacing.xs)
+
+                    // Processing progress
+                    if article.status == .processing {
+                        ProcessingProgressBar()
+                            .padding(.top, Spacing.xxs)
+                    } else if article.status == .clientReady {
+                        ProcessingProgressBar(color: Color.folio.success.opacity(0.3))
+                            .padding(.top, Spacing.xxs)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, Spacing.sm)
         }
-        .padding(.vertical, Spacing.sm)
     }
 
     // MARK: - Source Line
@@ -63,16 +78,18 @@ struct ArticleCardView: View {
                     ? String(localized: "source.thought", defaultValue: "My Thought")
                     : String(localized: "source.pasted", defaultValue: "Pasted Content"))
                     .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textTertiary)
+                    .foregroundStyle(Color.folio.textTertiary.opacity(0.8))
 
                 Text("\u{00B7}")
+                    .font(Typography.caption)
                     .foregroundStyle(Color.folio.textTertiary)
             } else if let siteName = article.siteName, !siteName.isEmpty {
                 Text(siteName)
                     .font(Typography.tag)
-                    .foregroundStyle(Color.folio.textTertiary)
+                    .foregroundStyle(Color.folio.textTertiary.opacity(0.8))
 
                 Text("\u{00B7}")
+                    .font(Typography.caption)
                     .foregroundStyle(Color.folio.textTertiary)
             }
 
@@ -80,16 +97,17 @@ struct ArticleCardView: View {
             if let category = article.category {
                 Text(category.localizedName)
                     .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textTertiary)
+                    .foregroundStyle(Color.folio.textTertiary.opacity(0.8))
 
                 Text("\u{00B7}")
+                    .font(Typography.caption)
                     .foregroundStyle(Color.folio.textTertiary)
             }
 
             // Time
             Text(article.createdAt.relativeFormatted())
                 .font(Typography.caption)
-                .foregroundStyle(Color.folio.textTertiary)
+                .foregroundStyle(Color.folio.textTertiary.opacity(0.8))
 
             Spacer(minLength: 0)
 
@@ -99,7 +117,7 @@ struct ArticleCardView: View {
             // Favorite heart (trailing)
             if article.isFavorite {
                 Image(systemName: "heart.fill")
-                    .font(.system(size: 12))
+                    .font(.caption)
                     .foregroundStyle(.pink)
                     .accessibilityLabel(Text(String(localized: "status.favorited", defaultValue: "Favorited")))
             }
@@ -130,7 +148,7 @@ struct ArticleCardView: View {
 
     private var sourceTypeIcon: some View {
         Image(systemName: article.sourceType.iconName)
-            .font(.system(size: 13))
+            .font(.caption)
             .foregroundStyle(Color.folio.textTertiary)
             .frame(width: 20, height: 20)
             .accessibilityLabel(article.sourceType.displayName)
@@ -142,24 +160,20 @@ struct ArticleCardView: View {
     private var statusIcon: some View {
         switch article.status {
         case .processing:
-            Image(systemName: "circle.dashed")
-                .font(.system(size: 12))
-                .foregroundStyle(Color.folio.warning)
-                .symbolEffect(.variableColor.iterative)
-                .accessibilityLabel(Text(String(localized: "status.processing", defaultValue: "Processing")))
+            EmptyView()
         case .clientReady:
             Image(systemName: "doc.richtext")
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundStyle(Color.folio.success)
                 .accessibilityLabel(Text(String(localized: "status.clientReady", defaultValue: "Content ready")))
         case .failed:
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundStyle(Color.folio.error)
                 .accessibilityLabel(Text(String(localized: "status.failed", defaultValue: "Failed")))
         case .pending where article.syncState == .pendingUpload:
             Image(systemName: "arrow.up.icloud")
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundStyle(Color.folio.textTertiary)
                 .accessibilityLabel(Text(String(localized: "status.pendingSync", defaultValue: "Pending sync")))
         default:
