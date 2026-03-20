@@ -4,6 +4,7 @@ struct UnifiedInputBar: View {
     @Binding var text: String
     @FocusState.Binding var isFocused: Bool
     let onSend: (String) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(alignment: .bottom, spacing: Spacing.xs) {
@@ -36,7 +37,7 @@ struct UnifiedInputBar: View {
         .overlay(alignment: .top) {
             Divider()
         }
-        .animation(Motion.settle, value: text.isEmpty)
+        .animation(Motion.resolved(Motion.settle, reduceMotion: reduceMotion), value: text.isEmpty)
     }
 
     private func send() {

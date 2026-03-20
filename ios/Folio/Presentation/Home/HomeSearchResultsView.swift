@@ -113,7 +113,7 @@ struct HomeSearchResultsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
             } else {
                 Button {
-                    withAnimation(Motion.settle) { showAIAnswer = true }
+                    withAnimation(Motion.resolved(Motion.settle, reduceMotion: reduceMotion)) { showAIAnswer = true }
                 } label: {
                     HStack(spacing: Spacing.xs) {
                         Text("\u{2728}")

@@ -134,17 +134,6 @@ class ShareViewController: UIViewController {
     }
 
     private func showAndDismiss(_ state: ShareState, delay: TimeInterval = 1.0) {
-        switch state {
-        case .saved:
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-        case .duplicate:
-            UINotificationFeedbackGenerator().notificationOccurred(.warning)
-        case .quotaExceeded:
-            UINotificationFeedbackGenerator().notificationOccurred(.warning)
-        case .error:
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
-        }
-
         let shareView = CompactShareView(state: state)
         let hc = UIHostingController(rootView: shareView)
         addChild(hc)
