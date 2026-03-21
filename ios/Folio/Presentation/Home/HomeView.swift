@@ -64,11 +64,7 @@ struct HomeView: View {
         }
         .safeAreaInset(edge: .bottom) {
             ComposeBar { content in
-                if ComposeBar.isURLOnly(content) {
-                    saveURL(content)
-                } else {
-                    saveManualContent(content)
-                }
+                handleComposeSave(content)
             }
         }
         .onChange(of: searchText) { _, newValue in
@@ -287,6 +283,16 @@ struct HomeView: View {
             UIPasteboard.general.string = urlString
             showToast(String(localized: "home.article.linkCopied", defaultValue: "Link copied"), icon: "doc.on.doc")
             saveSucceeded.toggle()
+        }
+    }
+
+    // MARK: - Compose
+
+    private func handleComposeSave(_ content: String) {
+        if ComposeBar.isURLOnly(content) {
+            saveURL(content)
+        } else {
+            saveManualContent(content)
         }
     }
 
