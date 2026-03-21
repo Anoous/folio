@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeSearchResultsView: View {
     let searchViewModel: SearchViewModel
     @Binding var searchText: String
+    var categoryFilter: String = ""
 
     @State private var showAIAnswer = false
     @State private var emptyAppeared = false
@@ -14,7 +15,7 @@ struct HomeSearchResultsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let error = searchViewModel.searchError {
             errorState(error: error)
-        } else if searchViewModel.showsEmptyState {
+        } else if searchViewModel.showsEmptyState || (!searchViewModel.results.isEmpty && filteredResults.isEmpty) {
             emptyState
         } else {
             resultsList
@@ -23,10 +24,17 @@ struct HomeSearchResultsView: View {
 
     // MARK: - Results List
 
+    private var filteredResults: [SearchViewModel.SearchResultItem] {
+        if categoryFilter.isEmpty {
+            return searchViewModel.results
+        }
+        return searchViewModel.results.filter { $0.article.category?.slug == categoryFilter }
+    }
+
     private var resultsList: some View {
         List {
             Section {
-                ForEach(searchViewModel.results) { item in
+                ForEach(filteredResults) { item in
                     NavigationLink(value: item.article.id) {
                         SearchResultRow(
                             item: item,
@@ -36,7 +44,8 @@ struct HomeSearchResultsView: View {
                     .listRowInsets(EdgeInsets())
                 }
             } header: {
-                Text("\(searchViewModel.resultCount) " + (searchViewModel.resultCount == 1
+                let count = filteredResults.count
+                Text("\(count) " + (count == 1
                     ? String(localized: "search.result", defaultValue: "result")
                     : String(localized: "search.results", defaultValue: "results")))
                     .font(Typography.caption)

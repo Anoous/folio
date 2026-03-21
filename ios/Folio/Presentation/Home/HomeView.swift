@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 private enum HomeDestination: Hashable {
@@ -13,6 +14,8 @@ struct HomeView: View {
     @State private var viewModel: HomeViewModel?
     @State private var searchViewModel: SearchViewModel?
     @State private var searchText = ""
+    @State private var searchScope = ""
+    @Query(sort: \Category.sortOrder) private var categories: [Category]
     @State private var articleToDelete: Article?
     @State private var showDeleteConfirmation = false
     @State private var showShareSheet = false
@@ -52,6 +55,12 @@ struct HomeView: View {
             text: $searchText,
             prompt: String(localized: "search.prompt", defaultValue: "Search your collection...")
         )
+        .searchScopes($searchScope, activation: .onSearchPresentation) {
+            Text(String(localized: "search.scope.all", defaultValue: "All")).tag("")
+            ForEach(categories) { category in
+                Text(category.localizedName).tag(category.slug)
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             ComposeBar { content in
                 if ComposeBar.isURLOnly(content) {
@@ -68,6 +77,9 @@ struct HomeView: View {
             } else {
                 searchViewModel?.searchText = trimmed
             }
+        }
+        .onChange(of: searchScope) { _, _ in
+            searchViewModel?.performSearch()
         }
         .navigationDestination(for: UUID.self) { articleID in
             if let article = viewModel?.articles.first(where: { $0.id == articleID }) {
@@ -105,7 +117,7 @@ struct HomeView: View {
     private var mainContent: some View {
         let isSearchActive = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if isSearchActive, let svm = searchViewModel {
-            HomeSearchResultsView(searchViewModel: svm, searchText: $searchText)
+            HomeSearchResultsView(searchViewModel: svm, searchText: $searchText, categoryFilter: searchScope)
         } else if viewModel?.articles.isEmpty ?? true {
             EmptyStateView(onPasteURL: { url in
                 saveURL(url.absoluteString)
