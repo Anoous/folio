@@ -1,41 +1,33 @@
 import SwiftUI
 
-/// Capsule button + hidden TextField trick for keyboard-attached input.
-/// Tap capsule → hidden field focuses → keyboard appears → toolbar shows real input.
+/// A text field styled as a capsule. Tap it = start typing (keyboard + toolbar appear).
+/// Two steps: tap & type → send.
 struct ComposeBar: View {
     @Binding var text: String
     @FocusState.Binding var isFocused: Bool
     let onSave: (String) -> Void
 
     var body: some View {
-        ZStack {
-            // Hidden TextField to own the keyboard
-            TextField("", text: $text, axis: .vertical)
-                .focused($isFocused)
-                .frame(width: 0, height: 0)
-                .opacity(0)
-                .allowsHitTesting(false)
+        // The capsule IS the text field — tapping it starts typing directly
+        HStack(spacing: Spacing.xs) {
+            Image(systemName: "square.and.pencil")
+                .font(.body)
+                .foregroundStyle(Color.folio.textSecondary)
 
-            // Visible capsule (hidden when focused — keyboard toolbar takes over)
-            if !isFocused {
-                Button { isFocused = true } label: {
-                    HStack(spacing: Spacing.xs) {
-                        Image(systemName: "square.and.pencil")
-                            .font(.body)
-                        Text(String(localized: "compose.capture", defaultValue: "Capture"))
-                            .font(Typography.body)
-                    }
-                    .foregroundStyle(Color.folio.textSecondary)
-                    .padding(.horizontal, Spacing.md)
-                    .padding(.vertical, Spacing.xs)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Capsule())
-                }
-                .buttonStyle(ScaleButtonStyle())
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Spacing.xs)
-            }
+            TextField(
+                String(localized: "compose.capture", defaultValue: "Capture"),
+                text: $text
+            )
+            .textFieldStyle(.plain)
+            .focused($isFocused)
+            .font(Typography.body)
         }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.xs)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .padding(.horizontal, Spacing.lg)
+        .padding(.vertical, Spacing.xs)
     }
 
     /// Returns true if the trimmed text is a single URL with no other meaningful text.
@@ -50,12 +42,11 @@ struct ComposeBar: View {
     }
 }
 
-/// The input bar that lives in .toolbar(.keyboard).
+/// Send/close buttons above the keyboard.
 struct ComposeToolbarContent: View {
     @Binding var text: String
     @FocusState.Binding var isFocused: Bool
     let onSave: (String) -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var hasContent: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -73,13 +64,7 @@ struct ComposeToolbarContent: View {
             }
             .buttonStyle(.plain)
 
-            Text(text.isEmpty
-                 ? String(localized: "compose.placeholder", defaultValue: "Your thought or link...")
-                 : text)
-                .font(Typography.body)
-                .foregroundStyle(text.isEmpty ? Color.folio.textTertiary : Color.folio.textPrimary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer()
 
             if hasContent {
                 Button {
