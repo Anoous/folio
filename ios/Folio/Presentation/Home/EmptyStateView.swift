@@ -56,7 +56,7 @@ struct EmptyStateView: View {
                 .transition(.opacity)
                 .animation(Motion.ink, value: clipboardURL != nil)
             } else {
-                Text(String(localized: "empty.addHint", defaultValue: "Tap + to add a link manually"))
+                Text(String(localized: "empty.addHint", defaultValue: "Use the bar below to paste a link"))
                     .font(Typography.caption)
                     .foregroundStyle(Color.folio.textTertiary)
             }

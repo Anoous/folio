@@ -53,6 +53,7 @@ struct HomeView: View {
         }
         .searchable(
             text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .automatic),
             prompt: String(localized: "search.prompt", defaultValue: "Search your collection...")
         )
         .searchScopes($searchScope, activation: .onSearchPresentation) {
