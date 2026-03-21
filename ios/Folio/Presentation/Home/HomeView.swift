@@ -44,9 +44,31 @@ struct HomeView: View {
 
     private var coreView: some View {
         mainContent
-            .safeAreaInset(edge: .bottom) {
-                ComposeBar(text: $composeText, isFocused: $composeFocused) { content in
-                    handleComposeSave(content)
+            .background {
+                // Hidden TextField to own keyboard focus — always in view tree
+                TextField("", text: $composeText)
+                    .focused($composeFocused)
+                    .opacity(0)
+                    .allowsHitTesting(false)
+            }
+            .overlay(alignment: .bottom) {
+                if !composeFocused {
+                    // Visible capsule
+                    Button { composeFocused = true } label: {
+                        HStack(spacing: Spacing.xs) {
+                            Image(systemName: "square.and.pencil")
+                                .font(.body)
+                            Text(String(localized: "compose.capture", defaultValue: "Capture"))
+                                .font(Typography.body)
+                        }
+                        .foregroundStyle(Color.folio.textSecondary)
+                        .padding(.horizontal, Spacing.md)
+                        .padding(.vertical, Spacing.xs)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(ScaleButtonStyle())
+                    .padding(.bottom, Spacing.md)
                 }
             }
             .toolbar {
