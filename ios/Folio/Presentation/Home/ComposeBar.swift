@@ -1,16 +1,17 @@
 import SwiftUI
 
-struct UnifiedInputBar: View {
-    @Binding var text: String
-    @FocusState.Binding var isFocused: Bool
-    let onSend: (String) -> Void
+/// Bottom bar for saving links and thoughts. Separate from search.
+struct ComposeBar: View {
+    @State private var text = ""
+    @FocusState private var isFocused: Bool
+    let onSave: (String) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(alignment: .bottom, spacing: Spacing.xs) {
             TextField(
-                String(localized: "input.placeholder",
-                       defaultValue: "Search, jot a thought, or paste a link..."),
+                String(localized: "compose.placeholder",
+                       defaultValue: "Paste a link or jot a thought..."),
                 text: $text,
                 axis: .vertical
             )
@@ -21,13 +22,13 @@ struct UnifiedInputBar: View {
             .padding(.vertical, Spacing.xs)
 
             if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Button(action: send) {
+                Button(action: save) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title2)
                         .foregroundStyle(Color.accentColor)
                 }
                 .buttonStyle(ScaleButtonStyle())
-                .accessibilityLabel(String(localized: "input.send", defaultValue: "Send"))
+                .accessibilityLabel(String(localized: "compose.save", defaultValue: "Save"))
                 .transition(.scale.combined(with: .opacity))
             }
         }
@@ -40,15 +41,13 @@ struct UnifiedInputBar: View {
         .animation(Motion.resolved(Motion.settle, reduceMotion: reduceMotion), value: text.isEmpty)
     }
 
-    private func send() {
+    private func save() {
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         text = ""
         isFocused = false
-        onSend(content)
+        onSave(content)
     }
-}
 
-extension UnifiedInputBar {
     /// Returns true if the trimmed text is a single URL with no other meaningful text.
     static func isURLOnly(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

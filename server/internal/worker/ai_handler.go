@@ -134,7 +134,7 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 
 	// Backfill title for manual entries that have no user-provided title
 	article, err := h.articleRepo.GetByID(ctx, p.ArticleID)
-	if err == nil && article != nil && (article.Title == nil || *article.Title == "") {
+	if err == nil && article != nil && article.SourceType == domain.SourceManual && (article.Title == nil || *article.Title == "") {
 		var generatedTitle string
 		if len(result.KeyPoints) > 0 {
 			generatedTitle = result.KeyPoints[0]

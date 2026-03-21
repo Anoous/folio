@@ -13,10 +13,6 @@ struct HomeView: View {
     @State private var viewModel: HomeViewModel?
     @State private var searchViewModel: SearchViewModel?
     @State private var searchText = ""
-    @FocusState private var isInputFocused: Bool
-    @State private var isSearching = false
-    @State private var showAddURL = false
-    @State private var urlInput = ""
     @State private var articleToDelete: Article?
     @State private var showDeleteConfirmation = false
     @State private var showShareSheet = false
@@ -51,13 +47,14 @@ struct HomeView: View {
                 }
                 .accessibilityLabel(String(localized: "tab.settings", defaultValue: "Settings"))
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                addButton
-            }
         }
+        .searchable(
+            text: $searchText,
+            prompt: String(localized: "search.prompt", defaultValue: "Search your collection...")
+        )
         .safeAreaInset(edge: .bottom) {
-            UnifiedInputBar(text: $searchText, isFocused: $isInputFocused) { content in
-                if UnifiedInputBar.isURLOnly(content) {
+            ComposeBar { content in
+                if ComposeBar.isURLOnly(content) {
                     saveURL(content)
                 } else {
                     saveManualContent(content)
@@ -66,27 +63,11 @@ struct HomeView: View {
         }
         .onChange(of: searchText) { _, newValue in
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            withAnimation(Motion.quick) {
-                isSearching = !trimmed.isEmpty
-            }
             if trimmed.isEmpty {
                 viewModel?.fetchArticles()
             } else {
                 searchViewModel?.searchText = trimmed
             }
-        }
-        .alert(String(localized: "home.addURL.title", defaultValue: "Add Link"), isPresented: $showAddURL) {
-            TextField(String(localized: "home.addURL.placeholder", defaultValue: "https://"), text: $urlInput)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            Button(String(localized: "button.cancel", defaultValue: "Cancel"), role: .cancel) {}
-            Button(String(localized: "home.addURL.save", defaultValue: "Save")) {
-                let trimmed = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { return }
-                saveURL(trimmed)
-            }
-        } message: {
-            Text(String(localized: "home.addURL.message", defaultValue: "Enter or paste a link to save"))
         }
         .navigationDestination(for: UUID.self) { articleID in
             if let article = viewModel?.articles.first(where: { $0.id == articleID }) {
@@ -122,17 +103,15 @@ struct HomeView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        if isSearching, let svm = searchViewModel {
+        let isSearchActive = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if isSearchActive, let svm = searchViewModel {
             HomeSearchResultsView(searchViewModel: svm, searchText: $searchText)
-                .transition(.opacity)
         } else if viewModel?.articles.isEmpty ?? true {
             EmptyStateView(onPasteURL: { url in
                 saveURL(url.absoluteString)
             })
-            .transition(.opacity)
         } else {
             articleList
-                .transition(.opacity)
         }
     }
 
@@ -150,25 +129,6 @@ struct HomeView: View {
     private var deleteConfirmTitle: String {
         let title = articleToDelete?.displayTitle ?? ""
         return String(localized: "reader.deleteConfirm", defaultValue: "Delete this article?") + (title.isEmpty ? "" : "\n\"\(title)\"")
-    }
-
-    // MARK: - Add Button
-
-    private var addButton: some View {
-        Button(action: prepareAddURL) {
-            Label(String(localized: "home.add", defaultValue: "Add"), systemImage: "plus")
-        }
-    }
-
-    private func prepareAddURL() {
-        urlInput = ""
-        if let url = UIPasteboard.general.url {
-            urlInput = url.absoluteString
-        } else if let string = UIPasteboard.general.string,
-                  let url = URL(string: string), url.scheme?.hasPrefix("http") == true {
-            urlInput = string
-        }
-        showAddURL = true
     }
 
     // MARK: - Article List
@@ -391,8 +351,6 @@ struct HomeView: View {
     }
 
     private func handleScenePhaseChange(_ newPhase: ScenePhase) {
-        // Share Extension 在独立进程中写入 SQLite，主 App 的 ModelContext
-        // 不会自动感知跨进程变更。通过 UserDefaults 标志位检测后重新 fetch。
         if newPhase == .active {
             let flag = UserDefaults.appGroup.bool(forKey: AppConstants.shareExtensionDidSaveKey)
             FolioLogger.data.info("home-debug: scenePhase=active, shareFlag=\(flag)")

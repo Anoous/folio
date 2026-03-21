@@ -122,11 +122,15 @@ final class ArticleExtractionTests: XCTestCase {
 
     // MARK: - SourceType.supportsClientExtraction Exhaustive Guard
 
+    func testSupportsClientExtraction_manualFalse() {
+        XCTAssertFalse(SourceType.manual.supportsClientExtraction)
+    }
+
     func testSupportsClientExtraction_allCasesExplicitlyTested() {
-        // Exhaustive check: verify only .youtube returns false, all others return true.
+        // Exhaustive check: verify only .youtube and .manual return false, all others return true.
         // This guards against new SourceType cases being added without updating supportsClientExtraction.
-        let allCases: [SourceType] = [.web, .wechat, .twitter, .weibo, .zhihu, .newsletter, .youtube]
-        let expectedFalse: Set<SourceType> = [.youtube]
+        let allCases: [SourceType] = [.web, .wechat, .twitter, .weibo, .zhihu, .newsletter, .youtube, .manual]
+        let expectedFalse: Set<SourceType> = [.youtube, .manual]
 
         for sourceType in allCases {
             if expectedFalse.contains(sourceType) {
@@ -140,8 +144,8 @@ final class ArticleExtractionTests: XCTestCase {
 
         // Verify we tested all known cases by checking count matches
         // If a new case is added to SourceType, this test will need updating
-        XCTAssertEqual(allCases.count, 7,
-                       "Expected 7 SourceType cases — update this test if new cases are added")
+        XCTAssertEqual(allCases.count, 8,
+                       "Expected 8 SourceType cases — update this test if new cases are added")
     }
 
     // MARK: - ExtractionSource Codable Round-Trip

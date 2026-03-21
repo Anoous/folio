@@ -197,8 +197,8 @@ final class Article {
         self.isFavorite = false
         self.isArchived = false
         self.readProgress = 0
-        self.createdAt = Date()
-        self.updatedAt = Date()
+        self.createdAt = .now
+        self.updatedAt = .now
         self.publishedAt = nil
         self.lastReadAt = nil
         self.wordCount = 0
@@ -216,8 +216,45 @@ final class Article {
     convenience init(content: String, title: String? = nil) {
         self.init(url: nil, title: title, sourceType: .manual)
         self.markdownContent = content
-        self.wordCount = content.count
+        self.wordCount = Self.countWords(content)
         self.statusRaw = ArticleStatus.pending.rawValue
+    }
+
+    /// Count words: CJK characters counted individually; non-CJK runs split by whitespace.
+    /// Mirrors the server-side `CountWords` in `repository/article.go`.
+    static func countWords(_ text: String) -> Int {
+        var count = 0
+        var inNonCJKRun = false
+        for scalar in text.unicodeScalars {
+            if Self.isCJK(scalar) {
+                if inNonCJKRun {
+                    count += 1
+                    inNonCJKRun = false
+                }
+                count += 1
+            } else if scalar.properties.isWhitespace || scalar == "\n" {
+                if inNonCJKRun {
+                    count += 1
+                    inNonCJKRun = false
+                }
+            } else {
+                inNonCJKRun = true
+            }
+        }
+        if inNonCJKRun { count += 1 }
+        return count
+    }
+
+    private static func isCJK(_ scalar: Unicode.Scalar) -> Bool {
+        let v = scalar.value
+        return (0x4E00...0x9FFF).contains(v) ||    // CJK Unified
+               (0x3400...0x4DBF).contains(v) ||    // CJK Extension A
+               (0x20000...0x2A6DF).contains(v) ||  // CJK Extension B
+               (0xF900...0xFAFF).contains(v) ||    // CJK Compatibility
+               (0x3000...0x303F).contains(v) ||    // CJK Symbols
+               (0x3040...0x309F).contains(v) ||    // Hiragana
+               (0x30A0...0x30FF).contains(v) ||    // Katakana
+               (0xAC00...0xD7AF).contains(v)       // Hangul
     }
 }
 

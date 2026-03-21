@@ -132,4 +132,90 @@ final class ArticleModelTests: XCTestCase {
         XCTAssertEqual(SyncState.pendingUpdate.rawValue, "pendingUpdate")
         XCTAssertEqual(SyncState.conflict.rawValue, "conflict")
     }
+
+    // MARK: - Article.countWords
+
+    func testCountWords_englishText() {
+        XCTAssertEqual(Article.countWords("Hello world"), 2)
+        XCTAssertEqual(Article.countWords("one two three four five"), 5)
+    }
+
+    func testCountWords_chineseText() {
+        // Each CJK character counts as one word
+        XCTAssertEqual(Article.countWords("你好世界"), 4)
+        XCTAssertEqual(Article.countWords("测试"), 2)
+    }
+
+    func testCountWords_mixedCJKAndEnglish() {
+        // "Hello" = 1 word, "世界" = 2 CJK characters
+        XCTAssertEqual(Article.countWords("Hello 世界"), 3)
+    }
+
+    func testCountWords_empty() {
+        XCTAssertEqual(Article.countWords(""), 0)
+    }
+
+    func testCountWords_whitespaceOnly() {
+        XCTAssertEqual(Article.countWords("   \n\t  "), 0)
+    }
+
+    func testCountWords_singleWord() {
+        XCTAssertEqual(Article.countWords("hello"), 1)
+    }
+
+    func testCountWords_multipleSpaces() {
+        XCTAssertEqual(Article.countWords("hello   world"), 2)
+    }
+
+    // MARK: - Manual Article Convenience Init
+
+    @MainActor
+    func testManualArticle_wordCountUsesCountWords() {
+        let content = "This is a test sentence with seven words"
+        let article = Article(content: content)
+        context.insert(article)
+
+        // countWords should give 8, not content.count (40)
+        XCTAssertEqual(article.wordCount, Article.countWords(content))
+        XCTAssertEqual(article.wordCount, 8)
+    }
+
+    @MainActor
+    func testManualArticle_wordCountCJK() {
+        let content = "这是一段中文测试内容"
+        let article = Article(content: content)
+        context.insert(article)
+
+        // Each CJK character = 1 word, 10 characters = 10 words
+        XCTAssertEqual(article.wordCount, 10)
+        XCTAssertEqual(article.wordCount, Article.countWords(content))
+    }
+
+    @MainActor
+    func testManualArticle_wordCountMixed() {
+        // 150 chars of English prose but far fewer words
+        let content = "Swift is a powerful and intuitive programming language for Apple platforms"
+        let article = Article(content: content)
+        context.insert(article)
+
+        // 11 words, NOT 73 characters
+        XCTAssertEqual(article.wordCount, 11)
+        XCTAssertNotEqual(article.wordCount, content.count)
+    }
+
+    @MainActor
+    func testManualArticle_sourceTypeIsManual() {
+        let article = Article(content: "test")
+        context.insert(article)
+        XCTAssertEqual(article.sourceType, .manual)
+        XCTAssertNil(article.url)
+    }
+
+    @MainActor
+    func testManualArticle_contentStored() {
+        let content = "My thought about Swift"
+        let article = Article(content: content)
+        context.insert(article)
+        XCTAssertEqual(article.markdownContent, content)
+    }
 }

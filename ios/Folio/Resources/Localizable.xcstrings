@@ -1064,18 +1064,6 @@
         }
       }
     },
-    "search.topicCount" : {
-      "comment" : "Number of articles in topic",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%d articles"
-          }
-        }
-      }
-    },
     "settings.title" : {
       "extractionState" : "manual",
       "localizations" : {

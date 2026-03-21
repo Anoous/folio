@@ -48,7 +48,7 @@ final class SharedDataManager {
         if let parsed = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
            let scheme = parsed.scheme?.lowercased(),
            scheme == "http" || scheme == "https",
-           parsed.host != nil {
+           parsed.host() != nil {
             return try saveArticle(url: parsed.absoluteString)
         }
 
@@ -109,7 +109,7 @@ final class SharedDataManager {
             article.summary = excerpt
         }
 
-        article.updatedAt = Date()
+        article.updatedAt = .now
         try context.save()
         FolioLogger.data.info("extraction updated: wordCount=\(result.wordCount), title=\(result.title ?? "nil")")
     }
@@ -120,10 +120,14 @@ final class SharedDataManager {
     static let monthlyQuotaKey = "folio.monthlyQuota"
     static let freeMonthlyQuota = 30
 
-    static func quotaKey(for date: Date = Date()) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM"
-        return "quota_\(formatter.string(from: date))"
+    private static let quotaFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM"
+        return f
+    }()
+
+    static func quotaKey(for date: Date = .now) -> String {
+        "quota_\(quotaFormatter.string(from: date))"
     }
 
     static func currentMonthCount(userDefaults: UserDefaults = .appGroup) -> Int {
