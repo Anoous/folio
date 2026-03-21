@@ -15,6 +15,8 @@ struct HomeView: View {
     @State private var searchViewModel: SearchViewModel?
     @State private var searchText = ""
     @State private var searchScope = ""
+    @State private var composeText = ""
+    @FocusState private var composeFocused: Bool
     @Query(sort: \Category.sortOrder) private var categories: [Category]
     @State private var articleToDelete: Article?
     @State private var showDeleteConfirmation = false
@@ -42,6 +44,18 @@ struct HomeView: View {
 
     private var coreView: some View {
         mainContent
+            .safeAreaInset(edge: .bottom) {
+                ComposeBar(text: $composeText, isFocused: $composeFocused) { content in
+                    handleComposeSave(content)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .keyboard) {
+                    ComposeToolbarContent(text: $composeText, isFocused: $composeFocused) { content in
+                        handleComposeSave(content)
+                    }
+                }
+            }
         .navigationTitle("Folio")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -60,11 +74,6 @@ struct HomeView: View {
             Text(String(localized: "search.scope.all", defaultValue: "All")).tag("")
             ForEach(categories) { category in
                 Text(category.localizedName).tag(category.slug)
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            ComposeBar { content in
-                handleComposeSave(content)
             }
         }
         .onChange(of: searchText) { _, newValue in
