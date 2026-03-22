@@ -287,6 +287,29 @@ struct RAGSource: Codable {
     let relevance: Double
 }
 
+// MARK: - Stats DTOs
+
+struct MonthlyStatsResponse: Codable {
+    let articlesCount: Int
+    let insightsCount: Int
+    let streakDays: Int
+    let topicDistribution: [TopicStat]
+    let trendInsight: String?
+}
+
+struct TopicStat: Codable {
+    let categorySlug: String
+    let categoryName: String
+    let count: Int
+}
+
+struct EchoStatsResponse: Codable {
+    let completionRate: Int
+    let totalReviews: Int
+    let rememberedCount: Int
+    let forgottenCount: Int
+}
+
 // MARK: - APIClient
 
 final class APIClient: @unchecked Sendable {
@@ -691,6 +714,20 @@ final class APIClient: @unchecked Sendable {
     func ragQuery(question: String, conversationId: String? = nil) async throws -> RAGQueryResponse {
         let body = RAGQueryRequest(question: question, conversationId: conversationId)
         return try await request(method: "POST", path: "/api/v1/rag/query", body: body)
+    }
+
+    // MARK: - Stats
+
+    func getMonthlyStats(month: String? = nil) async throws -> MonthlyStatsResponse {
+        var queryItems: [URLQueryItem] = []
+        if let month { queryItems.append(URLQueryItem(name: "month", value: month)) }
+        return try await request(method: "GET", path: "/api/v1/stats/monthly", queryItems: queryItems.isEmpty ? nil : queryItems)
+    }
+
+    func getEchoStats(month: String? = nil) async throws -> EchoStatsResponse {
+        var queryItems: [URLQueryItem] = []
+        if let month { queryItems.append(URLQueryItem(name: "month", value: month)) }
+        return try await request(method: "GET", path: "/api/v1/stats/echo", queryItems: queryItems.isEmpty ? nil : queryItems)
     }
 }
 

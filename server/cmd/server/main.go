@@ -114,6 +114,10 @@ func main() {
 	ragService := service.NewRAGService(ragRepo, userRepo, aiAnalyzer)
 	ragAPIHandler := handler.NewRAGHandler(ragService)
 
+	// Stats
+	statsService := service.NewStatsService(pool, aiAnalyzer, userRepo)
+	statsHandler := handler.NewStatsHandler(statsService, userRepo)
+
 	// Router
 	router := api.NewRouter(api.RouterDeps{
 		AuthService:         authService,
@@ -127,6 +131,7 @@ func main() {
 		EchoHandler:         echoAPIHandler,
 		HighlightHandler:    highlightHandler,
 		RAGHandler:          ragAPIHandler,
+		StatsHandler:        statsHandler,
 	})
 
 	// Worker server
