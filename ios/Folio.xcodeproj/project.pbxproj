@@ -127,6 +127,7 @@
 		C058757AB17029DF56962AF5 /* EchoCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D21E4439C61C02697D0C054 /* EchoCardView.swift */; };
 		C0DFDA2CC8FA8FF36F2C5065 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7848623895B7F57C8EE0147E /* AppConstants.swift */; };
 		C22B5A483F07BD23C3E5FCE8 /* SyncServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA20DC780693B28FCC8A1D33 /* SyncServiceTests.swift */; };
+		C2995487D4A798E25FCC9F4D /* MilestoneCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 102CBA1FA053F5BE0660B9BC /* MilestoneCardView.swift */; };
 		C3B203174071C80D02740DD2 /* HomeViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E016EA57FC3158AFDE32DF30 /* HomeViewModelTests.swift */; };
 		C4A02918A0333DF425D313D2 /* SharedDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E012CBB7734D7150DE83121 /* SharedDataManager.swift */; };
 		C56D1A745685B3B2C2F647C6 /* SpacingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71A2352C6035EB5F5B3C61B2 /* SpacingTests.swift */; };
@@ -209,6 +210,7 @@
 		0D21E4439C61C02697D0C054 /* EchoCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoCardView.swift; sourceTree = "<group>"; };
 		0E012CBB7734D7150DE83121 /* SharedDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDataManager.swift; sourceTree = "<group>"; };
 		0EE692E348F73CFF5A586D19 /* PendingDeletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingDeletion.swift; sourceTree = "<group>"; };
+		102CBA1FA053F5BE0660B9BC /* MilestoneCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MilestoneCardView.swift; sourceTree = "<group>"; };
 		117C69065C4BFC1C68EB1C00 /* CategoryRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryRepositoryTests.swift; sourceTree = "<group>"; };
 		169A0B494F30137A1EB80458 /* Color+Folio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Folio.swift"; sourceTree = "<group>"; };
 		17799D4B4BF31ECDFD409532 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
@@ -546,6 +548,7 @@
 				92ED4253BB778A67007D44F9 /* HomeView.swift */,
 				535A40C8A5E5036399F1E139 /* HomeViewModel.swift */,
 				7F3F4AEB604527646C17E523 /* ManualNoteSheet.swift */,
+				102CBA1FA053F5BE0660B9BC /* MilestoneCardView.swift */,
 				180BCAFCFE20AB0AA101E068 /* URLDetection.swift */,
 			);
 			path = Home;
@@ -1092,6 +1095,7 @@
 				FC7FCD5E8FDFCB7437700E1D /* MarkdownBlock.swift in Sources */,
 				E762FA0AF166288CB6B6F45B /* MarkdownRenderer.swift in Sources */,
 				26914CD643759C9FE8B0F99B /* MarkdownToHTML.swift in Sources */,
+				C2995487D4A798E25FCC9F4D /* MilestoneCardView.swift in Sources */,
 				B298BE141564E450A16CB5FD /* MockDataFactory.swift in Sources */,
 				BB5DA7D885C6543959421BC0 /* Motion.swift in Sources */,
 				9773A9A2C36B7C8F633B7A5A /* Network.swift in Sources */,
