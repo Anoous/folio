@@ -8,7 +8,7 @@ struct OnboardingView: View {
     @State private var currentPage = 0
     let onComplete: () -> Void
 
-    private let totalPages = 6
+    private let totalPages = 5
 
     var body: some View {
         NavigationStack {
@@ -20,7 +20,6 @@ struct OnboardingView: View {
                         rememberPage.tag(2)
                         usePage.tag(3)
                         loginPage.tag(4)
-                        startPage.tag(5)
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
                     .animation(Motion.settle, value: currentPage)
@@ -49,9 +48,7 @@ struct OnboardingView: View {
         }
         .onChange(of: authViewModel?.isAuthenticated) { _, isAuthenticated in
             if isAuthenticated == true {
-                withAnimation(Motion.settle) {
-                    currentPage = 5
-                }
+                completeOnboarding()
             }
         }
     }
@@ -333,7 +330,7 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .padding(.bottom, Spacing.sm)
 
-            Text("登录后可在多设备间同步收藏。\n不登录也可以使用全部功能。")
+            Text("登录后即可开始使用 Folio，\n你的知识将在多设备间同步。")
                 .font(.system(size: 16))
                 .foregroundStyle(Color.folio.textSecondary)
                 .multilineTextAlignment(.center)
@@ -375,17 +372,7 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Skip login
-                Button {
-                    withAnimation(Motion.settle) {
-                        currentPage = 5
-                    }
-                } label: {
-                    Text("不登录，直接使用")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.folio.textTertiary)
-                        .padding(.vertical, Spacing.xs)
-                }
+                // Login is mandatory — no skip option
             }
             .padding(.top, 36)
 
@@ -396,53 +383,6 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
                     .padding(.top, Spacing.xs)
             }
-
-            Spacer()
-            Spacer()
-        }
-        .padding(.horizontal, 44)
-    }
-
-    // MARK: - Page 5: Start
-
-    private var startPage: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            Image(systemName: "book.closed")
-                .font(.system(size: 72))
-                .foregroundStyle(Color.folio.textPrimary)
-                .opacity(0.12)
-                .padding(.bottom, 40)
-
-            Text("准备好了")
-                .font(Typography.v3OnboardingTitle)
-                .foregroundStyle(Color.folio.textPrimary)
-                .padding(.bottom, Spacing.sm)
-
-            Text("从任何 App 分享一个链接到 Folio，\n你的知识旅程就此开始。")
-                .font(.system(size: 16))
-                .foregroundStyle(Color.folio.textSecondary)
-                .multilineTextAlignment(.center)
-                .lineSpacing(16 * 0.65 - 16 * 0.35)
-
-            Button {
-                completeOnboarding()
-            } label: {
-                Text("开始使用")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.folio.background)
-                    .padding(.horizontal, 48)
-                    .padding(.vertical, 15)
-                    .background(Color.folio.textPrimary)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-            .padding(.top, 36)
-
-            Text("你可以在设置中随时登录")
-                .font(.system(size: 13))
-                .foregroundStyle(Color.folio.textQuaternary)
-                .padding(.top, 14)
 
             Spacer()
             Spacer()
