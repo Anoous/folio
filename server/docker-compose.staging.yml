@@ -1,0 +1,132 @@
+# Staging: low-memory Guangzhou server (1GB RAM + 2GB swap)
+# Access only via Shadowsocks proxy (port 1024) — no public exposure
+# Usage: docker compose -f docker-compose.staging.yml up -d
+# Images built locally and uploaded via: docker save | scp | docker load
+
+services:
+  app:
+    image: folio-app:staging
+    environment:
+      - APP_MODE=all
+      - DATABASE_URL=postgresql://folio:${DB_PASSWORD}@postgres:5432/folio
+      - REDIS_ADDR=redis:6379
+      - READER_URL=http://reader:3000
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - JWT_SECRET=${JWT_SECRET}
+      - R2_ENDPOINT=${R2_ENDPOINT:-}
+      - R2_ACCESS_KEY=${R2_ACCESS_KEY:-}
+      - R2_SECRET_KEY=${R2_SECRET_KEY:-}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME:-folio-images}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL:-}
+      - LOG_FORMAT=json
+      - GOMAXPROCS=1
+      - GOMEMLIMIT=64MiB
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      reader:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 96M
+    networks:
+      - backend
+
+  reader:
+    image: folio-reader:staging
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      - POOL_SIZE=1
+      - NODE_OPTIONS=--max-old-space-size=256
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    networks:
+      - backend
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=folio
+      - POSTGRES_USER=folio
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - pg_data_staging:/var/lib/postgresql/data
+      - ./migrations/001_init.up.sql:/docker-entrypoint-initdb.d/001_init.sql
+      - ./migrations/002_content_cache.up.sql:/docker-entrypoint-initdb.d/002_content_cache.sql
+      - ./migrations/002_soft_delete.up.sql:/docker-entrypoint-initdb.d/003_soft_delete.sql
+      - ./migrations/003_sync_epoch.up.sql:/docker-entrypoint-initdb.d/004_sync_epoch.sql
+      - ./migrations/004_fix_category_names.up.sql:/docker-entrypoint-initdb.d/005_fix_category_names.sql
+      - ./migrations/005_fix_precision.up.sql:/docker-entrypoint-initdb.d/006_fix_precision.sql
+      - ./migrations/006_manual_content.up.sql:/docker-entrypoint-initdb.d/007_manual_content.sql
+      - ./migrations/007_client_id.up.sql:/docker-entrypoint-initdb.d/008_client_id.sql
+    command: >
+      postgres
+        -c shared_buffers=64MB
+        -c effective_cache_size=128MB
+        -c work_mem=2MB
+        -c maintenance_work_mem=32MB
+        -c max_connections=20
+        -c huge_pages=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U folio -d folio"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 48mb --maxmemory-policy allkeys-lru --save ""
+    volumes:
+      - redis_data_staging:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  pg_data_staging:
+  redis_data_staging:

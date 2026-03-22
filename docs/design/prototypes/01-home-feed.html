@@ -1,0 +1,926 @@
+<!--
+  Folio v3.0 — Home Feed
+
+  乔布斯会说：
+  "这不是一个 App。这是你的私人杂志。
+   每次打开它，你应该觉得自己在翻开今天的一页。
+   内容就是界面。界面消失了，文字留下来。"
+
+  设计原则：
+  1. 内容即界面 — 没有容器、没有卡片边框、没有视觉噪音。文字本身就是设计。
+  2. 温度 — 纸张般的暖白，不是 LED 的冷白。这是一本书，不是一个仪表盘。
+  3. 节奏 — 第一篇文章大而从容，后续渐次收敛。像交响乐的乐章。
+  4. 留白是设计 — 元素之间的空间和元素本身同样重要。
+  5. 一个颜色 — 整个页面只有一个 accent 色出现在一个地方。其余全是黑白灰。
+  6. Echo 是诗 — 不是卡片。是页面中间的一个安静的问题。
+
+  状态：empty / first / normal / processing / offline / error
+-->
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Folio — Home Feed</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=LXGW+WenKai+TC:wght@300;400;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+:root {
+  --bg: #FAF9F6;
+  --text-1: #1D1D1F;
+  --text-2: #6E6E73;
+  --text-3: #AEAEB2;
+  --text-4: #D1D1D6;
+  --accent: #0071E3;
+  --sep: rgba(0,0,0,0.05);
+  --tag: #86868B;
+  --success: #248A3D;
+  --error: #D70015;
+  --warn: #BF5700;
+  --echo-bg: rgba(0,0,0,0.02);
+  --shimmer-a: rgba(0,0,0,0.03);
+  --shimmer-b: rgba(0,0,0,0.06);
+
+  --ui: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --serif: "LXGW WenKai TC", serif;
+
+  --settle: 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  --quick: 0.22s ease;
+  --ink: 0.15s ease-out;
+}
+
+[data-theme="dark"] {
+  --bg: #000;
+  --text-1: #F5F5F7;
+  --text-2: #86868B;
+  --text-3: #48484A;
+  --text-4: #2C2C2E;
+  --accent: #2997FF;
+  --sep: rgba(255,255,255,0.05);
+  --tag: #86868B;
+  --success: #30D158;
+  --error: #FF453A;
+  --warn: #FF9F0A;
+  --echo-bg: rgba(255,255,255,0.03);
+  --shimmer-a: rgba(255,255,255,0.03);
+  --shimmer-b: rgba(255,255,255,0.06);
+}
+
+body {
+  font-family: var(--ui);
+  background: #E8E8ED;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 48px 20px 32px;
+  -webkit-font-smoothing: antialiased;
+}
+[data-theme="dark"] body { background: #1C1C1E; }
+
+/* ── Device ── */
+.phone {
+  width: 393px; height: 852px;
+  background: var(--bg);
+  border-radius: 47px;
+  overflow: hidden;
+  position: relative;
+  display: flex; flex-direction: column;
+  box-shadow: 0 0 0 0.5px rgba(0,0,0,0.1), 0 40px 100px rgba(0,0,0,0.08);
+  transition: background var(--quick);
+}
+[data-theme="dark"] .phone { box-shadow: 0 0 0 0.5px rgba(255,255,255,0.08), 0 40px 100px rgba(0,0,0,0.5); }
+
+.island {
+  position: absolute; top: 11px; left: 50%; transform: translateX(-50%);
+  width: 126px; height: 37px; background: #000; border-radius: 24px; z-index: 100;
+}
+
+.statusbar {
+  height: 59px; display: flex; align-items: flex-end; justify-content: space-between;
+  padding: 0 28px 8px; font-size: 15px; font-weight: 600; color: var(--text-1); z-index: 90; position: relative;
+}
+.statusbar-r { display: flex; align-items: center; gap: 5px; }
+
+/* ── Top bar ── */
+.topbar {
+  padding: 6px 20px 0;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.topbar-title {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--text-1);
+  letter-spacing: -0.3px;
+}
+.topbar-icons { display: flex; gap: 4px; }
+.icon-btn {
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: none; cursor: pointer;
+  background: none; color: var(--text-2);
+  transition: opacity var(--quick);
+}
+.icon-btn:active { opacity: 0.4; }
+
+/* ── Date ── */
+.date-line {
+  padding: 16px 20px 0;
+  font-size: 13px;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+}
+
+/* ── Sync ── */
+.sync {
+  height: 1.5px; margin: 0; background: transparent;
+  position: relative; overflow: hidden; opacity: 0; transition: opacity var(--ink);
+}
+.sync.on { opacity: 1; }
+.sync::after {
+  content:''; position: absolute; top:0; left:-30%; width:30%; height:100%;
+  background: var(--accent); border-radius:1px;
+  animation: syncAni 1.8s ease-in-out infinite;
+}
+@keyframes syncAni { to { left: 100%; } }
+
+/* ── Banner ── */
+.banner {
+  margin: 10px 20px 0; padding: 10px 14px; border-radius: 10px;
+  display: none; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--text-2); line-height: 1.4;
+  animation: slideIn var(--settle) forwards;
+}
+.banner.on { display: flex; }
+.banner-off { background: var(--echo-bg); }
+.banner-err { background: rgba(215,0,21,0.04); border: 0.5px solid rgba(215,0,21,0.08); }
+[data-theme="dark"] .banner-err { background: rgba(255,69,58,0.06); border-color: rgba(255,69,58,0.1); }
+.banner svg { flex-shrink: 0; }
+.banner-t { flex: 1; }
+.banner-a { display: flex; gap: 2px; flex-shrink: 0; }
+.banner-b {
+  font-size: 13px; font-weight: 500; padding: 4px 10px; border-radius: 6px;
+  border: none; cursor: pointer; background: none; color: var(--accent); font-family: var(--ui);
+}
+.banner-b.x { color: var(--text-3); font-size: 16px; }
+@keyframes slideIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+
+/* ── Cold hint ── */
+.cold {
+  margin: 12px 20px 0; padding: 14px 16px; border-radius: 10px;
+  background: rgba(0,113,227,0.04); border: 0.5px solid rgba(0,113,227,0.08);
+  font-size: 14px; color: var(--text-2); line-height: 1.55;
+  display: none; animation: slideIn var(--settle) forwards;
+}
+.cold.on { display: block; }
+.cold b { color: var(--text-1); font-weight: 600; }
+
+/* ── Scroll area ── */
+.scroll {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; padding-bottom: 44px;
+}
+.scroll::-webkit-scrollbar { display: none; }
+
+/* ── Section date header ── */
+.sec {
+  padding: 32px 20px 14px;
+  font-family: var(--serif);
+  font-size: 14px;
+  color: var(--text-3);
+  letter-spacing: 0.3px;
+}
+.sec:first-child { padding-top: 20px; }
+
+/* ── Hero article (first unread) ── */
+.hero {
+  padding: 0 20px 24px;
+  cursor: pointer;
+  transition: opacity var(--ink);
+}
+.hero:active { opacity: 0.5; }
+
+.hero-title {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 400;
+  color: var(--text-1);
+  line-height: 1.4;
+  margin-bottom: 14px;
+  letter-spacing: -0.2px;
+}
+
+.hero-insight {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-style: italic;
+  color: var(--text-2);
+  line-height: 1.65;
+  margin-bottom: 14px;
+  padding-left: 16px;
+  border-left: 2px solid var(--accent);
+}
+
+.hero-meta {
+  font-size: 12px;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-dot {
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+
+/* ── Regular article ── */
+.item {
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: opacity var(--ink);
+  position: relative;
+}
+.item:active { opacity: 0.5; }
+.item + .item { border-top: 0.5px solid var(--sep); }
+.sec + .item { border-top: none; }
+
+.item-title {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 400;
+  color: var(--text-1);
+  line-height: 1.45;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.item.unread .item-title { font-weight: 700; }
+
+.item-insight {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-style: italic;
+  color: var(--text-3);
+  line-height: 1.55;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.item.unread .item-insight {
+  color: var(--text-2);
+}
+
+.item-meta {
+  font-size: 12px;
+  color: var(--text-4);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.item-dot {
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+
+.item-fav {
+  position: absolute;
+  top: 18px; right: 20px;
+  font-size: 10px; color: var(--warn);
+  opacity: 0.6;
+}
+
+/* Item with thumbnail */
+.item-row { display: flex; gap: 14px; }
+.item-text { flex: 1; min-width: 0; }
+.item-thumb {
+  width: 72px; height: 72px; border-radius: 8px;
+  flex-shrink: 0; overflow: hidden; align-self: flex-start;
+}
+.item-thumb-fill {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ── Echo ── */
+.echo {
+  margin: 12px 20px;
+  padding: 28px 24px;
+  background: var(--echo-bg);
+  border-radius: 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--settle);
+  position: relative;
+}
+
+.echo-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+.echo-q {
+  font-family: var(--serif);
+  font-size: 17px;
+  color: var(--text-1);
+  line-height: 1.65;
+  margin-bottom: 6px;
+  max-width: 300px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.echo-from {
+  font-size: 12px;
+  color: var(--text-4);
+  margin-bottom: 24px;
+  line-height: 1.4;
+}
+
+.echo-tap {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 28px;
+  border: 1px solid var(--sep);
+  border-radius: 24px;
+  background: none;
+  color: var(--text-2);
+  font-size: 14px; font-weight: 400;
+  cursor: pointer;
+  transition: all var(--quick);
+  font-family: var(--ui);
+  letter-spacing: 0.3px;
+}
+.echo-tap:hover { border-color: var(--text-3); color: var(--text-1); }
+.echo-tap:active { transform: scale(0.96); opacity: 0.6; }
+
+/* Echo revealed */
+.echo-ans { display: none; text-align: left; }
+.echo.open .echo-tap { display: none; }
+.echo.open .echo-q { text-align: left; font-size: 15px; color: var(--text-3); margin-bottom: 16px; max-width: none; }
+.echo.open .echo-from { display: none; }
+.echo.open .echo-label { text-align: left; }
+.echo.open { text-align: left; padding: 24px; }
+.echo.open .echo-ans { display: block; animation: fadeUp var(--settle) forwards; }
+
+.echo-ans-text {
+  font-family: var(--serif);
+  font-size: 17px;
+  color: var(--text-1);
+  line-height: 1.6;
+  margin-bottom: 6px;
+  padding-left: 14px;
+  border-left: 2px solid var(--accent);
+}
+.echo-ans-from {
+  font-size: 12px;
+  color: var(--text-4);
+  margin-bottom: 22px;
+  padding-left: 14px;
+}
+.echo-fb { display: flex; gap: 10px; }
+.echo-fb-b {
+  flex: 1; padding: 12px; border-radius: 10px;
+  border: 0.5px solid var(--sep); background: var(--bg);
+  font-size: 14px; cursor: pointer;
+  transition: all var(--quick); font-family: var(--ui);
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  color: var(--text-1);
+}
+.echo-fb-b:active { transform: scale(0.97); }
+.echo-fb-b.y { color: var(--success); border-color: rgba(36,138,61,0.15); }
+.echo-fb-b.n { color: var(--error); border-color: rgba(215,0,21,0.1); }
+
+/* Echo done */
+.echo-done { display: none; font-size: 14px; color: var(--text-2); text-align: center; }
+.echo.fin .echo-ans,.echo.fin .echo-q,.echo.fin .echo-from,.echo.fin .echo-label { display: none; }
+.echo.fin .echo-done { display: block; }
+.echo.fin { padding: 18px 24px; text-align: center; }
+
+@keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+/* ── Processing ── */
+.skel {
+  padding: 16px 20px;
+  border-top: 0.5px solid var(--sep);
+}
+.sk {
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--shimmer-a) 25%, var(--shimmer-b) 50%, var(--shimmer-a) 75%);
+  background-size: 200% 100%;
+  animation: shim 2s ease-in-out infinite;
+}
+.sk-s { width: 25%; height: 10px; margin-bottom: 14px; }
+.sk-l { width: 75%; height: 15px; margin-bottom: 10px; }
+.sk-m { width: 50%; height: 15px; margin-bottom: 14px; }
+.sk-f { width: 90%; height: 11px; margin-bottom: 6px; }
+.sk-h { width: 40%; height: 11px; }
+@keyframes shim { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+.proc-bar { height: 2px; margin-top: 12px; border-radius: 1px; background: var(--sep); overflow: hidden; }
+.proc-fill { height: 100%; border-radius: 1px; }
+.proc-fill.crawl { background: var(--accent); width: 45%; animation: pulse 2s ease-in-out infinite; }
+.proc-fill.done { background: var(--success); width: 100%; animation: fadeOut 1.5s ease-out 1s forwards; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+@keyframes fadeOut { to{opacity:0.15} }
+.proc-note { font-size: 12px; color: var(--text-3); margin-top: 6px; }
+
+/* ── Empty ── */
+.empty {
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  padding: 120px 52px 60px; text-align: center;
+}
+.empty.on { display: flex; }
+.empty-mark {
+  font-family: var(--serif);
+  font-size: 64px;
+  font-weight: 300;
+  color: var(--text-4);
+  margin-bottom: 40px;
+  opacity: 0.3;
+  line-height: 1;
+}
+.empty-h {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--text-1);
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+.empty-p {
+  font-size: 15px;
+  color: var(--text-2);
+  line-height: 1.65;
+  margin-bottom: 44px;
+}
+.empty-btn {
+  padding: 13px 32px;
+  background: var(--text-1);
+  color: var(--bg);
+  border: none; border-radius: 24px;
+  font-size: 15px; font-weight: 500;
+  cursor: pointer; font-family: var(--ui);
+  transition: all var(--quick);
+  letter-spacing: 0.2px;
+}
+.empty-btn:active { transform: scale(0.96); opacity: 0.8; }
+.empty-sub {
+  margin-top: 20px;
+  font-size: 12px;
+  color: var(--text-4);
+  line-height: 1.6;
+}
+
+/* ── Load more ── */
+.more {
+  display: flex; justify-content: center; padding: 32px 0 12px; gap: 8px;
+}
+.more-d {
+  width: 3px; height: 3px; border-radius: 50%; background: var(--text-4);
+  animation: bounce 1.4s ease-in-out infinite;
+}
+.more-d:nth-child(2) { animation-delay: 0.15s; }
+.more-d:nth-child(3) { animation-delay: 0.3s; }
+@keyframes bounce { 0%,80%,100%{opacity:0.25} 40%{opacity:0.8} }
+
+/* ── Home indicator ── */
+.home-i {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  width: 134px; height: 5px; background: var(--text-1); opacity: 0.12; border-radius: 3px;
+}
+
+/* ── Overlay / Toast ── */
+.ov {
+  position: fixed; inset: 0; background: var(--bg);
+  z-index: 200; opacity: 0; pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+.ov.on { opacity: 1; pointer-events: all; }
+#toast {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  background: var(--text-1); color: var(--bg);
+  padding: 10px 28px; border-radius: 24px;
+  font-size: 14px; font-family: var(--ui); font-weight: 500;
+  opacity: 0; pointer-events: none; transition: opacity var(--ink); z-index: 300;
+}
+
+
+button { min-height: 44px; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="island"></div>
+
+  <div class="statusbar">
+    <span>9:41</span>
+    <div class="statusbar-r">
+      <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="3" width="3" height="8" rx=".8" opacity=".4"/><rect x="4.5" y="2" width="3" height="9" rx=".8" opacity=".6"/><rect x="9" y=".5" width="3" height="10.5" rx=".8" opacity=".8"/><rect x="13.5" y="0" width="2.5" height="11" rx=".8"/></svg>
+      <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor"><path d="M7.5 3.2c-1.6 0-3 .6-4.1 1.6l1.3 1.3c.7-.7 1.7-1.1 2.8-1.1s2.1.4 2.8 1.1l1.3-1.3c-1.1-1-2.5-1.6-4.1-1.6z"/><circle cx="7.5" cy="9" r="1.2"/><path d="M7.5 0C4.9 0 2.5 1 .7 2.7l1.3 1.3C3.5 2.5 5.4 1.7 7.5 1.7S11.5 2.5 13 4l1.3-1.3C12.5 1 10.1 0 7.5 0z" opacity=".5"/></svg>
+      <svg width="25" height="11" viewBox="0 0 25 11" fill="currentColor"><rect x="0" y=".5" width="21" height="10" rx="2.2" stroke="currentColor" stroke-width="1" fill="none" opacity=".35"/><rect x="22" y="3" width="1.8" height="5" rx=".9" opacity=".2"/><rect x="2" y="2.5" width="15" height="6" rx="1.2"/></svg>
+    </div>
+  </div>
+
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="topbar-title">页集</div>
+    <div class="topbar-icons">
+      <button class="icon-btn" aria-label="搜索" onclick="window.location.href='03-search-and-qa.html'">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
+      </button>
+      <button class="icon-btn" aria-label="设置" onclick="window.location.href='07-settings.html'">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Date line -->
+  <div class="date-line" id="dateLine">三月二十二日，星期六</div>
+
+  <!-- Sync -->
+  <div class="sync" id="sync"></div>
+
+  <!-- Banners -->
+  <div class="banner banner-off" id="bOff">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06c.82.4 1.6.9 2.28 1.49"/><path d="M5 12.55a11 11 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a16 16 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="0.5"/></svg>
+    <span class="banner-t">离线 · 显示本地内容</span>
+  </div>
+  <div class="banner banner-err" id="bErr">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="0.5"/></svg>
+    <span class="banner-t">同步失败</span>
+    <div class="banner-a">
+      <button class="banner-b" onclick="toast('重试中…')">重试</button>
+      <button class="banner-b x" onclick="el('bErr').classList.remove('on')">×</button>
+    </div>
+  </div>
+
+  <!-- Cold start hint -->
+  <div class="cold" id="cold">
+    <b>Folio 已读过这篇。</b>继续收藏，它会发现文章之间的隐藏关联。
+  </div>
+
+  <!-- Scroll -->
+  <div class="scroll" id="scroll">
+    <!-- Empty -->
+    <div class="empty" id="empty">
+      <div class="empty-mark">F</div>
+      <div class="empty-h">你读过的，<br>Folio 都记得。</div>
+      <div class="empty-p">从任何 App 分享一个链接。<br>Folio 阅读它，理解它，<br>然后帮你记住。</div>
+      <button class="empty-btn" onclick="toast('粘贴链接')">粘贴链接</button>
+      <div class="empty-sub">或从 Safari、微信、Twitter 分享到 Folio</div>
+    </div>
+
+    <div id="feed"></div>
+  </div>
+
+  <div class="home-i"></div>
+</div>
+
+<div class="ov" id="ov"></div>
+<div id="toast"></div>
+
+
+<script>
+// ── Article data: realistic volume across multiple days ──
+const D={
+  today:[
+    {src:'少数派',t:'2小时前',title:'为什么 90% 的 AI 项目在概念验证后就失败了',
+     ins:'失败的根因不是技术能力不足，而是问题定义错误——团队在用 AI 解决不需要 AI 的问题。',
+     sub:'数据质量 > 模型规模 · 端到端评估缺失',tags:'AI · 产品',u:1,fav:0,img:0},
+    {src:'晚点 LatePost',t:'5小时前',title:'字节跳动如何用飞轮效应重塑电商',
+     ins:'抖音电商的核心不是流量，而是兴趣发现——用户不是来买东西的，但看着看着就买了。',
+     sub:'内容电商 vs 货架电商的本质区别',tags:'商业',u:1,fav:1,img:'#E8DFD0'},
+    {src:'Ben Thompson',t:'8小时前',title:'Aggregation Theory and AI',
+     ins:'AI doesn\'t just change products — it restructures entire value chains by collapsing the distance between supply and demand.',
+     sub:'Distribution advantages erode · Content becomes commodity',tags:'AI · 商业',u:0,fav:0,img:0},
+  ],
+  yesterday:[
+    {src:'Paul Graham',t:'昨天 14:20',title:'How to Do Great Work',
+     ins:'The key to great work is not talent or effort — it\'s choosing the right problem, one that genuinely fascinates you.',
+     sub:'Curiosity compounds',tags:'思考',u:0,fav:0,img:0},
+    {src:'机器之心',t:'昨天 10:05',title:'Scaling Laws 的启示：大模型训练的关键不是参数量',
+     ins:'1T 高质量 token 胜过 10T 噪声数据——数据质量和模型规模存在最优比例关系。',
+     sub:'Chinchilla 最优比例 · 数据飞轮 > 算法迭代',tags:'AI · 研究',u:0,fav:0,img:'#C8D8E8'},
+    {src:'即刻',t:'昨天 08:30',title:'独立开发者的定价心理学：为什么 ¥98 比 ¥99 好',
+     ins:'定价的核心不是成本加成，而是锚定用户心智。价格本身就是一种产品设计。',
+     sub:'价格感知 > 绝对价格',tags:'产品',u:1,fav:0,img:0},
+  ],
+  thisWeek:[
+    {src:'虎嗅',t:'周三',title:'用户留存的本质：习惯回路与变量奖赏',
+     ins:'留存不是功能问题，是行为设计问题。触发→行动→变量奖赏→投入，四步循环。',
+     sub:'首周留存决定一切',tags:'产品 · 增长',u:1,fav:0,img:0},
+    {src:'InfoQ',t:'周三',title:'好的 API 设计像好的笑话——不需要解释',
+     ins:'API 的终极目标不是完备性，而是可预测性。用户不读文档就能猜对参数名。',
+     sub:'命名一致性 > 功能丰富度',tags:'技术',u:0,fav:1,img:0},
+    {src:'极客公园',t:'周二',title:'苹果的设计哲学：一千个「不」换一个「是」',
+     ins:'苹果的产品力不是来自他们做了什么，而是他们拒绝做什么。克制本身就是一种能力。',
+     sub:'iPhone 初代没有复制粘贴',tags:'设计',u:0,fav:0,img:'#D8D0E8'},
+    {src:'竹白',t:'周二',title:'Newsletter 复兴：为什么长文在短视频时代反而崛起',
+     ins:'长文不是短视频的对立面——它服务的是完全不同的认知需求：深度理解而非即时满足。',
+     sub:'订阅经济 vs 算法分发',tags:'媒体',u:0,fav:0,img:0},
+    {src:'36氪',t:'周一',title:'独立开发者年入百万的产品思维',
+     ins:'不是找需求，而是找"已有解决方案让人不满"的场景。最好的产品替换的是 Excel 表格。',
+     sub:'单人可维护 > 增长潜力',tags:'创业',u:0,fav:0,img:0},
+  ],
+  lastWeek:[
+    {src:'品玩',t:'3月14日',title:'为什么 Notion 在中国水土不服',
+     ins:'不是本地化的问题，是协作文化的差异——中国团队偏好通知驱动而非文档驱动。',
+     sub:'微信 > Slack 的底层逻辑',tags:'SaaS',u:0,fav:0,img:0},
+    {src:'The Verge',t:'3月14日',title:'The future of personal computing is ambient',
+     ins:'Computing will disappear into the environment. The best interface is no interface.',
+     sub:'From apps to agents',tags:'趋势',u:0,fav:0,img:0},
+    {src:'Stratechery',t:'3月13日',title:'Why most AI wrappers will die',
+     ins:'The only sustainable AI businesses are those that own unique data or distribution. Everything else is a demo.',
+     sub:'Data moat > model capability',tags:'AI · 商业',u:0,fav:0,img:'#D0D8C8'},
+    {src:'知乎',t:'3月12日',title:'从技术负债到技术破产：一家创业公司的代码考古',
+     ins:'技术债不是代码问题，是决策问题。每个快捷方式都是一笔借款，利息叫做维护成本。',
+     sub:'重写 vs 渐进式改进',tags:'工程',u:0,fav:1,img:0},
+    {src:'硅谷101',t:'3月11日',title:'YC 2026 冬季路演：15 个值得关注的方向',
+     ins:'最密集的赛道是 AI agent 和垂直 SaaS，但最意外的趋势是"逆全球化工具"的兴起。',
+     sub:'AI infra 投资降温 · 应用层回暖',tags:'创投',u:0,fav:0,img:0},
+  ],
+  earlier:[
+    {src:'Lenny\'s Newsletter',t:'3月8日',title:'The best product metrics are feelings',
+     ins:'If you can\'t describe the feeling your product creates in one word, you don\'t understand your product yet.',
+     sub:'NPS is a lagging indicator',tags:'产品',u:0,fav:0,img:0},
+    {src:'爱范儿',t:'3月7日',title:'Vision Pro 半年后：空间计算的理想与现实',
+     ins:'Vision Pro 证明了空间计算的方向是对的，但也暴露了一个残酷现实——目前没有杀手应用。',
+     sub:'硬件领先 · 软件生态滞后',tags:'苹果 · 硬件',u:0,fav:0,img:'#E0D0C0'},
+    {src:'纽约时报',t:'3月5日',title:'为什么年轻人开始重新写日记',
+     ins:'在算法控制注意力的时代，手写日记成了最后一片不被优化的私人空间。',
+     sub:'数字排毒 · 慢思考回归',tags:'文化',u:0,fav:0,img:0},
+    {src:'MIT Tech Review',t:'3月3日',title:'The case against AI safety theater',
+     ins:'Most AI safety measures are designed to reassure regulators, not to actually reduce risk. Real safety is boring and unglamorous.',
+     sub:'Compliance ≠ safety',tags:'AI · 伦理',u:0,fav:0,img:0},
+    {src:'小众软件',t:'3月1日',title:'被遗忘的 macOS 效率技巧：十个你可能不知道的快捷键',
+     ins:'效率工具的悖论：最强大的功能往往藏在最不起眼的角落。Spotlight 就是最好的启动器。',
+     sub:'原生 > 第三方 · 减少工具数量',tags:'效率',u:0,fav:0,img:0},
+  ]
+};
+
+const EC=[
+  {q:'你 3 周前存了一篇关于 AI 项目失败率的文章。\n还记得最反直觉的结论是什么吗？',
+   from:'3 周前收藏',
+   ans:'"失败的根因不是技术，\n而是问题定义错误。"',
+   asrc:'来自《为什么 90% 的 AI 项目在概念验证后就失败了》',
+   y:'✓ 已记录 · 2 周后回顾',n:'已标记 · 3 天后再来'},
+  {q:'你标注过一句关于 API 设计的话。\n还记得原文吗？',
+   from:'2 天前收藏',
+   ans:'"API 的终极目标不是完备性，\n而是可预测性。"',
+   asrc:'来自《好的 API 设计像好的笑话——不需要解释》',
+   y:'✓ 已记录 · 10 天后回顾',n:'已标记 · 2 天后再来'},
+  {q:'这两篇文章都提到了"飞轮效应"，\n但应用场景截然不同。\n区别是什么？',
+   from:'关联发现 · 2 篇相关文章',
+   ans:'"字节的飞轮是流量→内容→变现，\nLenny 说的飞轮是体验→口碑→增长。\n一个靠算法驱动，一个靠产品力驱动。"',
+   asrc:'来自《字节跳动如何用飞轮效应重塑电商》与《The best product metrics are feelings》',
+   y:'✓ 已记录 · 2 周后回顾',n:'已标记 · 3 天后再来'},
+];
+
+function el(id){return document.getElementById(id)}
+
+// ── Hero ──
+function heroHTML(d){
+  return `<div class="hero" onclick="tap(this)">
+    <div class="hero-title">${d.title}</div>
+    <div class="hero-insight">${d.ins}</div>
+    <div class="hero-meta">
+      <span>${d.src}</span><span class="hero-dot"></span><span>${d.t}</span>
+      <span class="hero-dot"></span><span style="color:var(--text-4)">${d.tags}</span>
+    </div>
+  </div>`;
+}
+
+// ── Item ──
+function itemHTML(d,i){
+  const c=d.u?'item unread':'item';
+  const fav=d.fav?`<span class="item-fav">★</span>`:'';
+  let body;
+  if(d.img){
+    body=`<div class="item-row">
+      <div class="item-text">
+        <div class="item-title">${d.title}</div>
+        <div class="item-insight">${d.ins}</div>
+        <div class="item-meta"><span>${d.src}</span><span class="item-dot"></span><span>${d.t}</span></div>
+      </div>
+      <div class="item-thumb"><div class="item-thumb-fill" style="background:${d.img}"></div></div>
+    </div>`;
+  } else {
+    body=`<div class="item-title">${d.title}</div>
+    <div class="item-insight">${d.ins}</div>
+    <div class="item-meta">
+      <span>${d.src}</span><span class="item-dot"></span><span>${d.t}</span>
+      <span class="item-dot"></span><span>${d.tags}</span>
+    </div>`;
+  }
+  return `<div class="${c}" onclick="tap(this)" data-i="${i}">${fav}${body}</div>`;
+}
+
+// ── Echo ──
+function echoHTML(e,i){
+  return `<div class="echo" id="ec${i}">
+    <div class="echo-label">✦ Echo</div>
+    <div class="echo-q">${e.q.replace(/\n/g,'<br>')}</div>
+    <div class="echo-from">${e.from}</div>
+    <button class="echo-tap" onclick="reveal(${i},event)">揭晓答案</button>
+    <div class="echo-ans">
+      <div class="echo-ans-text">${e.ans.replace(/\n/g,'<br>')}</div>
+      <div class="echo-ans-from">${e.asrc}</div>
+      <div class="echo-fb">
+        <button class="echo-fb-b y" onclick="fb(${i},'y',event)">记得</button>
+        <button class="echo-fb-b n" onclick="fb(${i},'n',event)">忘了</button>
+      </div>
+    </div>
+    <div class="echo-done"></div>
+  </div>`;
+}
+
+// ── Helper: render a section of articles ──
+function secHTML(label, items, startIdx) {
+  let h = `<div class="sec">${label}</div>`;
+  items.forEach((d,j) => h += itemHTML(d, startIdx+j));
+  return h;
+}
+
+// ── States ──
+function go(s){
+  const f=el('feed');
+  f.innerHTML='';
+  el('empty').classList.remove('on');
+  el('bOff').classList.remove('on');
+  el('bErr').classList.remove('on');
+  el('cold').classList.remove('on');
+  el('sync').classList.remove('on');
+  el('scroll').scrollTop=0;
+
+  if(s==='empty'){
+    el('empty').classList.add('on');
+  }
+  else if(s==='first'){
+    el('cold').classList.add('on');
+    f.innerHTML=heroHTML(D.today[0]);
+  }
+  else if(s==='normal'){
+    let h='', idx=0;
+    // 今天: hero + 2 items
+    h+=`<div class="sec">今天</div>`;
+    h+=heroHTML(D.today[0]);
+    h+=itemHTML(D.today[1],1)+itemHTML(D.today[2],2);
+    idx=3;
+    // Echo 1
+    h+=echoHTML(EC[0],0);
+    // 昨天: 3 items
+    h+=`<div class="sec">昨天</div>`;
+    D.yesterday.forEach((d,j)=>{h+=itemHTML(d,idx);idx++;});
+    // 本周: 5 items with Echo 2 after 2nd
+    h+=`<div class="sec">本周</div>`;
+    D.thisWeek.forEach((d,j)=>{
+      h+=itemHTML(d,idx); idx++;
+      if(j===1) h+=echoHTML(EC[1],1);
+    });
+    // 上周: 5 items with Echo 3 after 3rd
+    h+=`<div class="sec">上周</div>`;
+    D.lastWeek.forEach((d,j)=>{
+      h+=itemHTML(d,idx); idx++;
+      if(j===2) h+=echoHTML(EC[2],2);
+    });
+    // 更早: 5 items
+    h+=`<div class="sec">更早</div>`;
+    D.earlier.forEach((d,j)=>{h+=itemHTML(d,idx);idx++;});
+    // Load more
+    h+=`<div class="more"><div class="more-d"></div><div class="more-d"></div><div class="more-d"></div></div>`;
+    f.innerHTML=h;
+  }
+  else if(s==='proc'){
+    el('sync').classList.add('on');
+    let h=`<div class="sec">今天</div>`;
+    h+=`<div class="skel"><div class="sk sk-s"></div><div class="sk sk-l"></div><div class="sk sk-m"></div><div class="sk sk-f"></div><div class="sk sk-h"></div></div>`;
+    h+=`<div class="item">
+      <div class="item-title" style="font-weight:700">深度解析：大模型 Agent 的工程实践与踩坑记录</div>
+      <div class="proc-bar"><div class="proc-fill crawl"></div></div>
+      <div class="proc-note">✦ AI 正在阅读…</div>
+    </div>`;
+    h+=`<div class="item unread">
+      <div class="item-title">从零到一搭建推荐系统的七个关键决策</div>
+      <div class="item-insight">推荐系统最大的陷阱是追求精准——过度个性化让用户困在信息茧房中。</div>
+      <div class="item-meta"><span>知乎</span><span class="item-dot"></span><span>3分钟前</span></div>
+      <div class="proc-bar"><div class="proc-fill done"></div></div>
+    </div>`;
+    h+=heroHTML(D.today[0]);
+    h+=itemHTML(D.today[1],1)+itemHTML(D.today[2],2);
+    let idx=3;
+    h+=`<div class="sec">昨天</div>`;
+    D.yesterday.forEach((d,j)=>{h+=itemHTML(d,idx);idx++;});
+    h+=`<div class="sec">本周</div>`;
+    D.thisWeek.forEach((d,j)=>{h+=itemHTML(d,idx);idx++;});
+    f.innerHTML=h;
+  }
+  else if(s==='off'){
+    el('bOff').classList.add('on');
+    let h='',idx=0;
+    h+=`<div class="sec">今天</div>`+heroHTML(D.today[0]);
+    h+=itemHTML(D.today[1],1)+itemHTML(D.today[2],2); idx=3;
+    h+=`<div class="sec">昨天</div>`;
+    D.yesterday.forEach((d,j)=>{h+=itemHTML(d,idx);idx++;});
+    h+=`<div class="sec">本周</div>`;
+    D.thisWeek.forEach((d,j)=>{h+=itemHTML(d,idx);idx++;});
+    f.innerHTML=h;
+  }
+  else if(s==='err'){
+    el('bErr').classList.add('on');
+    let h='',idx=0;
+    h+=`<div class="sec">今天</div>`+heroHTML(D.today[0]);
+    h+=itemHTML(D.today[1],1)+itemHTML(D.today[2],2); idx=3;
+    h+=`<div class="sec">昨天</div>`;
+    D.yesterday.forEach((d,j)=>{h+=itemHTML(d,idx);idx++;});
+    h+=`<div class="sec">本周</div>`;
+    D.thisWeek.forEach((d,j)=>{h+=itemHTML(d,idx);idx++;});
+    f.innerHTML=h;
+  }
+}
+
+// ── Interactions ──
+function tap(el){
+  el.style.transition='all 0.2s ease';
+  el.style.transform='scale(0.97)';
+  el.style.opacity='0.35';
+  const ov=document.getElementById('ov');
+  setTimeout(()=>ov.classList.add('on'),180);
+  setTimeout(()=>{
+    ov.classList.remove('on');
+    el.style.transform='';el.style.opacity='';
+    window.location.href='04-reader-full.html';
+  },700);
+}
+
+function reveal(i,e){
+  e.stopPropagation();
+  document.getElementById('ec'+i).classList.add('open');
+}
+
+function fb(i,type,e){
+  e.stopPropagation();
+  const c=document.getElementById('ec'+i);
+  c.querySelector('.echo-done').textContent=type==='y'?EC[i].y:EC[i].n;
+  c.classList.remove('open');
+  c.classList.add('fin');
+}
+
+function theme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  el('bl').classList.toggle('on',t==='light');
+  el('bd').classList.toggle('on',t==='dark');
+}
+
+function reset(){go('normal');theme('light');}
+
+function toast(m){
+  const t=el('toast');t.textContent=m;t.style.opacity='1';
+  setTimeout(()=>t.style.opacity='0',1200);
+}
+
+// ── Swipe ──
+let sx=0,st=null;
+document.addEventListener('touchstart',e=>{
+  const c=e.target.closest('.item,.hero');
+  if(c){sx=e.touches[0].clientX;st=c;}
+},{passive:true});
+document.addEventListener('touchend',e=>{
+  if(!st)return;
+  const dx=e.changedTouches[0].clientX-sx;
+  if(dx>100){
+    const f=st.querySelector('.item-fav');
+    if(f){f.remove();toast('取消收藏');}
+    else{const s=document.createElement('span');s.className='item-fav';s.textContent='★';st.appendChild(s);toast('已收藏');}
+  }else if(dx<-100){
+    st.style.transition='all 0.3s';st.style.transform='translateX(-100%)';st.style.opacity='0';
+    const r=st;setTimeout(()=>{r.style.height='0';r.style.padding='0';r.style.borderTop='none';r.style.overflow='hidden';toast('已删除');},300);
+  }
+  st=null;
+},{passive:true});
+
+// Init — keyboard shortcuts: 1-6 switch states, D toggles dark mode
+document.addEventListener('keydown',e=>{
+  const map={'1':'empty','2':'first','3':'normal','4':'proc','5':'off','6':'err'};
+  if(map[e.key]) go(map[e.key]);
+  if(e.key==='d'||e.key==='D') theme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
+});
+if(window.matchMedia('(prefers-color-scheme:dark)').matches) theme('dark');
+go('normal');
+</script>
+</body>
+</html>

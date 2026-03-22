@@ -1,0 +1,589 @@
+<!--
+  Folio v3.0 — Echo Interaction Prototype
+
+  Echo 是 Folio 的灵魂。它不是通知，不是提醒，
+  是一个安静的问题——在你快忘记的时候，帮你重新记住。
+
+  设计原则：
+  - 仪式感：每次 Echo 都是一次微小的自我检验。不急，不催。
+  - 一次只问一个问题。屏幕上没有其他干扰。
+  - 揭晓的瞬间要有"啊对"的感觉——答案出现时的动画必须恰到好处。
+  - 反馈（记得/忘了）不带评判。忘了不是失败，是学习。
+
+  三种卡片类型：
+  1. 核心洞察 — "这篇文章最反直觉的结论是什么？"
+  2. 高亮回顾 — "你标注了这句话——它的上下文是什么？"
+  3. 关联发现 — "这两篇文章的观点有什么不同？"
+
+  交互流程（每种类型都经历）：
+  Step 1: 问题呈现（静止）
+  Step 2: 点击揭晓 → 卡片呼吸式展开（settle 0.4s）
+  Step 3: 答案 + 来源 + 记得/忘了
+  Step 4: 反馈后 → 确认信息 + 下次时间
+
+  键盘：1/2/3 切换卡片类型，R 重置，D 切换 Dark
+-->
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Folio — Echo Interaction</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=LXGW+WenKai+TC:wght@300;400;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+:root {
+  --bg: #FAF9F6;
+  --text-1: #1D1D1F;
+  --text-2: #6E6E73;
+  --text-3: #AEAEB2;
+  --text-4: #D1D1D6;
+  --accent: #0071E3;
+  --sep: rgba(0,0,0,0.05);
+  --success: #248A3D;
+  --error: #D70015;
+  --echo-bg: rgba(0,0,0,0.02);
+  --ui: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --serif: "LXGW WenKai TC", serif;
+  --settle: 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  --quick: 0.22s ease;
+  --ink: 0.15s ease-out;
+  --exit: 0.2s ease-in;
+}
+
+[data-theme="dark"] {
+  --bg: #000;
+  --text-1: #F5F5F7;
+  --text-2: #86868B;
+  --text-3: #48484A;
+  --text-4: #2C2C2E;
+  --accent: #2997FF;
+  --sep: rgba(255,255,255,0.05);
+  --success: #30D158;
+  --error: #FF453A;
+  --echo-bg: rgba(255,255,255,0.03);
+}
+
+body {
+  font-family: var(--ui);
+  background: #E8E8ED;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 48px 20px 32px;
+  -webkit-font-smoothing: antialiased;
+}
+[data-theme="dark"] body { background: #1C1C1E; }
+
+/* ── Device ── */
+.phone {
+  width: 393px; height: 852px;
+  background: var(--bg);
+  border-radius: 47px;
+  overflow: hidden;
+  position: relative;
+  display: flex; flex-direction: column;
+  box-shadow: 0 0 0 0.5px rgba(0,0,0,0.1), 0 40px 100px rgba(0,0,0,0.08);
+  transition: background var(--quick);
+}
+[data-theme="dark"] .phone { box-shadow: 0 0 0 0.5px rgba(255,255,255,0.08), 0 40px 100px rgba(0,0,0,0.5); }
+
+.island {
+  position: absolute; top: 11px; left: 50%; transform: translateX(-50%);
+  width: 126px; height: 37px; background: #000; border-radius: 24px; z-index: 100;
+}
+
+.statusbar {
+  height: 59px; display: flex; align-items: flex-end; justify-content: space-between;
+  padding: 0 28px 8px; font-size: 15px; font-weight: 600; color: var(--text-1); z-index: 90;
+}
+.statusbar-r { display: flex; align-items: center; gap: 5px; }
+
+/* ── Nav ── */
+.nav {
+  padding: 6px 20px 0;
+  display: flex; align-items: center;
+  gap: 12px;
+}
+.nav-back {
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; cursor: pointer; background: none;
+  color: var(--accent); border-radius: 50%;
+}
+.nav-back:active { opacity: 0.4; }
+.nav-title {
+  font-size: 17px; font-weight: 600; color: var(--text-1);
+}
+
+/* ── Scroll ── */
+.scroll {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 44px;
+  display: flex; flex-direction: column;
+}
+.scroll::-webkit-scrollbar { display: none; }
+
+/* ── Type tabs ── */
+.tabs {
+  display: flex; gap: 0; padding: 20px 20px 8px;
+  border-bottom: 0.5px solid var(--sep);
+}
+.tab {
+  flex: 1; padding: 10px 0;
+  font-size: 13px; font-weight: 500; color: var(--text-3);
+  text-align: center; cursor: pointer;
+  border: none; background: none;
+  font-family: var(--ui);
+  position: relative;
+  transition: color var(--quick);
+  letter-spacing: 0.2px;
+}
+.tab.on { color: var(--text-1); }
+.tab.on::after {
+  content: ''; position: absolute;
+  bottom: -1px; left: 20%; right: 20%;
+  height: 2px; background: var(--text-1);
+  border-radius: 1px;
+}
+.tab:active { opacity: 0.5; }
+
+/* ── Echo container ── */
+.echo-wrap {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 0 28px;
+}
+
+/* ── Echo card ── */
+.echo {
+  width: 100%;
+  padding: 32px 28px;
+  background: var(--echo-bg);
+  border-radius: 20px;
+  text-align: center;
+  transition: all var(--settle);
+  position: relative;
+}
+
+.echo-sparkle {
+  font-size: 24px;
+  margin-bottom: 24px;
+  opacity: 0.5;
+  display: block;
+}
+
+.echo-q {
+  font-family: var(--serif);
+  font-size: 20px;
+  color: var(--text-1);
+  line-height: 1.65;
+  margin-bottom: 12px;
+}
+
+.echo-ctx {
+  font-size: 13px;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin-bottom: 32px;
+}
+
+/* Reveal button */
+.echo-reveal {
+  display: inline-flex; align-items: center;
+  padding: 13px 36px;
+  border: 1px solid var(--sep);
+  border-radius: 28px;
+  background: none;
+  color: var(--text-2);
+  font-size: 15px; font-weight: 400;
+  cursor: pointer;
+  transition: all var(--quick);
+  font-family: var(--ui);
+  letter-spacing: 0.3px;
+}
+.echo-reveal:hover { border-color: var(--text-3); color: var(--text-1); }
+.echo-reveal:active { transform: scale(0.96); opacity: 0.6; }
+
+/* ── Step 2+3: Revealed ── */
+.echo-answer {
+  display: none;
+  text-align: left;
+  animation: answerUp var(--settle) forwards;
+}
+
+.echo.step2 .echo-reveal { display: none; }
+.echo.step2 { text-align: left; padding: 28px 24px; }
+.echo.step2 .echo-sparkle { text-align: left; font-size: 18px; margin-bottom: 20px; }
+.echo.step2 .echo-q {
+  text-align: left; font-size: 16px;
+  color: var(--text-3); margin-bottom: 20px;
+}
+.echo.step2 .echo-ctx { display: none; }
+.echo.step2 .echo-answer { display: block; }
+
+.ans-text {
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--text-1);
+  line-height: 1.6;
+  margin-bottom: 10px;
+  padding-left: 16px;
+  border-left: 2px solid var(--accent);
+}
+
+.ans-source {
+  font-size: 12px;
+  color: var(--text-4);
+  margin-bottom: 28px;
+  padding-left: 16px;
+  line-height: 1.5;
+}
+
+/* Feedback buttons */
+.fb-row {
+  display: flex; gap: 12px;
+}
+
+.fb-btn {
+  flex: 1; padding: 14px;
+  border-radius: 12px;
+  border: 0.5px solid var(--sep);
+  background: var(--bg);
+  font-size: 15px; font-weight: 500;
+  cursor: pointer;
+  transition: all var(--quick);
+  font-family: var(--ui);
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; color: var(--text-1);
+  letter-spacing: 0.2px;
+}
+.fb-btn:active { transform: scale(0.97); }
+
+.fb-btn.yes { color: var(--success); border-color: rgba(36,138,61,0.2); }
+.fb-btn.yes:hover { background: rgba(36,138,61,0.04); }
+.fb-btn.no { color: var(--error); border-color: rgba(215,0,21,0.15); }
+.fb-btn.no:hover { background: rgba(215,0,21,0.04); }
+
+.fb-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+}
+.fb-btn.yes .fb-dot { background: var(--success); }
+.fb-btn.no .fb-dot { background: var(--error); }
+
+/* ── Step 4: Confirmed ── */
+.echo-confirmed {
+  display: none;
+  text-align: center;
+  animation: confirmFade var(--ink) forwards;
+}
+
+.echo.step3 .echo-answer { display: none; }
+.echo.step3 .echo-q { display: none; }
+.echo.step3 .echo-ctx { display: none; }
+.echo.step3 .echo-sparkle { text-align: center; font-size: 20px; margin-bottom: 16px; }
+.echo.step3 { text-align: center; padding: 32px 28px; }
+.echo.step3 .echo-confirmed { display: block; }
+
+.confirm-icon {
+  font-size: 36px;
+  margin-bottom: 16px;
+  display: block;
+}
+
+.confirm-text {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-1);
+  margin-bottom: 6px;
+}
+
+.confirm-next {
+  font-size: 13px;
+  color: var(--text-3);
+  margin-bottom: 24px;
+}
+
+.confirm-streak {
+  font-size: 12px;
+  color: var(--text-4);
+  padding-top: 16px;
+  border-top: 0.5px solid var(--sep);
+}
+
+@keyframes answerUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes confirmFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── Progress dots ── */
+.progress {
+  display: flex; justify-content: center; gap: 8px;
+  padding: 20px 0;
+}
+.prog-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-4);
+  transition: all var(--quick);
+}
+.prog-dot.done { background: var(--success); }
+.prog-dot.active { background: var(--text-1); transform: scale(1.3); }
+
+/* ── Step indicator ── */
+.steps {
+  display: flex; justify-content: center; gap: 6px;
+  padding: 16px 0 8px;
+}
+.step-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--text-4);
+  transition: all var(--quick);
+}
+.step-dot.on { background: var(--text-1); }
+
+/* ── Home indicator ── */
+.home-i {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  width: 134px; height: 5px; background: var(--text-1); opacity: 0.12; border-radius: 3px;
+}
+
+/* Toast */
+#toast {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  background: var(--text-1); color: var(--bg);
+  padding: 10px 28px; border-radius: 24px;
+  font-size: 14px; font-family: var(--ui); font-weight: 500;
+  opacity: 0; pointer-events: none; transition: opacity var(--ink); z-index: 300;
+}
+
+button { min-height: 44px; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="island"></div>
+
+  <div class="statusbar">
+    <span>9:41</span>
+    <div class="statusbar-r">
+      <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="3" width="3" height="8" rx=".8" opacity=".4"/><rect x="4.5" y="2" width="3" height="9" rx=".8" opacity=".6"/><rect x="9" y=".5" width="3" height="10.5" rx=".8" opacity=".8"/><rect x="13.5" y="0" width="2.5" height="11" rx=".8"/></svg>
+      <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor"><path d="M7.5 3.2c-1.6 0-3 .6-4.1 1.6l1.3 1.3c.7-.7 1.7-1.1 2.8-1.1s2.1.4 2.8 1.1l1.3-1.3c-1.1-1-2.5-1.6-4.1-1.6z"/><circle cx="7.5" cy="9" r="1.2"/><path d="M7.5 0C4.9 0 2.5 1 .7 2.7l1.3 1.3C3.5 2.5 5.4 1.7 7.5 1.7S11.5 2.5 13 4l1.3-1.3C12.5 1 10.1 0 7.5 0z" opacity=".5"/></svg>
+      <svg width="25" height="11" viewBox="0 0 25 11" fill="currentColor"><rect x="0" y=".5" width="21" height="10" rx="2.2" stroke="currentColor" stroke-width="1" fill="none" opacity=".35"/><rect x="22" y="3" width="1.8" height="5" rx=".9" opacity=".2"/><rect x="2" y="2.5" width="15" height="6" rx="1.2"/></svg>
+    </div>
+  </div>
+
+  <!-- Nav (simulating we're on Home, Echo is inline) -->
+  <div class="nav">
+    <button class="nav-back" onclick="window.location.href='01-home-feed.html'">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
+    </button>
+    <span class="nav-title">Echo</span>
+  </div>
+
+  <!-- Type tabs -->
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-type="0" onclick="switchType(0)">核心洞察</button>
+    <button class="tab" data-type="1" onclick="switchType(1)">高亮回顾</button>
+    <button class="tab" data-type="2" onclick="switchType(2)">关联发现</button>
+  </div>
+
+  <div class="scroll">
+    <!-- Step dots -->
+    <div class="steps" id="steps">
+      <div class="step-dot on"></div>
+      <div class="step-dot"></div>
+      <div class="step-dot"></div>
+    </div>
+
+    <!-- Echo area -->
+    <div class="echo-wrap">
+      <div class="echo" id="echo">
+        <span class="echo-sparkle">✦</span>
+        <div class="echo-q" id="echoQ"></div>
+        <div class="echo-ctx" id="echoCtx"></div>
+        <button class="echo-reveal" id="echoReveal" onclick="doReveal()">揭晓答案</button>
+
+        <div class="echo-answer" id="echoAnswer">
+          <div class="ans-text" id="ansText"></div>
+          <div class="ans-source" id="ansSrc"></div>
+          <div class="fb-row">
+            <button class="fb-btn yes" onclick="doFeedback('yes')">
+              <span class="fb-dot"></span> 记得
+            </button>
+            <button class="fb-btn no" onclick="doFeedback('no')">
+              <span class="fb-dot"></span> 忘了
+            </button>
+          </div>
+        </div>
+
+        <div class="echo-confirmed" id="echoConfirmed">
+          <span class="confirm-icon" id="confirmIcon"></span>
+          <div class="confirm-text" id="confirmText"></div>
+          <div class="confirm-next" id="confirmNext"></div>
+          <div class="confirm-streak" id="confirmStreak"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Today's Echo progress -->
+    <div class="progress" id="progress">
+      <div class="prog-dot active"></div>
+      <div class="prog-dot"></div>
+      <div class="prog-dot"></div>
+    </div>
+  </div>
+
+  <div class="home-i"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Echo data: 3 types ──
+const ECHOS = [
+  // Type 0: 核心洞察回忆
+  {
+    q: '你 3 周前存了一篇关于\nAI 项目失败率的文章。\n\n还记得最反直觉的\n结论是什么吗？',
+    ctx: '来自《为什么 90% 的 AI 项目在概念验证后就失败了》\n少数派 · 3 周前收藏',
+    ans: '"失败的根因不是技术，\n而是问题定义错误——\n团队在用 AI 解决\n不需要 AI 的问题。"',
+    src: '来自《为什么 90% 的 AI 项目在概念验证后就失败了》\n少数派 · 2026年3月1日收藏',
+    yesText: '记得',
+    yesNext: '下次回顾：2 周后',
+    noText: '已标记',
+    noNext: '3 天后再来',
+    streak: '本周回忆率 85% · 已连续 7 天',
+  },
+  // Type 1: 高亮回顾
+  {
+    q: '你在一篇关于 API 设计的\n文章中标注了一句话。\n\n还记得你标注的\n原文是什么吗？',
+    ctx: '来自《好的 API 设计像好的笑话——不需要解释》\nInfoQ · 你标注了 1 处高亮',
+    ans: '"API 的终极目标\n不是完备性，\n而是可预测性。\n用户不读文档\n就能猜对参数名。"',
+    src: '你在 3 月 20 日标注了这段文字\n来自《好的 API 设计像好的笑话——不需要解释》',
+    yesText: '记得',
+    yesNext: '下次回顾：10 天后',
+    noText: '已标记',
+    noNext: '2 天后再来',
+    streak: '本周回忆率 85% · 已连续 7 天',
+  },
+  // Type 2: 关联发现
+  {
+    q: '这两篇文章都提到了\n「飞轮效应」，但应用在\n截然不同的场景。\n\n区别是什么？',
+    ctx: '关联发现 · 2 篇相关文章\n《字节跳动如何用飞轮效应重塑电商》\n《The best product metrics are feelings》',
+    ans: '"字节的飞轮是\n流量→内容→变现，\n靠算法驱动。\n\nLenny 说的飞轮是\n体验→口碑→增长，\n靠产品力驱动。"',
+    src: '来自《字节跳动如何用飞轮效应重塑电商》(晚点 LatePost)\n与《The best product metrics are feelings》(Lenny\'s Newsletter)',
+    yesText: '记得',
+    yesNext: '下次回顾：2 周后',
+    noText: '已标记',
+    noNext: '3 天后再来',
+    streak: '本周回忆率 85% · 已连续 7 天',
+  }
+];
+
+let currentType = 0;
+let currentStep = 0; // 0=question, 1=revealed, 2=confirmed
+
+function el(id) { return document.getElementById(id); }
+
+function render() {
+  const e = ECHOS[currentType];
+  const echo = el('echo');
+
+  // Reset classes
+  echo.className = 'echo';
+  if (currentStep === 1) echo.classList.add('step2');
+  if (currentStep === 2) echo.classList.add('step3');
+
+  // Fill content
+  el('echoQ').innerHTML = e.q.replace(/\n/g, '<br>');
+  el('echoCtx').innerHTML = e.ctx.replace(/\n/g, '<br>');
+  el('ansText').innerHTML = e.ans.replace(/\n/g, '<br>');
+  el('ansSrc').innerHTML = e.src.replace(/\n/g, '<br>');
+
+  // Update step dots
+  document.querySelectorAll('.step-dot').forEach((d, i) => {
+    d.className = 'step-dot';
+    if (i === currentStep) d.classList.add('on');
+  });
+
+  // Update tabs
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('on', i === currentType);
+  });
+}
+
+function switchType(i) {
+  currentType = i;
+  currentStep = 0;
+  render();
+}
+
+function doReveal() {
+  currentStep = 1;
+  render();
+}
+
+function doFeedback(type) {
+  currentStep = 2;
+  const e = ECHOS[currentType];
+
+  if (type === 'yes') {
+    el('confirmIcon').textContent = '✓';
+    el('confirmIcon').style.color = 'var(--success)';
+    el('confirmText').textContent = e.yesText;
+    el('confirmNext').textContent = e.yesNext;
+  } else {
+    el('confirmIcon').textContent = '↻';
+    el('confirmIcon').style.color = 'var(--accent)';
+    el('confirmText').textContent = e.noText;
+    el('confirmNext').textContent = e.noNext;
+  }
+  el('confirmStreak').textContent = e.streak;
+
+  render();
+
+  // Update progress dots
+  const dots = document.querySelectorAll('.prog-dot');
+  dots[currentType].classList.add('done');
+  dots[currentType].classList.remove('active');
+  if (currentType < 2) {
+    dots[currentType + 1].classList.add('active');
+  }
+}
+
+function theme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+}
+
+function toast(m) {
+  const t = el('toast'); t.textContent = m; t.style.opacity = '1';
+  setTimeout(() => t.style.opacity = '0', 1200);
+}
+
+// Keyboard: 1/2/3 switch type, R reset, D dark
+document.addEventListener('keydown', e => {
+  if (e.key === '1') switchType(0);
+  if (e.key === '2') switchType(1);
+  if (e.key === '3') switchType(2);
+  if (e.key === 'r' || e.key === 'R') { currentStep = 0; render(); document.querySelectorAll('.prog-dot').forEach(d=>{d.className='prog-dot';}); document.querySelector('.prog-dot').classList.add('active'); }
+  if (e.key === 'd' || e.key === 'D') theme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+
+// Init
+if (window.matchMedia('(prefers-color-scheme:dark)').matches) theme('dark');
+render();
+</script>
+
+</body>
+</html>

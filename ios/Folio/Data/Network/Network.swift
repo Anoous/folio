@@ -205,8 +205,8 @@ final class APIClient: @unchecked Sendable {
         #if targetEnvironment(simulator)
         static let defaultBaseURL = URL(string: "http://localhost:8080")!
         #else
-        // Local network IP for real device debugging
-        static let defaultBaseURL = URL(string: "http://192.168.1.14:8080")!
+        // Staging server (self-signed cert, Caddy on :8443)
+        static let defaultBaseURL = URL(string: "https://43.138.233.19:8443")!
         #endif
     #else
     static let defaultBaseURL = URL(string: "https://api.folio.app")!
