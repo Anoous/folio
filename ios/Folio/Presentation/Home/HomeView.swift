@@ -229,28 +229,45 @@ struct HomeView: View {
                 .listRowSeparator(.hidden)
 
             if let vm = viewModel {
-                ForEach(vm.groupedArticles, id: \.group) { section in
+                ForEach(vm.feedSections, id: \.group) { section in
                     Section {
-                        ForEach(Array(section.articles.enumerated()), id: \.element.id) { index, article in
-                            if section.group == .today && index == 0 && article.readProgress == 0 && article.status == .ready {
-                                NavigationLink(value: article.id) {
-                                    HeroArticleCardView(article: article)
-                                }
-                                .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
-                                .listRowSeparator(.hidden)
-                                .onAppear {
-                                    if article.id == vm.articles.last?.id {
-                                        vm.loadNextPage()
+                        ForEach(section.items) { item in
+                            switch item {
+                            case .article(let article):
+                                let isFirstUnreadToday = section.group == .today
+                                    && section.items.first(where: { if case .article = $0 { return true } else { return false } })?.id == item.id
+                                    && article.readProgress == 0 && article.status == .ready
+
+                                if isFirstUnreadToday {
+                                    NavigationLink(value: article.id) {
+                                        HeroArticleCardView(article: article)
                                     }
+                                    .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
+                                    .listRowSeparator(.hidden)
+                                    .onAppear {
+                                        if article.id == vm.articles.last?.id {
+                                            vm.loadNextPage()
+                                        }
+                                    }
+                                } else {
+                                    HomeArticleRow(
+                                        article: article,
+                                        isLast: article.id == vm.articles.last?.id
+                                    ) { action in
+                                        handleArticleAction(action, article: article, vm: vm)
+                                    }
+                                    .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
+                                    .listRowSeparator(.hidden)
                                 }
-                            } else {
-                                HomeArticleRow(
-                                    article: article,
-                                    isLast: article.id == vm.articles.last?.id
-                                ) { action in
-                                    handleArticleAction(action, article: article, vm: vm)
-                                }
-                                .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
+
+                            case .echo(let echoDTO):
+                                EchoCardView(
+                                    card: EchoCardData(from: echoDTO),
+                                    onReview: { result, completion in
+                                        vm.submitEchoReview(cardID: echoDTO.id, result: result, completion: completion)
+                                    }
+                                )
+                                .listRowInsets(EdgeInsets())
                                 .listRowSeparator(.hidden)
                             }
                         }
@@ -272,6 +289,7 @@ struct HomeView: View {
                 await syncService.incrementalSync()
             }
             viewModel?.fetchArticles()
+            await viewModel?.fetchEchoCards()
         }
         .task(id: viewModel?.hasProcessingArticles) {
             guard viewModel?.hasProcessingArticles == true else { return }
@@ -472,6 +490,7 @@ struct HomeView: View {
                 isAuthenticated: authViewModel?.isAuthenticated ?? false
             )
             viewModel?.fetchArticles()
+            Task { await viewModel?.fetchEchoCards() }
         }
         if searchViewModel == nil {
             guard let manager = try? FTS5SearchManager(inMemory: false) else { return }

@@ -1,7 +1,41 @@
 import SwiftUI
 
+/// Lightweight value type holding only the fields EchoCardView needs for display.
+/// Constructed from either `EchoCard` (SwiftData) or `EchoCardDTO` (API).
+struct EchoCardData {
+    let question: String
+    let answer: String
+    let sourceContext: String?
+    let articleTitle: String
+    let intervalDays: Int
+
+    init(question: String, answer: String, sourceContext: String?, articleTitle: String, intervalDays: Int) {
+        self.question = question
+        self.answer = answer
+        self.sourceContext = sourceContext
+        self.articleTitle = articleTitle
+        self.intervalDays = intervalDays
+    }
+
+    init(from model: EchoCard) {
+        self.question = model.question
+        self.answer = model.answer
+        self.sourceContext = model.sourceContext
+        self.articleTitle = model.articleTitle
+        self.intervalDays = model.intervalDays
+    }
+
+    init(from dto: EchoCardDTO) {
+        self.question = dto.question
+        self.answer = dto.answer
+        self.sourceContext = dto.sourceContext
+        self.articleTitle = dto.articleTitle
+        self.intervalDays = dto.intervalDays
+    }
+}
+
 struct EchoCardView: View {
-    let card: EchoCard
+    let card: EchoCardData
     let onReview: (String, @escaping (EchoReviewResponse?) -> Void) -> Void
 
     @State private var step: Int = 0
