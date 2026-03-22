@@ -102,6 +102,9 @@ struct HomeView: View {
             .onAppear(perform: initializeViewModels)
             .onChange(of: authViewModel?.isAuthenticated) { _, newValue in
                 viewModel?.isAuthenticated = newValue ?? false
+                if newValue == true {
+                    Task { await viewModel?.fetchEchoCards() }
+                }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 handleScenePhaseChange(newPhase)

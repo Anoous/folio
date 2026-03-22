@@ -162,7 +162,6 @@ final class HomeViewModel {
             let response = try await apiClient.getEchoToday()
             echoCards = response.data
         } catch {
-            // Silent failure — just don't show echo cards
             echoCards = []
         }
     }
