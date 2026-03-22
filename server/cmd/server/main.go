@@ -49,7 +49,7 @@ func main() {
 
 	// External clients
 	readerClient := client.NewReaderClient(cfg.ReaderURL)
-	aiClient := client.NewAIClient(cfg.AIServiceURL)
+	aiClient := client.NewDeepSeekAnalyzer(os.Getenv("DEEPSEEK_API_KEY"), cfg.AIServiceURL)
 
 	// R2 client (optional — nil if not configured)
 	var r2Client *client.R2Client

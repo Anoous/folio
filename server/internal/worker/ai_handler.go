@@ -56,7 +56,7 @@ type AIHandler struct {
 }
 
 func NewAIHandler(
-	aiClient *client.AIClient,
+	aiClient client.Analyzer,
 	articleRepo *repository.ArticleRepo,
 	taskRepo *repository.TaskRepo,
 	categoryRepo *repository.CategoryRepo,
@@ -100,7 +100,10 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		)
 		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
 		h.articleRepo.SetError(ctx, p.ArticleID, err.Error())
-		h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusFailed)
+		// Content was already crawled successfully — mark as ready so the
+		// article remains readable.  Only the AI enrichment (summary, tags,
+		// category) is missing.
+		h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusReady)
 		return fmt.Errorf("ai analyze failed: %w", err)
 	}
 
