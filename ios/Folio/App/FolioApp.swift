@@ -12,6 +12,7 @@ struct FolioApp: App {
     @State private var authViewModel = AuthViewModel()
     @State private var offlineQueueManager: OfflineQueueManager?
     @State private var syncService: SyncService?
+    @State private var subscriptionManager = SubscriptionManager()
     @State private var navigationPath = NavigationPath()
 
     init() {
@@ -57,8 +58,12 @@ struct FolioApp: App {
             .environment(authViewModel)
             .environment(offlineQueueManager)
             .environment(syncService)
+            .environment(subscriptionManager)
             .task {
                 await authViewModel.checkExistingAuth()
+                await subscriptionManager.fetchProducts()
+                await subscriptionManager.checkEntitlements()
+                _ = subscriptionManager.listenForTransactions()
             }
             .onChange(of: authViewModel.authState) { _, newValue in
                 if newValue == .signedIn {
