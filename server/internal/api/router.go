@@ -23,6 +23,7 @@ type RouterDeps struct {
 	TaskHandler         *handler.TaskHandler
 	SubscriptionHandler *handler.SubscriptionHandler
 	EchoHandler         *handler.EchoHandler
+	HighlightHandler    *handler.HighlightHandler
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -80,6 +81,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 			// Subscription
 			r.Post("/subscription/verify", deps.SubscriptionHandler.HandleVerify)
+
+			// Highlights
+			r.Post("/articles/{id}/highlights", deps.HighlightHandler.HandleCreateHighlight)
+			r.Get("/articles/{id}/highlights", deps.HighlightHandler.HandleGetHighlights)
+			r.Delete("/highlights/{id}", deps.HighlightHandler.HandleDeleteHighlight)
 
 			// Echo (spaced repetition)
 			r.Get("/echo/today", deps.EchoHandler.HandleGetToday)

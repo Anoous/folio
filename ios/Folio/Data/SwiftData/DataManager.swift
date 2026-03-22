@@ -14,6 +14,7 @@ final class DataManager {
         PendingDeletion.self,
         DeletionRecord.self,
         EchoCard.self,
+        Highlight.self,
     ]
 
     static let schema = Schema(modelTypes)

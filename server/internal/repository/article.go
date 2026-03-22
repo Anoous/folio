@@ -70,7 +70,7 @@ func (r *ArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, 
 		SELECT id, user_id, url, title, author, site_name, favicon_url, cover_image_url,
 		       markdown_content, word_count, language, category_id, summary, key_points,
 		       ai_confidence, status, source_type, fetch_error, retry_count,
-		       is_favorite, is_archived, read_progress, last_read_at, published_at,
+		       is_favorite, is_archived, read_progress, highlight_count, last_read_at, published_at,
 		       created_at, updated_at, deleted_at
 		FROM articles WHERE id = $1`, id,
 	).Scan(
@@ -78,7 +78,7 @@ func (r *ArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, 
 		&a.FaviconURL, &a.CoverImageURL, &a.MarkdownContent, &a.WordCount,
 		&a.Language, &a.CategoryID, &a.Summary, &keyPointsJSON,
 		&a.AIConfidence, &a.Status, &a.SourceType, &a.FetchError, &a.RetryCount,
-		&a.IsFavorite, &a.IsArchived, &a.ReadProgress, &a.LastReadAt, &a.PublishedAt,
+		&a.IsFavorite, &a.IsArchived, &a.ReadProgress, &a.HighlightCount, &a.LastReadAt, &a.PublishedAt,
 		&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 	)
 	if err == pgx.ErrNoRows {

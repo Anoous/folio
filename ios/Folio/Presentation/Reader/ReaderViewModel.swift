@@ -21,6 +21,7 @@ final class ReaderViewModel {
     var toastIcon: String? = nil
     var isLoadingContent: Bool = false
     var contentLoadError: String?
+    var highlights: [HighlightDTO] = []
 
     /// Words per minute for reading time estimation.
     private static let wordsPerMinute: Double = 250
@@ -195,9 +196,54 @@ final class ReaderViewModel {
 
     // MARK: - Toast
 
-    private func showToastMessage(_ message: String, icon: String? = nil) {
+    func showToastMessage(_ message: String, icon: String? = nil) {
         toastMessage = message
         toastIcon = icon
         showToast = true
+    }
+
+    // MARK: - Highlights
+
+    func fetchHighlights() async {
+        guard let serverID = article.serverID else { return }
+        do {
+            let response = try await apiClient.getHighlights(articleID: serverID)
+            highlights = response.data
+        } catch {
+            // Silent failure — highlights are non-critical
+        }
+    }
+
+    func createHighlight(text: String, startOffset: Int, endOffset: Int) {
+        guard let serverID = article.serverID else { return }
+        Task {
+            do {
+                let dto = try await apiClient.createHighlight(
+                    articleID: serverID, text: text,
+                    startOffset: startOffset, endOffset: endOffset
+                )
+                await MainActor.run {
+                    highlights.append(dto)
+                }
+            } catch {
+                await MainActor.run {
+                    showToastMessage(
+                        String(localized: "highlight.saveFailed", defaultValue: "高亮保存失败"),
+                        icon: "exclamationmark.triangle.fill"
+                    )
+                }
+            }
+        }
+    }
+
+    func deleteHighlight(id: String) {
+        highlights.removeAll { $0.id == id }
+        Task {
+            do {
+                try await apiClient.deleteHighlight(id: id)
+            } catch {
+                // Silent — already removed from UI
+            }
+        }
     }
 }

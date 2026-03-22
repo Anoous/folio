@@ -201,6 +201,27 @@ struct ListResponse<T: Decodable>: Decodable {
     let syncEpoch: Int?
 }
 
+// MARK: - Highlight DTOs
+
+struct HighlightDTO: Codable {
+    let id: String
+    let text: String
+    let startOffset: Int
+    let endOffset: Int
+    let color: String
+    let createdAt: Date
+}
+
+struct CreateHighlightRequest: Codable {
+    let text: String
+    let startOffset: Int
+    let endOffset: Int
+}
+
+struct HighlightsResponse: Codable {
+    let data: [HighlightDTO]
+}
+
 // MARK: - Echo DTOs
 
 struct EchoCardDTO: Codable {
@@ -624,6 +645,21 @@ final class APIClient: @unchecked Sendable {
     func submitEchoReview(cardID: String, result: String, responseTimeMs: Int? = nil) async throws -> EchoReviewResponse {
         let body = EchoReviewRequest(result: result, responseTimeMs: responseTimeMs)
         return try await request(method: "POST", path: "/api/v1/echo/\(cardID)/review", body: body)
+    }
+
+    // MARK: - Highlights
+
+    func createHighlight(articleID: String, text: String, startOffset: Int, endOffset: Int) async throws -> HighlightDTO {
+        let body = CreateHighlightRequest(text: text, startOffset: startOffset, endOffset: endOffset)
+        return try await request(method: "POST", path: "/api/v1/articles/\(articleID)/highlights", body: body)
+    }
+
+    func getHighlights(articleID: String) async throws -> HighlightsResponse {
+        return try await request(method: "GET", path: "/api/v1/articles/\(articleID)/highlights")
+    }
+
+    func deleteHighlight(id: String) async throws {
+        try await requestVoid(method: "DELETE", path: "/api/v1/highlights/\(id)")
     }
 }
 

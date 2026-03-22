@@ -212,7 +212,7 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 
 	// Enqueue echo card generation (non-blocking)
-	echoTask, err := NewEchoTask(p.ArticleID, p.UserID)
+	echoTask, err := NewEchoTask(p.ArticleID, p.UserID, "")
 	if err == nil {
 		if _, err := h.asynqClient.EnqueueContext(ctx, echoTask); err != nil {
 			slog.Error("[ECHO] failed to enqueue for article",

@@ -72,12 +72,17 @@ func NewAIProcessTask(articleID, taskID, userID, title, markdown, source, author
 }
 
 type EchoPayload struct {
-	ArticleID string `json:"article_id"`
-	UserID    string `json:"user_id"`
+	ArticleID   string `json:"article_id"`
+	UserID      string `json:"user_id"`
+	HighlightID string `json:"highlight_id,omitempty"`
 }
 
-func NewEchoTask(articleID, userID string) (*asynq.Task, error) {
-	payload, err := json.Marshal(EchoPayload{ArticleID: articleID, UserID: userID})
+func NewEchoTask(articleID, userID, highlightID string) (*asynq.Task, error) {
+	payload, err := json.Marshal(EchoPayload{
+		ArticleID:   articleID,
+		UserID:      userID,
+		HighlightID: highlightID,
+	})
 	if err != nil {
 		return nil, err
 	}

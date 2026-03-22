@@ -104,6 +104,15 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	start := time.Now()
 	slog.Info("crawl task started", "article_id", p.ArticleID, "task_id", p.TaskID, "url", p.URL)
 
+	// Skip re-crawl if article has highlights (user content takes priority)
+	if art, err := h.articleRepo.GetByID(ctx, p.ArticleID); err == nil && art != nil && art.HighlightCount > 0 {
+		slog.Info("crawl skipped: article has highlights",
+			"article_id", p.ArticleID,
+			"highlight_count", art.HighlightCount,
+		)
+		return nil
+	}
+
 	// Mark crawl started
 	if err := h.taskRepo.SetCrawlStarted(ctx, p.TaskID); err != nil {
 		return fmt.Errorf("set crawl started: %w", err)
