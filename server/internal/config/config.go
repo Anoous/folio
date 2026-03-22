@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 type Config struct {
@@ -22,6 +23,17 @@ type Config struct {
 	AppleBundleID  string
 	ResendAPIKey   string
 	AppMode        string // "api" | "worker" | "all" (default "all")
+
+	// Apple Server API (App Store Server API for subscription verification)
+	AppleAPIKeyID    string
+	AppleAPIIssuerID string
+	AppleAPIKeyPath  string
+
+	// APNs (Apple Push Notification service)
+	APNSKeyID   string
+	APNSTeamID  string
+	APNSKeyPath string
+	APNSSandbox bool
 }
 
 func Load() (*Config, error) {
@@ -60,6 +72,17 @@ func Load() (*Config, error) {
 	if cfg.AppMode != "api" && cfg.AppMode != "worker" && cfg.AppMode != "all" {
 		return nil, fmt.Errorf("invalid APP_MODE %q: must be api, worker, or all", cfg.AppMode)
 	}
+
+	// Apple Server API
+	cfg.AppleAPIKeyID = os.Getenv("APPLE_API_KEY_ID")
+	cfg.AppleAPIIssuerID = os.Getenv("APPLE_API_ISSUER_ID")
+	cfg.AppleAPIKeyPath = os.Getenv("APPLE_API_KEY_PATH")
+
+	// APNs
+	cfg.APNSKeyID = os.Getenv("APNS_KEY_ID")
+	cfg.APNSTeamID = os.Getenv("APNS_TEAM_ID")
+	cfg.APNSKeyPath = os.Getenv("APNS_KEY_PATH")
+	cfg.APNSSandbox = strings.EqualFold(os.Getenv("APNS_SANDBOX"), "true")
 
 	return cfg, nil
 }

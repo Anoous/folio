@@ -4,6 +4,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
+    @Environment(SubscriptionManager.self) private var subscriptionManager: SubscriptionManager?
     @State private var logoutTrigger = false
     @State private var showUpgradeComparison = false
     @State private var showReadingPreferences = false
@@ -250,7 +251,9 @@ struct SettingsView: View {
                 settingsSection(header: "订阅") {
                     settingsRow(icon: "creditcard", label: "管理订阅")
                     sectionSeparator
-                    settingsRow(icon: "arrow.clockwise", label: "恢复购买")
+                    settingsRow(icon: "arrow.clockwise", label: "恢复购买") {
+                        Task { await subscriptionManager?.restorePurchases() }
+                    }
                 }
             }
 
@@ -450,6 +453,21 @@ struct SettingsView: View {
 
 struct UpgradeComparisonView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(SubscriptionManager.self) private var subscriptionManager: SubscriptionManager?
+
+    private var yearlyPriceText: String {
+        if let product = subscriptionManager?.yearlyProduct {
+            return "\(product.displayPrice)/年"
+        }
+        return "¥98/年"
+    }
+
+    private var monthlyPriceText: String {
+        if let product = subscriptionManager?.monthlyProduct {
+            return "\(product.displayPrice)/月"
+        }
+        return "¥12/月"
+    }
 
     var body: some View {
         NavigationStack {
@@ -473,24 +491,53 @@ struct UpgradeComparisonView: View {
                     // CTA
                     VStack(spacing: Spacing.xs) {
                         Button {
-                            // StoreKit purchase — placeholder
+                            Task {
+                                if let product = subscriptionManager?.yearlyProduct {
+                                    await subscriptionManager?.purchase(product)
+                                }
+                            }
                         } label: {
-                            Text("升级 Pro — ¥98/年")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(Color.folio.textPrimary)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                            if subscriptionManager?.isLoading == true {
+                                ProgressView()
+                                    .tint(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .background(Color.folio.textPrimary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                            } else {
+                                Text("升级 Pro — \(yearlyPriceText)")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .background(Color.folio.textPrimary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+                        }
+                        .disabled(subscriptionManager?.isLoading == true)
+
+                        if let errorMessage = subscriptionManager?.errorMessage {
+                            Text(errorMessage)
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.folio.error)
                         }
 
-                        Text("或 ¥12/月 · 随时取消")
+                        Text("或 \(monthlyPriceText) · 随时取消")
                             .font(.system(size: 13))
                             .foregroundStyle(Color.folio.textTertiary)
 
                         Text("7 天免费试用 · 试用期内取消不收费")
                             .font(.system(size: 12))
                             .foregroundStyle(Color.folio.textQuaternary)
+
+                        Button {
+                            Task { await subscriptionManager?.restorePurchases() }
+                        } label: {
+                            Text("恢复购买")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.folio.textSecondary)
+                        }
+                        .padding(.top, Spacing.xxs)
                     }
                     .padding(.top, Spacing.sm)
                 }

@@ -12,6 +12,7 @@ const (
 	TypeAIProcess    = "article:ai"
 	TypeImageUpload  = "article:images"
 	TypeEchoGenerate = "echo:generate"
+	TypePushEcho     = "push:echo"
 
 	QueueCritical = "critical"
 	QueueDefault  = "default"

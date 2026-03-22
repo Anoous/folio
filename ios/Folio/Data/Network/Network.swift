@@ -310,6 +310,13 @@ struct EchoStatsResponse: Codable {
     let forgottenCount: Int
 }
 
+// MARK: Subscription
+
+struct VerifySubscriptionResponse: Decodable {
+    let subscription: String
+    let expiresAt: Date?
+}
+
 // MARK: - APIClient
 
 final class APIClient: @unchecked Sendable {
@@ -714,6 +721,32 @@ final class APIClient: @unchecked Sendable {
     func ragQuery(question: String, conversationId: String? = nil) async throws -> RAGQueryResponse {
         let body = RAGQueryRequest(question: question, conversationId: conversationId)
         return try await request(method: "POST", path: "/api/v1/rag/query", body: body)
+    }
+
+    // MARK: - Subscription
+
+    func verifySubscription(transactionID: UInt64, productID: String) async throws -> VerifySubscriptionResponse {
+        struct VerifySubscriptionRequest: Encodable {
+            let transactionId: String
+            let productId: String
+        }
+        let body = VerifySubscriptionRequest(
+            transactionId: String(transactionID),
+            productId: productID
+        )
+        return try await request(method: "POST", path: "/api/v1/subscription/verify", body: body)
+    }
+
+    // MARK: - Device Registration
+
+    struct RegisterDeviceRequest: Codable {
+        let token: String
+        let platform: String
+    }
+
+    func registerDevice(token: String) async throws {
+        let body = RegisterDeviceRequest(token: token, platform: "ios")
+        let _: StatusResponse = try await request(method: "POST", path: "/api/v1/devices", body: body)
     }
 
     // MARK: - Stats

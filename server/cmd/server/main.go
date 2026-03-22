@@ -59,6 +59,16 @@ func main() {
 		slog.Warn("DEEPSEEK_API_KEY not set, using mock AI analyzer")
 	}
 
+	// Apple Store client — real if key path is set, mock for development
+	appleClient, err := client.NewAppleClient(
+		cfg.AppleAPIKeyID, cfg.AppleAPIIssuerID, cfg.AppleAPIKeyPath,
+		cfg.AppleBundleID, cfg.APNSSandbox,
+	)
+	if err != nil {
+		slog.Error("failed to create Apple client", "error", err)
+		os.Exit(1)
+	}
+
 	// R2 client (optional — nil if not configured)
 	var r2Client *client.R2Client
 	if cfg.R2Endpoint != "" && cfg.R2AccessKey != "" && cfg.R2SecretKey != "" {
@@ -85,6 +95,7 @@ func main() {
 		articleRepo, taskRepo, tagRepo, categoryRepo,
 		quotaService, asynqClient,
 	)
+	subscriptionService := service.NewSubscriptionService(appleClient, userRepo, cfg.AppleBundleID)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authService)
@@ -93,7 +104,20 @@ func main() {
 	tagHandler := handler.NewTagHandler(tagService)
 	categoryHandler := handler.NewCategoryHandler(categoryRepo)
 	taskHandler := handler.NewTaskHandler(taskRepo)
-	subscriptionHandler := handler.NewSubscriptionHandler()
+	subscriptionHandler := handler.NewSubscriptionHandler(subscriptionService)
+
+	// Device repository
+	deviceRepo := repository.NewDeviceRepo(pool)
+
+	// APNs client
+	apnsClient, err := client.NewAPNSClient(cfg.APNSKeyID, cfg.APNSTeamID, cfg.APNSKeyPath, cfg.APNSSandbox)
+	if err != nil {
+		slog.Error("failed to create APNs client", "error", err)
+		os.Exit(1)
+	}
+
+	// Device handler (API)
+	deviceHandler := handler.NewDeviceHandler(deviceRepo)
 
 	// Content cache repository
 	contentCacheRepo := repository.NewContentCacheRepo(pool)
@@ -132,6 +156,7 @@ func main() {
 		HighlightHandler:    highlightHandler,
 		RAGHandler:          ragAPIHandler,
 		StatsHandler:        statsHandler,
+		DeviceHandler:       deviceHandler,
 	})
 
 	// Worker server
@@ -139,13 +164,14 @@ func main() {
 	crawlHandler := worker.NewCrawlHandler(readerClient, jinaClient, articleRepo, taskRepo, asynqClient, r2Client != nil, contentCacheRepo, tagRepo, categoryRepo)
 	aiHandler := worker.NewAIHandler(aiAnalyzer, articleRepo, taskRepo, categoryRepo, tagRepo, contentCacheRepo, asynqClient)
 	echoHandler := worker.NewEchoHandler(aiAnalyzer, articleRepo, echoRepo, highlightRepo)
+	pushHandler := worker.NewPushHandler(deviceRepo, apnsClient, cfg.AppleBundleID)
 
 	var workerServer *worker.WorkerServer
 	if r2Client != nil {
 		imageHandler := worker.NewImageHandler(r2Client, articleRepo)
-		workerServer = worker.NewWorkerServer(cfg.RedisAddr, crawlHandler, aiHandler, imageHandler, echoHandler)
+		workerServer = worker.NewWorkerServer(cfg.RedisAddr, crawlHandler, aiHandler, imageHandler, echoHandler, pushHandler)
 	} else {
-		workerServer = worker.NewWorkerServer(cfg.RedisAddr, crawlHandler, aiHandler, nil, echoHandler)
+		workerServer = worker.NewWorkerServer(cfg.RedisAddr, crawlHandler, aiHandler, nil, echoHandler, pushHandler)
 	}
 
 	// HTTP server
@@ -157,9 +183,38 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// startPushScheduler enqueues push:echo tasks hourly via a ticker goroutine.
+	startPushScheduler := func() {
+		go func() {
+			// Enqueue immediately on startup, then hourly.
+			if _, err := asynqClient.Enqueue(
+				asynq.NewTask(worker.TypePushEcho, nil),
+				asynq.Queue(worker.QueueLow),
+				asynq.MaxRetry(1),
+				asynq.Timeout(2*time.Minute),
+			); err != nil {
+				slog.Error("push scheduler: initial enqueue failed", "error", err)
+			}
+
+			ticker := time.NewTicker(1 * time.Hour)
+			defer ticker.Stop()
+			for range ticker.C {
+				if _, err := asynqClient.Enqueue(
+					asynq.NewTask(worker.TypePushEcho, nil),
+					asynq.Queue(worker.QueueLow),
+					asynq.MaxRetry(1),
+					asynq.Timeout(2*time.Minute),
+				); err != nil {
+					slog.Error("push scheduler: enqueue failed", "error", err)
+				}
+			}
+		}()
+	}
+
 	switch cfg.AppMode {
 	case "worker":
 		slog.Info("starting in worker mode")
+		startPushScheduler()
 		if err := workerServer.Run(); err != nil {
 			slog.Error("worker server error", "error", err)
 			return
@@ -169,6 +224,7 @@ func main() {
 		runHTTPServer(httpServer, cfg.Port, nil)
 	default: // "all"
 		slog.Info("starting in all mode")
+		startPushScheduler()
 		go func() {
 			if err := workerServer.Run(); err != nil {
 				slog.Error("worker server error", "error", err)

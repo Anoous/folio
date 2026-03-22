@@ -17,6 +17,7 @@ type User struct {
 	AvatarURL            *string      `json:"avatar_url,omitempty"`
 	Subscription         Subscription `json:"subscription"`
 	SubscriptionExpiresAt *time.Time  `json:"subscription_expires_at,omitempty"`
+	OriginalTransactionID *string     `json:"original_transaction_id,omitempty"`
 	MonthlyQuota         int          `json:"monthly_quota"`
 	CurrentMonthCount    int          `json:"current_month_count"`
 	QuotaResetAt         *time.Time   `json:"quota_reset_at,omitempty"`

@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 /// Lightweight value type holding only the fields EchoCardView needs for display.
 /// Constructed from either `EchoCard` (SwiftData) or `EchoCardDTO` (API).
@@ -46,6 +47,7 @@ struct EchoCardView: View {
     @State private var rememberedPressed = false
     @State private var forgotPressed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("has_requested_notifications") private var hasRequestedNotifications = false
 
     var body: some View {
         Group {
@@ -252,6 +254,16 @@ struct EchoCardView: View {
             reviewResponse = response
             withAnimation(Motion.resolved(Motion.exit, reduceMotion: reduceMotion) ?? .default) {
                 step = 2
+            }
+        }
+        if !hasRequestedNotifications {
+            hasRequestedNotifications = true
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                if granted {
+                    DispatchQueue.main.async {
+                        UIApplication.shared.registerForRemoteNotifications()
+                    }
+                }
             }
         }
     }

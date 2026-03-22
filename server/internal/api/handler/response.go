@@ -39,6 +39,12 @@ func handleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, service.ErrDuplicateURL):
 		slog.Debug("duplicate URL", "path", r.URL.Path)
 		writeError(w, http.StatusConflict, "url already saved")
+	case errors.Is(err, service.ErrInvalidProduct):
+		writeError(w, http.StatusBadRequest, "invalid product ID")
+	case errors.Is(err, service.ErrInvalidBundleID):
+		writeError(w, http.StatusBadRequest, "bundle ID mismatch")
+	case errors.Is(err, service.ErrSubscriptionExpired):
+		writeError(w, http.StatusBadRequest, "subscription already expired")
 	default:
 		slog.Error("internal error", "path", r.URL.Path, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
