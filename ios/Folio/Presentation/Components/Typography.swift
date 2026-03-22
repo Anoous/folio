@@ -38,6 +38,61 @@ enum Typography {
     /// SF Pro Text, ~13pt, Medium — scales with .footnote
     static let tag = Font.system(.footnote, weight: .medium)
 
+    // MARK: - v3 Card Fonts (LXGW WenKai TC — prototype 01)
+
+    /// LXGW WenKai TC, 28px, Regular — page title "页集"
+    static let v3PageTitle = Font.custom("LXGWWenKaiTC-Regular", size: 28)
+
+    /// LXGW WenKai TC, 24px, Regular — hero card title (P01)
+    static let v3HeroTitle = Font.custom("LXGWWenKaiTC-Regular", size: 24)
+
+    /// LXGW WenKai TC, 17px, Regular — card title (read state)
+    static let v3CardTitle = Font.custom("LXGWWenKaiTC-Regular", size: 17)
+
+    /// LXGW WenKai TC, 17px, Medium — card title (unread state)
+    static let v3CardTitleUnread = Font.custom("LXGWWenKaiTC-Medium", size: 17)
+
+    /// LXGW WenKai TC, 16px, Italic — hero insight (P01)
+    static let v3HeroInsight = Font.custom("LXGWWenKaiTC-Regular", size: 16).italic()
+
+    /// LXGW WenKai TC, 14px, Italic — card insight (P01)
+    static let v3CardInsight = Font.custom("LXGWWenKaiTC-Regular", size: 14).italic()
+
+    /// LXGW WenKai TC, 14px, Regular — section header "今天"/"昨天" (P01)
+    static let v3SectionHeader = Font.custom("LXGWWenKaiTC-Regular", size: 14)
+
+    /// LXGW WenKai TC, 22px, Regular — empty state headline (P01)
+    static let v3EmptyHeadline = Font.custom("LXGWWenKaiTC-Regular", size: 22)
+
+    /// LXGW WenKai TC, 17px, Regular — echo question (P02)
+    static let v3EchoQuestion = Font.custom("LXGWWenKaiTC-Regular", size: 17)
+
+    /// LXGW WenKai TC, 15px, Medium — insight panel main text (P04)
+    static let v3InsightMain = Font.custom("LXGWWenKaiTC-Medium", size: 15)
+
+    /// LXGW WenKai TC, 28px, Medium — onboarding page title (P06)
+    static let v3OnboardingTitle = Font.custom("LXGWWenKaiTC-Medium", size: 28)
+
+    /// LXGW WenKai TC, 20px, Light — onboarding brand "Folio · 页集" (P06)
+    static let v3OnboardingBrand = Font.custom("LXGWWenKaiTC-Light", size: 20)
+
+    /// LXGW WenKai TC, 22px, Medium — settings comparison title (P07)
+    static let v3ComparisonTitle = Font.custom("LXGWWenKaiTC-Medium", size: 22)
+
+    /// LXGW WenKai TC, 20px, Regular — settings login prompt header (P07)
+    static let v3LoginPromptTitle = Font.custom("LXGWWenKaiTC-Regular", size: 20)
+
+    // MARK: - v3 Article Fonts (Reader — prototype 04)
+
+    /// LXGW WenKai TC, 26px, Medium — article title in reader (P04)
+    static let v3ArticleTitle = Font.custom("LXGWWenKaiTC-Medium", size: 26)
+
+    /// LXGW WenKai TC, 17px, Regular — article body in reader (P04)
+    static let v3ArticleBody = Font.custom("LXGWWenKaiTC-Regular", size: 17)
+
+    /// LXGW WenKai TC, 20px, Medium — H2 in reader (P04)
+    static let v3ArticleH2 = Font.custom("LXGWWenKaiTC-Medium", size: 20)
+
     // MARK: - Article Fonts (Chinese)
 
     /// Noto Serif SC, 28pt, Bold
