@@ -18,6 +18,7 @@ struct ReaderView: View {
     @State private var isInsightExpanded = false
     @State private var metrics = ScaledArticleMetrics()
     @State private var showToastState = false
+    @State private var tappedImageURL: URL?
 
     // Ink entrance
     @State private var titleVisible = false
@@ -110,6 +111,14 @@ struct ReaderView: View {
                 WebViewContainer(url: url)
             }
         }
+        .fullScreenCover(isPresented: Binding(
+            get: { tappedImageURL != nil },
+            set: { if !$0 { tappedImageURL = nil } }
+        )) {
+            if let url = tappedImageURL {
+                ImageViewerOverlay(url: url, altText: "")
+            }
+        }
         .alert(
             String(localized: "reader.deleteConfirm", defaultValue: "Delete this article?"),
             isPresented: $showsDeleteConfirmation
@@ -197,8 +206,8 @@ struct ReaderView: View {
                         onScrollProgress: { progress in
                             viewModel.updateReadingProgress(progress)
                         },
-                        onImageTap: { _ in
-                            // TODO: Show ImageViewerOverlay
+                        onImageTap: { src in
+                            tappedImageURL = URL(string: src)
                         },
                         onLinkTap: { href in
                             if let url = URL(string: href) {
