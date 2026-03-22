@@ -56,10 +56,6 @@ func (h *StatsHandler) checkProSubscription(w http.ResponseWriter, r *http.Reque
 func (h *StatsHandler) HandleMonthlyStats(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 
-	if !h.checkProSubscription(w, r, userID) {
-		return
-	}
-
 	year, month := parseMonthParam(r)
 
 	stats, err := h.statsService.GetMonthlyStats(r.Context(), userID, year, month)
@@ -103,10 +99,6 @@ func (h *StatsHandler) HandleMonthlyStats(w http.ResponseWriter, r *http.Request
 // HandleEchoStats handles GET /api/v1/stats/echo
 func (h *StatsHandler) HandleEchoStats(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
-
-	if !h.checkProSubscription(w, r, userID) {
-		return
-	}
 
 	year, month := parseMonthParam(r)
 
