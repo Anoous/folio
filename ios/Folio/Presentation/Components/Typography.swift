@@ -18,6 +18,23 @@ enum Typography {
     /// SF Pro Text, ~13pt, Regular — scales with .footnote
     static let caption = Font.system(.footnote)
 
+    // MARK: - Editorial Card Fonts (Home page)
+
+    /// New York (serif), ~17pt — article titles on home cards
+    static let cardTitle = Font.system(.headline, design: .serif)
+
+    /// New York (serif), ~17pt, semibold — unread article titles
+    static let cardTitleUnread = Font.system(.headline, design: .serif).weight(.semibold)
+
+    /// SF Pro Text, ~15pt — article summaries on home cards
+    static let cardSummary = Font.system(.subheadline)
+
+    /// SF Pro Text, ~13pt — source + time on home cards
+    static let cardMeta = Font.system(.footnote)
+
+    /// New York (serif), ~24pt — empty state headline
+    static let emptyHeadline = Font.system(.title2, design: .serif)
+
     /// SF Pro Text, ~13pt, Medium — scales with .footnote
     static let tag = Font.system(.footnote, weight: .medium)
 

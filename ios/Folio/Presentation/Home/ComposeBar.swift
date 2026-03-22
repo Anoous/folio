@@ -1,35 +1,6 @@
-import SwiftUI
+import Foundation
 
-/// A text field styled as a capsule. Tap it = start typing (keyboard + toolbar appear).
-/// Two steps: tap & type → send.
-struct ComposeBar: View {
-    @Binding var text: String
-    @FocusState.Binding var isFocused: Bool
-    let onSave: (String) -> Void
-
-    var body: some View {
-        // The capsule IS the text field — tapping it starts typing directly
-        HStack(spacing: Spacing.xs) {
-            Image(systemName: "square.and.pencil")
-                .font(.body)
-                .foregroundStyle(Color.folio.textSecondary)
-
-            TextField(
-                String(localized: "compose.capture", defaultValue: "Capture"),
-                text: $text
-            )
-            .textFieldStyle(.plain)
-            .focused($isFocused)
-            .font(Typography.body)
-        }
-        .padding(.horizontal, Spacing.md)
-        .padding(.vertical, Spacing.xs)
-        .background(.ultraThinMaterial)
-        .clipShape(Capsule())
-        .padding(.horizontal, Spacing.lg)
-        .padding(.vertical, Spacing.xs)
-    }
-
+enum URLDetection {
     /// Returns true if the trimmed text is a single URL with no other meaningful text.
     static func isURLOnly(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -40,46 +11,11 @@ struct ComposeBar: View {
         guard matches.count == 1, let match = matches.first else { return false }
         return match.range.length == range.length
     }
-}
 
-/// Send/close buttons above the keyboard.
-struct ComposeToolbarContent: View {
-    @Binding var text: String
-    @FocusState.Binding var isFocused: Bool
-    let onSave: (String) -> Void
-
-    private var hasContent: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    var body: some View {
-        HStack(spacing: Spacing.xs) {
-            Button {
-                text = ""
-                isFocused = false
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(Color.folio.textTertiary)
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            if hasContent {
-                Button {
-                    let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    text = ""
-                    isFocused = false
-                    onSave(content)
-                } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(Color.accentColor)
-                }
-                .buttonStyle(ScaleButtonStyle())
-                .accessibilityLabel(String(localized: "compose.save", defaultValue: "Save"))
-            }
-        }
+    /// Extracts a URL from text if the text is a single URL.
+    static func extractURL(from text: String) -> URL? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isURLOnly(trimmed) else { return nil }
+        return URL(string: trimmed)
     }
 }

@@ -72,6 +72,7 @@
 		700EBAE0A4FF2CEB48DAEC19 /* ArticleRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31E66A5792F8833A91D7C787 /* ArticleRepository.swift */; };
 		70943084036581B7D2366FAD /* Color+Folio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 169A0B494F30137A1EB80458 /* Color+Folio.swift */; };
 		72153227A49357BAA1A4CB07 /* APIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2D05CDF427ADD1FE47D576 /* APIClientTests.swift */; };
+		7441052664B8CBE205DDB4CE /* ManualNoteSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F3F4AEB604527646C17E523 /* ManualNoteSheet.swift */; };
 		74FCB17F4508741AB1950FCC /* ReadabilityExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 309C2FD401BBC90ECC2434FE /* ReadabilityExtractor.swift */; };
 		77D34BE4A927470C4161008D /* Category.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F05970EB8BBD7890F0F92A /* Category.swift */; };
 		794E62241C62BBFC7882B0C3 /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF21EED2AB8D7E9F2F02E548 /* Typography.swift */; };
@@ -246,6 +247,7 @@
 		7861C8ADE901E7621567A32A /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		7D2984F5A4CD88647D15D56D /* TagRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagRepositoryTests.swift; sourceTree = "<group>"; };
 		7E5600F3DD868B1C6B4542E6 /* DTOMappingExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DTOMappingExtractionTests.swift; sourceTree = "<group>"; };
+		7F3F4AEB604527646C17E523 /* ManualNoteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualNoteSheet.swift; sourceTree = "<group>"; };
 		7FF9CAB5F865B73864CBB8D0 /* ReaderViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderViewModelTests.swift; sourceTree = "<group>"; };
 		834A1C695A65846FEFBD3F0D /* chinese-content.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "chinese-content.html"; sourceTree = "<group>"; };
 		856356967CB852BD68D53012 /* ImageViewerOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageViewerOverlay.swift; sourceTree = "<group>"; };
@@ -500,6 +502,7 @@
 				587E5568604CD87046B09908 /* HomeSearchResultsView.swift */,
 				92ED4253BB778A67007D44F9 /* HomeView.swift */,
 				535A40C8A5E5036399F1E139 /* HomeViewModel.swift */,
+				7F3F4AEB604527646C17E523 /* ManualNoteSheet.swift */,
 			);
 			path = Home;
 			sourceTree = "<group>";
@@ -1027,6 +1030,7 @@
 				CF0B21BA3EE08B5A7D5891E6 /* ImageView.swift in Sources */,
 				F5B624B3C113D8905C2DF348 /* ImageViewerOverlay.swift in Sources */,
 				0E95A317369F19B9F3EF4316 /* KeyChainManager.swift in Sources */,
+				7441052664B8CBE205DDB4CE /* ManualNoteSheet.swift in Sources */,
 				FC7FCD5E8FDFCB7437700E1D /* MarkdownBlock.swift in Sources */,
 				E762FA0AF166288CB6B6F45B /* MarkdownRenderer.swift in Sources */,
 				B298BE141564E450A16CB5FD /* MockDataFactory.swift in Sources */,

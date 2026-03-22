@@ -14,10 +14,12 @@ struct HomeView: View {
     @State private var viewModel: HomeViewModel?
     @State private var searchViewModel: SearchViewModel?
     @State private var searchText = ""
-    @State private var searchScope = ""
-    @State private var composeText = ""
-    @FocusState private var composeFocused: Bool
-    @Query(sort: \Category.sortOrder) private var categories: [Category]
+    @State private var clipboardURL: URL?
+    @State private var clipboardText: String?
+    /// Tracks content we already saved from clipboard so we don't offer it again
+    @State private var lastSavedClipboard: String?
+    @State private var showNoteSheet = false
+    @State private var noteSheetText = ""
     @State private var articleToDelete: Article?
     @State private var showDeleteConfirmation = false
     @State private var showShareSheet = false
@@ -28,124 +30,98 @@ struct HomeView: View {
     @State private var refreshTrigger = false
 
     var body: some View {
-        coreView
-        .sensoryFeedback(.success, trigger: saveSucceeded)
-        .sensoryFeedback(.error, trigger: saveFailed)
-        .sensoryFeedback(.impact(weight: .medium), trigger: deleteConfirmTrigger)
-        .sensoryFeedback(.impact(weight: .light), trigger: refreshTrigger)
-        .onAppear(perform: initializeViewModels)
-        .onChange(of: authViewModel?.isAuthenticated) { _, newValue in
-            viewModel?.isAuthenticated = newValue ?? false
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            handleScenePhaseChange(newPhase)
-        }
-    }
-
-    private var coreView: some View {
         mainContent
-            .background {
-                // Hidden TextField to own keyboard focus — always in view tree
-                TextField("", text: $composeText)
-                    .focused($composeFocused)
-                    .opacity(0)
-                    .allowsHitTesting(false)
-            }
-            .overlay(alignment: .bottom) {
-                if !composeFocused {
-                    // Visible capsule
-                    Button { composeFocused = true } label: {
-                        HStack(spacing: Spacing.xs) {
-                            Image(systemName: "square.and.pencil")
-                                .font(.body)
-                            Text(String(localized: "compose.capture", defaultValue: "Capture"))
-                                .font(Typography.body)
-                        }
-                        .foregroundStyle(Color.folio.textSecondary)
-                        .padding(.horizontal, Spacing.md)
-                        .padding(.vertical, Spacing.xs)
-                        .background(.ultraThinMaterial)
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(ScaleButtonStyle())
-                    .padding(.bottom, Spacing.md)
-                }
-            }
+            .navigationTitle("Folio")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .keyboard) {
-                    ComposeToolbarContent(text: $composeText, isFocused: $composeFocused) { content in
-                        handleComposeSave(content)
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink(value: HomeDestination.settings) {
+                        Circle()
+                            .fill(Color.folio.textTertiary.opacity(0.2))
+                            .frame(width: 30, height: 30)
+                            .overlay {
+                                Image(systemName: "person.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.folio.textTertiary)
+                            }
                     }
+                    .accessibilityLabel(String(localized: "tab.settings", defaultValue: "Settings"))
                 }
             }
-        .navigationTitle("Folio")
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                NavigationLink(value: HomeDestination.settings) {
-                    Image(systemName: "gearshape")
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .automatic),
+                prompt: String(localized: "search.prompt", defaultValue: "Search or paste a link...")
+            )
+            .onChange(of: searchText) { _, newValue in
+                handleSearchTextChange(newValue)
+            }
+            .navigationDestination(for: UUID.self) { articleID in
+                if let article = viewModel?.articles.first(where: { $0.id == articleID }) {
+                    ReaderView(article: article)
                 }
-                .accessibilityLabel(String(localized: "tab.settings", defaultValue: "Settings"))
             }
-        }
-        .searchable(
-            text: $searchText,
-            placement: .navigationBarDrawer(displayMode: .automatic),
-            prompt: String(localized: "search.prompt", defaultValue: "Search your collection...")
-        )
-        .searchScopes($searchScope, activation: .onSearchPresentation) {
-            Text(String(localized: "search.scope.all", defaultValue: "All")).tag("")
-            ForEach(categories) { category in
-                Text(category.localizedName).tag(category.slug)
+            .navigationDestination(for: HomeDestination.self) { destination in
+                switch destination {
+                case .settings:
+                    SettingsView()
+                }
             }
-        }
-        .onChange(of: searchText) { _, newValue in
-            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                viewModel?.fetchArticles()
-            } else {
-                searchViewModel?.searchText = trimmed
-            }
-        }
-        .onChange(of: searchScope) { _, _ in
-            searchViewModel?.performSearch()
-        }
-        .navigationDestination(for: UUID.self) { articleID in
-            if let article = viewModel?.articles.first(where: { $0.id == articleID }) {
-                ReaderView(article: article)
-            }
-        }
-        .navigationDestination(for: HomeDestination.self) { destination in
-            switch destination {
-            case .settings:
-                SettingsView()
-            }
-        }
-        .toast(isPresented: showToastBinding, message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
-        .alert(
-            deleteConfirmTitle,
-            isPresented: $showDeleteConfirmation
-        ) {
-            Button(String(localized: "button.cancel", defaultValue: "Cancel"), role: .cancel) {
-                articleToDelete = nil
-            }
-            Button(String(localized: "reader.delete", defaultValue: "Delete"), role: .destructive) {
-                if let article = articleToDelete {
-                    viewModel?.deleteArticle(article)
+            .toast(isPresented: showToastBinding, message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
+            .alert(
+                deleteConfirmTitle,
+                isPresented: $showDeleteConfirmation
+            ) {
+                Button(String(localized: "button.cancel", defaultValue: "Cancel"), role: .cancel) {
                     articleToDelete = nil
                 }
+                Button(String(localized: "reader.delete", defaultValue: "Delete"), role: .destructive) {
+                    if let article = articleToDelete {
+                        viewModel?.deleteArticle(article)
+                        articleToDelete = nil
+                    }
+                }
+            } message: {
+                Text(String(localized: "reader.deleteMessage", defaultValue: "This article will be permanently removed."))
             }
-        } message: {
-            Text(String(localized: "reader.deleteMessage", defaultValue: "This article will be permanently removed."))
-        }
+            .sheet(isPresented: $showNoteSheet) {
+                ManualNoteSheet(text: noteSheetText) { content in
+                    saveManualContent(content)
+                    searchText = ""
+                }
+            }
+            .sensoryFeedback(.success, trigger: saveSucceeded)
+            .sensoryFeedback(.error, trigger: saveFailed)
+            .sensoryFeedback(.impact(weight: .medium), trigger: deleteConfirmTrigger)
+            .sensoryFeedback(.impact(weight: .light), trigger: refreshTrigger)
+            .onAppear(perform: initializeViewModels)
+            .onChange(of: authViewModel?.isAuthenticated) { _, newValue in
+                viewModel?.isAuthenticated = newValue ?? false
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                handleScenePhaseChange(newPhase)
+            }
     }
 
     // MARK: - Main Content
 
     @ViewBuilder
     private var mainContent: some View {
-        let isSearchActive = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isSearchActive = !trimmed.isEmpty
+
         if isSearchActive, let svm = searchViewModel {
-            HomeSearchResultsView(searchViewModel: svm, searchText: $searchText, categoryFilter: searchScope)
+            HomeSearchResultsView(
+                searchViewModel: svm,
+                searchText: $searchText,
+                detectedURL: URLDetection.extractURL(from: trimmed),
+                existingArticle: findExistingArticle(for: trimmed),
+                onSaveURL: { url in saveURL(url) },
+                onSaveNote: { content in
+                    noteSheetText = content
+                    showNoteSheet = true
+                }
+            )
         } else if viewModel?.articles.isEmpty ?? true {
             EmptyStateView(onPasteURL: { url in
                 saveURL(url.absoluteString)
@@ -171,36 +147,31 @@ struct HomeView: View {
         return String(localized: "reader.deleteConfirm", defaultValue: "Delete this article?") + (title.isEmpty ? "" : "\n\"\(title)\"")
     }
 
-    // MARK: - Article List
+    // MARK: - Article List (flat, no date grouping)
 
     private var articleList: some View {
         List {
             statusBanners
 
+            // Clipboard prompts
+            if let url = clipboardURL {
+                clipboardURLBanner(url: url)
+            }
+            if let text = clipboardText {
+                clipboardTextBanner(text: text)
+            }
+
             if let vm = viewModel {
-                ForEach(vm.groupedArticles, id: \.0) { group in
-                    Section {
-                        ForEach(group.1) { article in
-                            HomeArticleRow(
-                                article: article,
-                                isLast: article.id == group.1.last?.id
-                            ) { action in
-                                handleArticleAction(action, article: article, vm: vm)
-                            }
-                        }
-                    } header: {
-                        Text(group.0)
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.folio.textTertiary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, Spacing.screenPadding)
-                            .padding(.vertical, 8)
-                            .background(Color.folio.background)
-                            .listRowInsets(EdgeInsets())
+                ForEach(vm.articles) { article in
+                    HomeArticleRow(
+                        article: article,
+                        isLast: article.id == vm.articles.last?.id
+                    ) { action in
+                        handleArticleAction(action, article: article, vm: vm)
                     }
                 }
                 .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
-                .listRowSeparatorTint(Color.folio.separator)
+                .listRowSeparator(.hidden)
             }
         }
         .listStyle(.plain)
@@ -226,6 +197,78 @@ struct HomeView: View {
                 ShareSheet(activityItems: items)
             }
         }
+    }
+
+    // MARK: - Clipboard Banners
+
+    private func clipboardURLBanner(url: URL) -> some View {
+        Button {
+            lastSavedClipboard = url.absoluteString
+            saveURL(url.absoluteString)
+            withAnimation { clipboardURL = nil }
+        } label: {
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: "doc.on.clipboard")
+                    .font(.body)
+                    .foregroundStyle(Color.folio.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "home.clipboard.addLink", defaultValue: "Add copied link"))
+                        .font(Typography.body)
+                        .foregroundStyle(Color.folio.textPrimary)
+                    Text(url.host ?? url.absoluteString)
+                        .font(Typography.cardMeta)
+                        .foregroundStyle(Color.folio.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "xmark")
+                    .font(.caption2)
+                    .foregroundStyle(Color.folio.textTertiary)
+                    .onTapGesture {
+                        lastSavedClipboard = url.absoluteString
+                        withAnimation { clipboardURL = nil }
+                    }
+            }
+            .padding(.vertical, Spacing.xs)
+        }
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
+        .listRowSeparator(.hidden)
+    }
+
+    private func clipboardTextBanner(text: String) -> some View {
+        Button {
+            lastSavedClipboard = text
+            saveManualContent(text)
+            withAnimation { clipboardText = nil }
+        } label: {
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: "doc.on.clipboard")
+                    .font(.body)
+                    .foregroundStyle(Color.folio.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "home.clipboard.saveText", defaultValue: "Save copied text"))
+                        .font(Typography.body)
+                        .foregroundStyle(Color.folio.textPrimary)
+                    Text(text.prefix(50) + (text.count > 50 ? "..." : ""))
+                        .font(Typography.cardMeta)
+                        .foregroundStyle(Color.folio.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "xmark")
+                    .font(.caption2)
+                    .foregroundStyle(Color.folio.textTertiary)
+                    .onTapGesture {
+                        lastSavedClipboard = text
+                        withAnimation { clipboardText = nil }
+                    }
+            }
+            .padding(.vertical, Spacing.xs)
+        }
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
+        .listRowSeparator(.hidden)
     }
 
     // MARK: - Status Banners
@@ -317,14 +360,24 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Compose
+    // MARK: - Search
 
-    private func handleComposeSave(_ content: String) {
-        if ComposeBar.isURLOnly(content) {
-            saveURL(content)
+    private func handleSearchTextChange(_ newValue: String) {
+        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            viewModel?.fetchArticles()
         } else {
-            saveManualContent(content)
+            searchViewModel?.searchText = trimmed
         }
+    }
+
+    // MARK: - URL Lookup
+
+    private func findExistingArticle(for text: String) -> Article? {
+        guard URLDetection.isURLOnly(text) else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let repo = ArticleRepository(context: modelContext)
+        return try? repo.fetchByURL(trimmed)
     }
 
     // MARK: - Actions
@@ -381,6 +434,42 @@ struct HomeView: View {
         withAnimation { viewModel?.showToast = true }
     }
 
+    // MARK: - Clipboard Detection
+
+    private func checkClipboard() {
+        // Reset previous state
+        clipboardURL = nil
+        clipboardText = nil
+
+        // 1. Check .url first — doesn't trigger paste permission banner
+        if let url = UIPasteboard.general.url {
+            if url.absoluteString == lastSavedClipboard { return }
+            let repo = ArticleRepository(context: modelContext)
+            if (try? repo.existsByURL(url.absoluteString)) == true { return }
+            clipboardURL = url
+            return
+        }
+
+        // 2. Fall back to .string — may trigger paste permission banner on iOS 16+
+        guard let string = UIPasteboard.general.string else { return }
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if trimmed == lastSavedClipboard { return }
+
+        // Check if it's a URL as text
+        if let url = URL(string: trimmed), url.scheme?.hasPrefix("http") == true {
+            let repo = ArticleRepository(context: modelContext)
+            if (try? repo.existsByURL(url.absoluteString)) == true { return }
+            clipboardURL = url
+            return
+        }
+
+        // Non-URL text — offer to save if substantial (>= 10 chars)
+        if trimmed.count >= 10 {
+            clipboardText = trimmed
+        }
+    }
+
     // MARK: - Lifecycle
 
     private func initializeViewModels() {
@@ -398,6 +487,7 @@ struct HomeView: View {
             svm.loadPopularTags()
             svm.refreshSyncedCount(context: modelContext)
         }
+        checkClipboard()
     }
 
     private func handleScenePhaseChange(_ newPhase: ScenePhase) {
@@ -410,6 +500,7 @@ struct HomeView: View {
                 searchViewModel?.refreshSyncedCount(context: modelContext)
                 FolioLogger.data.info("home-debug: fetchArticles called, vm.articles.count=\(viewModel?.articles.count ?? -1)")
             }
+            checkClipboard()
         }
     }
 

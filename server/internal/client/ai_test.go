@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -108,5 +109,32 @@ func TestValidateResponse_InvalidLanguage(t *testing.T) {
 
 	if resp.Language != "en" {
 		t.Errorf("expected language 'en' for invalid input, got %q", resp.Language)
+	}
+}
+
+func TestMockAnalyzer_CategoryFromURL(t *testing.T) {
+	tests := []struct {
+		source   string
+		wantSlug string
+	}{
+		{"https://github.com/foo/bar", "tech"},
+		{"https://arxiv.org/abs/123", "science"},
+		{"https://bbc.com/news/xyz", "news"},
+		{"https://dribbble.com/shot", "design"},
+		{"https://unknown.example.com", "tech"},
+		{"", "other"},
+	}
+	mock := &MockAnalyzer{}
+	for _, tt := range tests {
+		resp, err := mock.Analyze(context.Background(), AnalyzeRequest{
+			Title:  "Test",
+			Source: tt.source,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error for source %q: %v", tt.source, err)
+		}
+		if resp.Category != tt.wantSlug {
+			t.Errorf("source=%q: got category %q, want %q", tt.source, resp.Category, tt.wantSlug)
+		}
 	}
 }

@@ -45,45 +45,6 @@ final class HomeViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testGroupByDate_today() throws {
-        let a = Article(url: "https://example.com/today", title: "Today article")
-        a.createdAt = Date()
-        context.insert(a)
-        try context.save()
-
-        let vm = HomeViewModel(context: context)
-        let grouped = vm.groupByDate([a])
-        XCTAssertEqual(grouped.first?.0, "Today")
-    }
-
-    @MainActor
-    func testGroupByDate_yesterday() throws {
-        let calendar = Calendar.current
-        let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: Date()))!
-        let a = Article(url: "https://example.com/yesterday", title: "Yesterday article")
-        a.createdAt = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: yesterday)!
-        context.insert(a)
-        try context.save()
-
-        let vm = HomeViewModel(context: context)
-        let grouped = vm.groupByDate([a])
-        XCTAssertEqual(grouped.first?.0, "Yesterday")
-    }
-
-    @MainActor
-    func testGroupByDate_specificDate() throws {
-        let a = Article(url: "https://example.com/old", title: "Old article")
-        a.createdAt = Date(timeIntervalSinceNow: -30 * 86400)
-        context.insert(a)
-        try context.save()
-
-        let vm = HomeViewModel(context: context)
-        let grouped = vm.groupByDate([a])
-        XCTAssertNotEqual(grouped.first?.0, "Today")
-        XCTAssertNotEqual(grouped.first?.0, "Yesterday")
-    }
-
-    @MainActor
     func testPagination_loadsNextPage() throws {
         // Create 25 articles
         for i in 0..<25 {

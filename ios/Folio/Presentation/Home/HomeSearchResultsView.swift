@@ -5,21 +5,197 @@ struct HomeSearchResultsView: View {
     @Binding var searchText: String
     var categoryFilter: String = ""
 
+    /// URL detected in the search text (nil if not a URL)
+    var detectedURL: URL?
+    /// The article if this URL is already saved
+    var existingArticle: Article?
+    /// Called when user taps "Save this link"
+    var onSaveURL: ((String) -> Void)?
+    /// Called when user taps "Save as note"
+    var onSaveNote: ((String) -> Void)?
+
     @State private var showAIAnswer = false
     @State private var emptyAppeared = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var isTextInput: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && detectedURL == nil
+            && searchText.count >= 2
+    }
+
     var body: some View {
-        if searchViewModel.isSearching {
+        if searchViewModel.isSearching && detectedURL == nil && !isTextInput {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let error = searchViewModel.searchError {
+        } else if let error = searchViewModel.searchError, detectedURL == nil {
             errorState(error: error)
-        } else if searchViewModel.showsEmptyState || (!searchViewModel.results.isEmpty && filteredResults.isEmpty) {
-            emptyState
+        } else if detectedURL != nil {
+            urlActionList
+        } else if !filteredResults.isEmpty {
+            // Has search results — show note action at top + results
+            resultsWithNoteAction
+        } else if searchViewModel.showsEmptyState || isTextInput {
+            // No results — show note action prominently
+            emptyWithNoteAction
         } else {
             resultsList
         }
+    }
+
+    // MARK: - Results With Note Action
+
+    private var resultsWithNoteAction: some View {
+        List {
+            // Save as note — first row
+            if isTextInput {
+                noteActionRow
+                    .listRowSeparator(.hidden)
+            }
+
+            Section {
+                ForEach(filteredResults) { item in
+                    NavigationLink(value: item.article.id) {
+                        SearchResultRow(
+                            item: item,
+                            searchQuery: searchViewModel.searchText
+                        )
+                    }
+                    .listRowInsets(EdgeInsets())
+                }
+            } header: {
+                let count = filteredResults.count
+                Text("\(count) " + (count == 1
+                    ? String(localized: "search.result", defaultValue: "result")
+                    : String(localized: "search.results", defaultValue: "results")))
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.folio.textTertiary)
+            }
+        }
+        .listStyle(.plain)
+    }
+
+    // MARK: - Empty With Note Action
+
+    private var emptyWithNoteAction: some View {
+        List {
+            // Save as note — first and most prominent row
+            if isTextInput {
+                noteActionRow
+                    .listRowSeparator(.hidden)
+            }
+
+            // No results hint
+            Section {
+                VStack(spacing: Spacing.sm) {
+                    Text(String(localized: "search.noResults", defaultValue: "No matching articles"))
+                        .font(Typography.cardMeta)
+                        .foregroundStyle(Color.folio.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Spacing.lg)
+            }
+            .listRowSeparator(.hidden)
+        }
+        .listStyle(.plain)
+    }
+
+    // MARK: - Note Action Row
+
+    private var noteActionRow: some View {
+        Button {
+            onSaveNote?(searchText.trimmingCharacters(in: .whitespacesAndNewlines))
+        } label: {
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: "note.text.badge.plus")
+                    .font(.body)
+                    .foregroundStyle(Color.folio.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "search.saveAsNote", defaultValue: "Save as note"))
+                        .font(Typography.body)
+                        .foregroundStyle(Color.folio.textPrimary)
+                    Text(searchText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60) + (searchText.count > 60 ? "..." : ""))
+                        .font(Typography.cardMeta)
+                        .foregroundStyle(Color.folio.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+            }
+            .padding(.vertical, Spacing.xs)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - URL Action List
+
+    private var urlActionList: some View {
+        List {
+            Section {
+                if let article = existingArticle {
+                    NavigationLink(value: article.id) {
+                        HStack(spacing: Spacing.sm) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(Color.folio.success)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(String(localized: "search.alreadySaved", defaultValue: "Already saved"))
+                                    .font(Typography.body)
+                                    .foregroundStyle(Color.folio.textPrimary)
+                                Text(article.displayTitle)
+                                    .font(Typography.caption)
+                                    .foregroundStyle(Color.folio.textSecondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(.vertical, Spacing.xs)
+                    }
+                } else if let url = detectedURL {
+                    Button {
+                        onSaveURL?(url.absoluteString)
+                    } label: {
+                        HStack(spacing: Spacing.sm) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(Color.folio.accent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(String(localized: "search.saveLink", defaultValue: "Save this link"))
+                                    .font(Typography.body)
+                                    .foregroundStyle(Color.folio.textPrimary)
+                                Text(url.host ?? url.absoluteString)
+                                    .font(Typography.caption)
+                                    .foregroundStyle(Color.folio.textSecondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, Spacing.xs)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if !filteredResults.isEmpty {
+                Section {
+                    ForEach(filteredResults) { item in
+                        NavigationLink(value: item.article.id) {
+                            SearchResultRow(
+                                item: item,
+                                searchQuery: searchViewModel.searchText
+                            )
+                        }
+                        .listRowInsets(EdgeInsets())
+                    }
+                } header: {
+                    let count = filteredResults.count
+                    Text("\(count) " + (count == 1
+                        ? String(localized: "search.result", defaultValue: "result")
+                        : String(localized: "search.results", defaultValue: "results")))
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.folio.textTertiary)
+                }
+            }
+        }
+        .listStyle(.plain)
     }
 
     // MARK: - Results List
@@ -82,71 +258,5 @@ struct HomeSearchResultsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(Spacing.screenPadding)
-    }
-
-    // MARK: - Empty State
-
-    private var emptyState: some View {
-        VStack(spacing: Spacing.md) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.folio.textTertiary)
-
-            Text(String(localized: "search.noResults", defaultValue: "No results found"))
-                .font(Typography.listTitle)
-                .foregroundStyle(Color.folio.textPrimary)
-
-            Text(String(localized: "search.noResultsHint", defaultValue: "Try different keywords or check spelling"))
-                .font(Typography.body)
-                .foregroundStyle(Color.folio.textSecondary)
-                .multilineTextAlignment(.center)
-
-            if showAIAnswer {
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    HStack(spacing: Spacing.xxs) {
-                        Text("\u{2726}")
-                            .font(.caption)
-                            .foregroundStyle(Color.folio.accent)
-                        Text("AI")
-                            .font(Typography.tag)
-                            .foregroundStyle(Color.folio.accent)
-                    }
-                    Text(String(localized: "search.aiMockAnswer", defaultValue: "Based on 4 articles in your collection, here are some relevant insights on this topic..."))
-                        .font(Typography.body)
-                        .foregroundStyle(Color.folio.textSecondary)
-                        .lineSpacing(4)
-                }
-                .padding(Spacing.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.folio.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
-            } else {
-                Button {
-                    withAnimation(Motion.resolved(Motion.settle, reduceMotion: reduceMotion)) { showAIAnswer = true }
-                } label: {
-                    HStack(spacing: Spacing.xs) {
-                        Text("\u{2728}")
-                        Text(String(localized: "search.askAI", defaultValue: "Ask AI about your collection"))
-                            .font(Typography.body)
-                    }
-                    .foregroundStyle(Color.folio.accent)
-                }
-                .buttonStyle(.plain)
-                .padding(.top, Spacing.sm)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(Spacing.screenPadding)
-        .opacity(emptyAppeared ? 1 : 0)
-        .offset(y: emptyAppeared ? 0 : 12)
-        .onAppear {
-            withAnimation(Motion.resolved(Motion.settle, reduceMotion: reduceMotion) ?? .default) {
-                emptyAppeared = true
-            }
-        }
-        .onChange(of: searchText) { _, _ in
-            showAIAnswer = false
-            emptyAppeared = false
-        }
     }
 }
