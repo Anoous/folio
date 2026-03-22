@@ -211,7 +211,31 @@ struct SettingsView: View {
         } else {
             // 通用
             settingsSection(header: "通用") {
-                settingsRow(icon: "map", label: "知识地图", isPlaceholder: true)
+                NavigationLink {
+                    KnowledgeMapView()
+                } label: {
+                    HStack(spacing: Spacing.sm) {
+                        Image(systemName: "map")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.folio.textSecondary)
+                            .frame(width: 28, height: 28)
+                            .background(Color.folio.background)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                        Text("知识地图")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color.folio.textPrimary)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Color.folio.textQuaternary)
+                    }
+                    .padding(.vertical, 14)
+                    .padding(.horizontal, 16)
+                }
+                .buttonStyle(.plain)
                 sectionSeparator
                 settingsRow(icon: "textformat.size", label: "阅读偏好") {
                     showReadingPreferences = true
