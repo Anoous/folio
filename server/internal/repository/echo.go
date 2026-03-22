@@ -27,8 +27,8 @@ func (r *EchoRepo) CreateCard(ctx context.Context, card *domain.EchoCard) error 
 			next_review_at, interval_days, ease_factor, review_count, correct_count,
 			related_article_id, highlight_id, created_at, updated_at
 		) VALUES (
-			COALESCE(NULLIF($1, ''), uuid_generate_v4()::text),
-			$2, $3, $4, $5, $6, $7,
+			COALESCE(NULLIF($1, '')::uuid, uuid_generate_v4()),
+			$2::uuid, $3::uuid, $4, $5, $6, $7,
 			$8, $9, $10, $11, $12,
 			$13, $14, NOW(), NOW()
 		)
