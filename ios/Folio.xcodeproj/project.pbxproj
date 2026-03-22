@@ -29,6 +29,7 @@
 		2047E4EFF6DEE16C5C918168 /* TagRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2984F5A4CD88647D15D56D /* TagRepositoryTests.swift */; };
 		25FD4449D9303109BA245ED7 /* ExtractionResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0635AE053751363901C124 /* ExtractionResult.swift */; };
 		262F73093B1C8E9406AF514E /* KeychainAccess in Frameworks */ = {isa = PBXBuildFile; productRef = D1AD63A300383F049533808C /* KeychainAccess */; };
+		26914CD643759C9FE8B0F99B /* MarkdownToHTML.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4E9CD765C05ACC615CD57D /* MarkdownToHTML.swift */; };
 		26E2AF17E94584C1645E54F7 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = EB356FF8056CC8909E833640 /* SwiftSoup */; };
 		289CA4861950E605E44908B8 /* MarkdownRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF29B7B9F12CD2807CB2590 /* MarkdownRendererTests.swift */; };
 		28C511C6D4856108B14B5F38 /* ReadingTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1DDF450DF44B33D92932552 /* ReadingTheme.swift */; };
@@ -253,6 +254,7 @@
 		6D5FD400A66F26A1CB323587 /* OfflineQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineQueueManager.swift; sourceTree = "<group>"; };
 		6D7667B92B7C015356B030F8 /* Date+RelativeFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Date+RelativeFormat.swift"; sourceTree = "<group>"; };
 		6F3C268731DCB6CF9682D76F /* FTS5SearchManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FTS5SearchManager.swift; sourceTree = "<group>"; };
+		6F4E9CD765C05ACC615CD57D /* MarkdownToHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownToHTML.swift; sourceTree = "<group>"; };
 		6FBE92442A12CC66400E7038 /* HTMLFetcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLFetcherTests.swift; sourceTree = "<group>"; };
 		7057B829CEE3FE655F4837A1 /* ContentExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentExtractor.swift; sourceTree = "<group>"; };
 		71A2352C6035EB5F5B3C61B2 /* SpacingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpacingTests.swift; sourceTree = "<group>"; };
@@ -501,6 +503,7 @@
 				856356967CB852BD68D53012 /* ImageViewerOverlay.swift */,
 				88A4BAE147D38A03773F7B00 /* MarkdownBlock.swift */,
 				F646F1377FEE790175386A86 /* MarkdownRenderer.swift */,
+				6F4E9CD765C05ACC615CD57D /* MarkdownToHTML.swift */,
 				D3895BDC8F0D382B020B65FC /* ReaderView.swift */,
 				6BC31BD29ACB398C09476D77 /* ReaderViewModel.swift */,
 				ECD2709338C4BA3D19ECADD7 /* ReadingPreferenceView.swift */,
@@ -1077,6 +1080,7 @@
 				7441052664B8CBE205DDB4CE /* ManualNoteSheet.swift in Sources */,
 				FC7FCD5E8FDFCB7437700E1D /* MarkdownBlock.swift in Sources */,
 				E762FA0AF166288CB6B6F45B /* MarkdownRenderer.swift in Sources */,
+				26914CD643759C9FE8B0F99B /* MarkdownToHTML.swift in Sources */,
 				B298BE141564E450A16CB5FD /* MockDataFactory.swift in Sources */,
 				BB5DA7D885C6543959421BC0 /* Motion.swift in Sources */,
 				9773A9A2C36B7C8F633B7A5A /* Network.swift in Sources */,
