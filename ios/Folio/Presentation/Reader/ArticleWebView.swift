@@ -1,6 +1,23 @@
 import SwiftUI
 import WebKit
 
+// MARK: - Custom WKWebView with "高亮" in system edit menu
+
+class HighlightableWebView: WKWebView {
+    var coordinator: ArticleWebView.Coordinator?
+
+    override func buildMenu(with builder: any UIMenuBuilder) {
+        // Add "高亮" action to the system edit menu (alongside Copy/Look Up/etc.)
+        let highlightAction = UIAction(title: "高亮", image: UIImage(systemName: "highlighter")) { [weak self] _ in
+            self?.coordinator?.handleHighlightFromMenu()
+        }
+        let highlightMenu = UIMenu(title: "", options: .displayInline, children: [highlightAction])
+        builder.insertChild(highlightMenu, atStartOfMenu: .standardEdit)
+
+        super.buildMenu(with: builder)
+    }
+}
+
 /// A SwiftUI wrapper around WKWebView for rendering article HTML content
 /// with highlight support, scroll tracking, and JS bridge communication.
 struct ArticleWebView: UIViewRepresentable {
@@ -18,32 +35,19 @@ struct ArticleWebView: UIViewRepresentable {
         Coordinator(parent: self)
     }
 
-    func makeUIView(context: Context) -> WKWebView {
+    func makeUIView(context: Context) -> HighlightableWebView {
         let contentController = WKUserContentController()
         contentController.add(context.coordinator, name: "folio")
 
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = contentController
-        configuration.preferences.javaScriptEnabled = true
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = HighlightableWebView(frame: .zero, configuration: configuration)
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
         webView.navigationDelegate = context.coordinator
-
-        // Disable default long-press context menu via CSS injection
-        let disableMenuCSS = """
-        var style = document.createElement('style');
-        style.textContent = '-webkit-touch-callout: none;';
-        document.head.appendChild(style);
-        """
-        let userScript = WKUserScript(
-            source: disableMenuCSS,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: true
-        )
-        contentController.addUserScript(userScript)
+        webView.coordinator = context.coordinator
 
         context.coordinator.webView = webView
         webView.loadHTMLString(htmlContent, baseURL: nil)
@@ -51,9 +55,7 @@ struct ArticleWebView: UIViewRepresentable {
         return webView
     }
 
-    func updateUIView(_ uiView: WKWebView, context: Context) {
-        // Reload only when the HTML content has actually changed.
-        // The coordinator tracks the last loaded content to avoid spurious reloads.
+    func updateUIView(_ uiView: HighlightableWebView, context: Context) {
         if context.coordinator.lastLoadedHTML != htmlContent {
             context.coordinator.lastLoadedHTML = htmlContent
             uiView.loadHTMLString(htmlContent, baseURL: nil)
@@ -137,6 +139,44 @@ struct ArticleWebView: UIViewRepresentable {
         }
 
         // MARK: Public Helpers
+
+        /// Called when user taps "高亮" in the system edit menu.
+        /// Gets the current selection from JS and creates a highlight.
+        func handleHighlightFromMenu() {
+            let js = """
+            (function() {
+                var sel = window.getSelection();
+                if (!sel || sel.isCollapsed || sel.toString().trim().length < 1) return null;
+                var range = sel.getRangeAt(0);
+                var text = sel.toString();
+                var start = getTextOffset(range.startContainer, range.startOffset);
+                var end = getTextOffset(range.endContainer, range.endOffset);
+                if (text.length > 500) { text = text.substring(0, 500); end = start + 500; }
+                // Create visual highlight
+                try {
+                    var mark = document.createElement('mark');
+                    mark.className = 'hl';
+                    mark.setAttribute('data-id', 'temp-' + Date.now());
+                    range.surroundContents(mark);
+                    if (typeof attachHighlightPopup === 'function') attachHighlightPopup(mark);
+                    sel.removeAllRanges();
+                } catch(ex) {}
+                return JSON.stringify({text: text, startOffset: start, endOffset: end});
+            })()
+            """
+            webView?.evaluateJavaScript(js) { [weak self] result, error in
+                guard let jsonString = result as? String,
+                      let data = jsonString.data(using: .utf8),
+                      let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let text = dict["text"] as? String,
+                      let start = dict["startOffset"] as? Int,
+                      let end = dict["endOffset"] as? Int else { return }
+                DispatchQueue.main.async {
+                    self?.parent.onHighlightCreate(text, start, end)
+                    self?.parent.onToast("已高亮")
+                }
+            }
+        }
 
         /// Evaluates arbitrary JavaScript in the web view.
         func callJS(_ script: String) {
