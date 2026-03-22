@@ -737,6 +737,18 @@ final class APIClient: @unchecked Sendable {
         return try await request(method: "POST", path: "/api/v1/subscription/verify", body: body)
     }
 
+    // MARK: - Device Registration
+
+    struct RegisterDeviceRequest: Codable {
+        let token: String
+        let platform: String
+    }
+
+    func registerDevice(token: String) async throws {
+        let body = RegisterDeviceRequest(token: token, platform: "ios")
+        let _: StatusResponse = try await request(method: "POST", path: "/api/v1/devices", body: body)
+    }
+
     // MARK: - Stats
 
     func getMonthlyStats(month: String? = nil) async throws -> MonthlyStatsResponse {

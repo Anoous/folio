@@ -92,6 +92,7 @@ struct FolioApp: App {
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
+                    UIApplication.shared.applicationIconBadgeNumber = 0
                     offlineQueueManager?.refreshPendingCount()
                     if authViewModel.authState == .signedIn, let sync = syncService {
                         Task { await sync.incrementalSync() }
