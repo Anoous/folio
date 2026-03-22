@@ -149,7 +149,7 @@ struct SettingsView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color.folio.textPrimary)
 
-            Text("每日 Echo · 无限问答 · 语义搜索 · iCloud 同步")
+            Text("每日 Echo · 无限问答 · 语义搜索 · 知识地图")
                 .font(.system(size: 13))
                 .foregroundStyle(Color.folio.textSecondary)
 
@@ -242,10 +242,7 @@ struct SettingsView: View {
                 }
                 sectionSeparator
                 settingsRow(icon: "bell", label: "通知", value: "开启")
-                if isPro {
-                    sectionSeparator
-                    settingsRow(icon: "icloud", label: "iCloud 同步", value: "已开启", valueColor: Color.folio.success)
-                }
+                // iCloud 同步已移除（使用后端同步）
             }
 
             if isPro {
@@ -618,7 +615,7 @@ struct UpgradeComparisonView: View {
             ComparisonRow(feature: "RAG 问答", freeValue: .text("5次/月"), proValue: .text("无限")),
             ComparisonRow(feature: "知识简报", freeValue: .dash, proValue: .check),
             ComparisonRow(feature: "知识地图", freeValue: .dash, proValue: .check),
-            ComparisonRow(feature: "iCloud 同步", freeValue: .dash, proValue: .check),
+            // iCloud 同步已移除
             ComparisonRow(feature: "存储空间", freeValue: .text("1 GB"), proValue: .text("无限")),
         ]
     }
