@@ -67,7 +67,7 @@ cleanup() {
         wait "$pid" 2>/dev/null || true
     done
     # 确保端口已释放
-    for port in 3000 8000 8080; do
+    for port in 3000 8080; do
         local remaining
         remaining=$(lsof -ti :"$port" 2>/dev/null || true)
         if [ -n "$remaining" ]; then
@@ -87,7 +87,6 @@ step "检查前置条件"
 
 command -v docker >/dev/null || err "缺少 docker，请先安装 Docker Desktop"
 command -v node >/dev/null   || err "缺少 node，请先安装 Node.js 18+"
-command -v python3 >/dev/null || err "缺少 python3，请先安装 Python 3.10+"
 command -v go >/dev/null     || err "缺少 go，请先安装 Go 1.24+"
 
 # Go 版本检查
@@ -111,11 +110,10 @@ fi
 
 log "docker $(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
 log "node $(node --version)"
-log "python3 $(python3 --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
 log "go $(go version | grep -oE 'go[0-9]+\.[0-9]+\.[0-9]*')"
 
 # ── 1. Docker 基础设施 ───────────────────────────────────────
-step "1/5 启动 PostgreSQL + Redis"
+step "1/4 启动 PostgreSQL + Redis"
 
 cd "$ROOT_DIR"
 docker compose -f docker-compose.dev.yml up -d
@@ -147,12 +145,12 @@ for i in $(seq 1 15); do
 done
 
 # ── 清理残留进程 ───────────────────────────────────────────────
-for port in 3000 8000 8080; do
+for port in 3000 8080; do
     kill_port "$port"
 done
 
 # ── 2. Reader 本地依赖 ───────────────────────────────────────
-step "2/5 启动 Reader Service (:3000)"
+step "2/4 启动 Reader Service (:3000)"
 
 if [ -z "$READER_PKG_DIR" ]; then
     err "@vakra-dev/reader 本地包不存在。请确保 $(cd "$ROOT_DIR/../.." && pwd)/reader 目录存在"
@@ -179,32 +177,8 @@ for i in $(seq 1 30); do
     if [ "$i" -eq 30 ]; then err "Reader Service 启动超时"; fi
 done
 
-# ── 3. Mock AI Service ────────────────────────────────────────
-step "3/5 启动 Mock AI Service (:8000)"
-
-cd "$ROOT_DIR"
-
-# 确保 fastapi/uvicorn 已安装
-python3 -c "import fastapi, uvicorn" 2>/dev/null || {
-    warn "安装 fastapi + uvicorn..."
-    python3 -m pip install -q fastapi uvicorn pydantic
-}
-
-python3 scripts/mock_ai_service.py > "$LOG_DIR/mock-ai.log" 2>&1 &
-PIDS+=($!)
-log "Mock AI 日志: $LOG_DIR/mock-ai.log"
-
-for i in $(seq 1 15); do
-    if curl -s http://localhost:8000/health 2>/dev/null | grep -q ok; then
-        log "Mock AI Service 就绪"
-        break
-    fi
-    sleep 1
-    if [ "$i" -eq 15 ]; then err "Mock AI Service 启动超时"; fi
-done
-
-# ── 4. Go API Server ─────────────────────────────────────────
-step "4/5 构建并启动 Go API Server (:8080)"
+# ── 3. Go API Server ─────────────────────────────────────────
+step "3/4 构建并启动 Go API Server (:8080)"
 
 cd "$ROOT_DIR"
 
@@ -212,7 +186,6 @@ export DATABASE_URL="postgresql://folio:folio@localhost:5432/folio"
 export REDIS_ADDR="localhost:6380"
 export JWT_SECRET="dev-jwt-secret-change-in-production"
 export READER_URL="http://localhost:3000"
-export AI_SERVICE_URL="http://localhost:8000"
 export LOG_LEVEL="debug"
 export PORT="8080"
 
@@ -231,8 +204,8 @@ for i in $(seq 1 30); do
     if [ "$i" -eq 30 ]; then err "Go API Server 启动超时"; fi
 done
 
-# ── 5. 打开 Xcode ────────────────────────────────────────────
-step "5/5 打开 Xcode 项目"
+# ── 4. 打开 Xcode ────────────────────────────────────────────
+step "4/4 打开 Xcode 项目"
 
 XCPROJ="$ROOT_DIR/../ios/Folio.xcodeproj"
 if [ -d "$XCPROJ" ]; then
@@ -250,14 +223,12 @@ echo -e "${GREEN}═════════════════════
 echo ""
 echo "  API Server   http://localhost:8080"
 echo "  Reader       http://localhost:3000"
-echo "  Mock AI      http://localhost:8000"
 echo "  PostgreSQL   localhost:5432  (folio/folio)"
 echo "  Redis        localhost:6380"
 echo ""
 echo "  日志文件:"
 echo "    API Server   $LOG_DIR/api-server.log"
 echo "    Reader       $LOG_DIR/reader.log"
-echo "    Mock AI      $LOG_DIR/mock-ai.log"
 echo ""
 echo "  实时查看日志:  tail -f $LOG_DIR/*.log"
 echo ""
