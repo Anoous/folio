@@ -28,42 +28,35 @@ struct HomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Custom top bar matching prototype 01
-            HStack {
-                Text("页集")
-                    .font(Typography.v3PageTitle)
-                    .foregroundStyle(Color.folio.textPrimary)
-                Spacer()
-                HStack(spacing: 4) {
-                    Button {
-                        isSearchActive = true
-                    } label: {
-                        Circle()
-                            .fill(Color.clear)
-                            .frame(width: 38, height: 38)
-                            .overlay {
-                                Image(systemName: "magnifyingglass")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundStyle(Color.folio.textSecondary)
-                            }
+            // Custom top bar (prototype 01)
+            if !isSearchActive {
+                HStack {
+                    Text("页集")
+                        .font(Typography.v3PageTitle)
+                        .foregroundStyle(Color.folio.textPrimary)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Button { isSearchActive = true } label: {
+                            Circle().fill(Color.clear).frame(width: 38, height: 38)
+                                .overlay {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundStyle(Color.folio.textSecondary)
+                                }
+                        }
+                        NavigationLink(value: HomeDestination.settings) {
+                            Circle().fill(Color.clear).frame(width: 38, height: 38)
+                                .overlay {
+                                    Image(systemName: "gearshape")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundStyle(Color.folio.textSecondary)
+                                }
+                        }
                     }
-                    .accessibilityLabel("Search")
-
-                    NavigationLink(value: HomeDestination.settings) {
-                        Circle()
-                            .fill(Color.clear)
-                            .frame(width: 38, height: 38)
-                            .overlay {
-                                Image(systemName: "gearshape")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundStyle(Color.folio.textSecondary)
-                            }
-                    }
-                    .accessibilityLabel("Settings")
                 }
+                .padding(.horizontal, Spacing.screenPadding)
+                .padding(.top, 6)
             }
-            .padding(.horizontal, Spacing.screenPadding)
-            .padding(.top, 6)
 
             mainContent
         }
