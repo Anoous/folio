@@ -49,7 +49,21 @@ struct ReaderView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("页集")
+                            .font(.system(size: 16))
+                    }
+                    .foregroundStyle(Color.folio.accent)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     showMoreMenu = true
