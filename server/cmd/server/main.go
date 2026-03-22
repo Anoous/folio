@@ -98,6 +98,11 @@ func main() {
 	// Content cache repository
 	contentCacheRepo := repository.NewContentCacheRepo(pool)
 
+	// Highlight
+	highlightRepo := repository.NewHighlightRepo(pool)
+	highlightService := service.NewHighlightService(highlightRepo, articleRepo, asynqClient)
+	highlightHandler := handler.NewHighlightHandler(highlightService)
+
 	// Echo repository
 	echoRepo := repository.NewEchoRepo(pool)
 
@@ -115,6 +120,7 @@ func main() {
 		TaskHandler:         taskHandler,
 		SubscriptionHandler: subscriptionHandler,
 		EchoHandler:         echoAPIHandler,
+		HighlightHandler:    highlightHandler,
 	})
 
 	// Worker server
