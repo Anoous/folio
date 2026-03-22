@@ -16,7 +16,12 @@
 |------|------|------|
 | 渲染方案 | WKWebView | 精确偏移量、完整 Markdown 支持、行业标准、原型 CSS 可复用 |
 | 偏移量计算 | JS Selection API → 字符偏移 | 精确、无歧义 |
-| 同步策略 | 立刻同步（乐观更新） | 跨设备同步、Echo 卡片生成依赖后端 |
+| 创建流程 | 两步：选中 → 弹出"高亮/复制"菜单 → 点击创建 | 比自动高亮更不容易误操作 |
+| 同步策略 | 本地先存 + 联网后同步（乐观更新） | 本地优先 App，离线也能高亮 |
+| 离线支持 | 本地 SwiftData 立即保存，联网后 POST 到后端 | 复用 OfflineQueueManager 模式 |
+| 内容变化保护 | 有高亮的文章不重新抓取 | 避免偏移量失效 |
+| 同步去重 | DB UNIQUE (article_id, user_id, start_offset, end_offset) | 防止多设备重复高亮 |
+| 阅读偏好 | 动态注入 CSS 变量（字号/行距/字体/主题） | 保留现有用户自定义能力 |
 | Echo 集成 | 创建高亮时自动生成 | 高亮 = 用户标记"重要"，值得回忆 |
 
 ## 架构
@@ -49,8 +54,13 @@ Markdown → HTML + CSS → WKWebView
   - 链接：accent color
   - 图片：max-width 100%, 8px radius
 - 注入高亮列表作为 JS 数据（`window.existingHighlights = [...]`）
-- 支持 Light/Dark mode（CSS media query 或 JS 注入 theme）
-- 背景色：`#FAF9F6` (light) / `#000` (dark)
+- **动态 CSS 变量**（从 `@AppStorage` 读取阅读偏好注入）：
+  - `--font-size`: 用户设置的字号（默认 17px）
+  - `--line-height`: 用户设置的行距（默认 1.75）
+  - `--font-family`: 用户选择的字体（LXGW WenKai TC / Noto Serif SC / Georgia / system）
+  - `--theme`: light / dark / sepia（跟随用户 ReadingTheme 设置）
+- 背景色：light=#FAF9F6, dark=#000, sepia=#F5F0E8（通过 theme 变量控制）
+- 字体偏好变化时通过 JS bridge 动态更新（`evaluateJavaScript("setPreferences(...)")`）
 
 ### 2. ArticleWebView（UIViewRepresentable）
 
@@ -101,17 +111,21 @@ webView.evaluateJavaScript("setTheme('dark')")
 **注入到 HTML 的 `<script>`：**
 
 **文本选择 → 高亮：**
-1. 监听 `selectionchange` 事件
-2. 选中文字后延迟 200ms 检查 selection
-3. 如果 selection 长度 > 2 字符且不在已高亮区域内：
+1. 监听 `touchend` / `mouseup` 事件（WKWebView 上 `selectionchange` 不可靠）
+2. 延迟 200ms 检查 `window.getSelection()`
+3. 如果 selection 长度 > 2 字符且不在已高亮 `<mark>` 区域内：
    - 显示自定义浮动菜单（"高亮" / "复制"）
-   - 菜单定位在 selection 上方
+   - 菜单定位：`bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%)`（相对于 selection rect）
+   - 菜单有向下三角箭头（CSS border trick）
 4. 点击"高亮"：
    - 获取 selection 在纯文本中的 start/end offset
-   - 用 `<mark class="hl" data-id="temp">` 包裹选中文字
+   - 用 `<mark class="hl" data-id="temp">` 包裹选中文字（`surroundContents`，部分重叠时 try/catch 静默失败）
    - `window.webkit.messageHandlers.folio.postMessage({ type: "highlight.create", ... })`
-5. Swift 收到后创建 Highlight，返回 server ID
-6. JS 更新 `data-id` 为真实 ID
+   - **限制：** text 长度不超过 500 字符（超长选择静默截断）
+5. 点击"复制"：复制选中文本 → toast "已复制"
+6. Swift 收到 create 消息后：本地 SwiftData 立即保存 → 显示成功 → 异步 POST 到后端
+7. 后端返回 server ID → JS 更新 `data-id`
+8. 如果网络不可用 → 本地排队，联网后批量同步（OfflineQueueManager 模式）
 
 **偏移量计算方法：**
 ```javascript
@@ -124,8 +138,13 @@ function getTextOffset(node, offset) {
 
 **已高亮交互：**
 - 点击 `<mark class="hl">` → 显示菜单（"移除高亮" / "复制"）
-- 点击"移除高亮" → 移除 `<mark>` 标签，还原文本 → postMessage `highlight.remove`
-- 点击其他区域 → 关闭菜单
+- 点击"移除高亮" → 移除 `<mark>` 标签，还原文本 → postMessage `highlight.remove` → toast "已移除高亮"
+- 点击"复制" → 复制高亮文本 → toast "已复制"
+- 点击其他区域 → 关闭所有菜单
+
+**Toast 通知：**
+- 通过 JS bridge → Swift → 复用现有 ToastView 显示
+- postMessage `{ type: "toast", message: "已移除高亮" }`
 
 **高亮菜单样式（原型 04）：**
 - 位置：选中区域上方 8px
@@ -151,16 +170,18 @@ function getTextOffset(node, offset) {
     border-radius: 2px;
     padding: 1px 0;
     cursor: pointer;
+    position: relative;
 }
 
-@media (prefers-color-scheme: dark) {
-    .hl { background: rgba(41, 151, 255, 0.15); }
-}
+[data-theme="dark"] .hl { background: rgba(41, 151, 255, 0.15); }
 
 /* 浮动菜单 */
 .hl-popup {
     position: absolute;
-    display: flex;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
     background: var(--text-1);
     color: var(--bg);
     border-radius: 8px;
@@ -168,6 +189,18 @@ function getTextOffset(node, offset) {
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     z-index: 50;
     animation: popIn 0.15s ease;
+}
+.hl-popup.on { display: flex; }
+
+/* 向下三角箭头 */
+.hl-popup::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--text-1);
 }
 
 .hl-popup-btn {
@@ -177,6 +210,14 @@ function getTextOffset(node, offset) {
     border: none;
     background: none;
     color: inherit;
+    border-radius: 4px;
+}
+.hl-popup-btn:active { opacity: 0.5; }
+.hl-popup-btn + .hl-popup-btn { border-left: 0.5px solid rgba(255,255,255,0.15); }
+
+@keyframes popIn {
+    from { opacity: 0; transform: translateX(-50%) scale(0.9); }
+    to { opacity: 1; transform: translateX(-50%) scale(1); }
 }
 ```
 
@@ -197,9 +238,12 @@ CREATE TABLE IF NOT EXISTS highlights (
     note TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_highlights_unique ON highlights (article_id, user_id, start_offset, end_offset);
 CREATE INDEX IF NOT EXISTS idx_highlights_article ON highlights (article_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_highlights_user ON highlights (user_id, created_at DESC);
 ```
+
+**内容变化保护：** 有高亮的文章不重新抓取。在 `article:crawl` Worker 中检查 `articles.highlight_count > 0`，如果有高亮则跳过重新抓取。
 
 ### 2. 文件结构
 
@@ -274,8 +318,10 @@ server/internal/
 创建高亮时入队 `echo:generate`：
 - 传入 `highlight_id` + `article_id` + `user_id`
 - Worker 检测到 highlight_id → 生成 `card_type = 'highlight'` 卡片
-- AI prompt：基于高亮文本 + 文章标题，生成"你标注了这句话——它出现在什么上下文中？"风格的问题
-- answer = 高亮原文
+- AI prompt 风格（匹配原型 02）：
+  - question："你在一篇关于 {主题} 的文章中标注了一句话。还记得你标注的原文是什么吗？"
+  - answer：高亮原文（如"API 的终极目标不是完备性，而是可预测性。用户不读文档就能猜对参数名。"）
+  - source_context："你在 {日期} 标注了这段文字 · 来自《{文章标题}》"
 - echo_cards.highlight_id = highlight_id
 
 ## iOS 数据层
@@ -326,10 +372,27 @@ func deleteHighlight(id: String) async throws
 - **阅读进度**从 WebView scroll 事件获取（替代当前 SwiftUI GeometryReader 方案）
 - **图片查看**：WebView 内图片点击通过 JS bridge 通知 Swift，复用现有 ImageViewerOverlay
 
+## WKWebView Reader 功能对等清单
+
+从 SwiftUI MarkdownRenderer 迁移到 WKWebView 时，必须保留以下现有功能：
+
+| 现有功能 | WKWebView 方案 |
+|---------|---------------|
+| 阅读偏好（字号/行距/字体/主题） | 动态 CSS 变量注入，偏好变化时 JS bridge 更新 |
+| 图片点击 → 全屏查看器 | JS 拦截 img click → postMessage `{ type: "image.tap", src: "..." }` → 复用 ImageViewerOverlay |
+| 链接点击 → Safari | JS 拦截 a click → postMessage `{ type: "link.tap", href: "..." }` → Swift 打开 SafariViewController |
+| 阅读进度追踪 | JS scroll 事件 → postMessage `scroll.progress` → 更新 ReaderViewModel |
+| 滚动位置恢复 | 打开文章时传入 `readProgress` → JS `window.scrollTo(0, height * progress)` |
+| 入场动画 | WebView 内容加载完成后回调 → Swift 控制容器 opacity 0→1（ink 动效） |
+| 表格渲染 | HTML `<table>` + CSS 样式（水平滚动容器） |
+| 代码块 | `<pre><code>` + SF Mono 字体 + 灰背景 + 圆角 |
+| Dark mode | CSS theme 变量 + JS `setTheme()` 切换 |
+| WKWebView 安全 | 禁用外部导航（`decidePolicyFor navigationAction`），拦截所有链接和表单 |
+
 ## 不做
 
 - 多色高亮
-- 高亮笔记/备注
+- 高亮笔记/备注（DB `note` 列预留，不实现 UI）
 - 高亮导出
-- 离线高亮创建（需要网络同步到后端）
 - 高亮搜索（P1.3 RAG 自然支持）
+- 单篇文章高亮数量限制（暂不限制，观察实际使用）
