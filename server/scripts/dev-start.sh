@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-# Folio 本地开发一键启动脚本
+# Folio 本地开发一键启动脚本（全容器模式）
 # 用法: ./scripts/dev-start.sh
-# 停止: Ctrl+C（自动清理所有子进程）
+# 停止: Ctrl+C
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-READER_PKG_DIR="$(cd "$ROOT_DIR/../../reader" 2>/dev/null && pwd || echo "")"
-PIDS=()
-LOG_DIR="$ROOT_DIR/logs"
-mkdir -p "$LOG_DIR"
+COMPOSE_FILE="$ROOT_DIR/docker-compose.local.yml"
+ENV_FILE="$ROOT_DIR/.env"
 
 # 颜色
 RED='\033[0;31m'
@@ -22,63 +20,13 @@ warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[✗]${NC} $*"; exit 1; }
 step() { echo -e "\n${CYAN}===> $*${NC}"; }
 
-# ── 工具函数 ──────────────────────────────────────────────────
-
-# 杀掉进程树（先杀子进程，再杀父进程）
-kill_tree() {
-    local pid=$1
-    # 递归杀掉所有子进程
-    local children
-    children=$(pgrep -P "$pid" 2>/dev/null || true)
-    for child in $children; do
-        kill_tree "$child"
-    done
-    kill "$pid" 2>/dev/null || true
-}
-
-# 清理占用指定端口的进程
-kill_port() {
-    local port=$1
-    local pids
-    pids=$(lsof -ti :"$port" 2>/dev/null || true)
-    if [ -n "$pids" ]; then
-        warn "端口 $port 被占用 (PID: $pids)，正在终止..."
-        for pid in $pids; do
-            kill "$pid" 2>/dev/null || true
-        done
-        sleep 1
-        # 强制杀掉仍存活的进程
-        pids=$(lsof -ti :"$port" 2>/dev/null || true)
-        for pid in $pids; do
-            kill -9 "$pid" 2>/dev/null || true
-        done
-    fi
-}
-
 # ── Ctrl+C 清理 ──────────────────────────────────────────────
 cleanup() {
     echo ""
-    step "正在停止所有服务..."
-    for pid in "${PIDS[@]}"; do
-        kill_tree "$pid"
-    done
-    # 等待所有子进程退出
-    for pid in "${PIDS[@]}"; do
-        wait "$pid" 2>/dev/null || true
-    done
-    # 确保端口已释放
-    for port in 3000 8080; do
-        local remaining
-        remaining=$(lsof -ti :"$port" 2>/dev/null || true)
-        if [ -n "$remaining" ]; then
-            warn "端口 $port 仍被占用，强制终止..."
-            kill -9 $remaining 2>/dev/null || true
-        fi
-    done
-    log "所有后台服务已停止"
-    echo -e "${YELLOW}提示: Docker 容器仍在运行，如需停止:${NC}"
-    echo "  cd $ROOT_DIR && docker compose -f docker-compose.dev.yml down"
-    echo "  加 -v 可清除数据: docker compose -f docker-compose.dev.yml down -v"
+    step "正在停止所有容器..."
+    cd "$ROOT_DIR"
+    docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>/dev/null || true
+    log "所有容器已停止"
 }
 trap cleanup EXIT
 
@@ -86,122 +34,118 @@ trap cleanup EXIT
 step "检查前置条件"
 
 command -v docker >/dev/null || err "缺少 docker，请先安装 Docker Desktop"
-command -v node >/dev/null   || err "缺少 node，请先安装 Node.js 18+"
-command -v go >/dev/null     || err "缺少 go，请先安装 Go 1.24+"
+log "docker $(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
 
-# Go 版本检查
-GO_VER=$(go version | grep -oE 'go[0-9]+\.[0-9]+' | head -1 | sed 's/go//')
-GO_MAJOR=$(echo "$GO_VER" | cut -d. -f1)
-GO_MINOR=$(echo "$GO_VER" | cut -d. -f2)
-if (( GO_MAJOR < 1 || (GO_MAJOR == 1 && GO_MINOR < 24) )); then
-    warn "Go 版本 $GO_VER < 1.24，尝试自动切换..."
-    if command -v gvm >/dev/null; then
-        # 检查是否已安装 go1.24.0
-        if ! gvm list 2>/dev/null | grep -q "go1.24"; then
-            step "安装 Go 1.24.0（首次需要几分钟）"
-            gvm install go1.24.0 -B || err "gvm install go1.24.0 失败，请手动安装"
-        fi
-        eval "$(SHELL=/bin/bash gvm 'use' go1.24.0)" 2>/dev/null || gvm use go1.24.0
-        log "已切换到 $(go version)"
-    else
-        err "Go $GO_VER 太旧且未安装 gvm。请手动安装 Go 1.24+: https://go.dev/dl/"
-    fi
+# ── 1. 确保 .env ─────────────────────────────────────────────
+step "1/4 检查环境配置"
+
+# 委托 deploy-local.sh 的 ensure_env 逻辑
+if [ ! -f "$ENV_FILE" ]; then
+    log "从模板创建 .env..."
+    cp "$ROOT_DIR/.env.example" "$ENV_FILE"
 fi
 
-log "docker $(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
-log "node $(node --version)"
-log "go $(go version | grep -oE 'go[0-9]+\.[0-9]+\.[0-9]*')"
+if ! grep -q '^DB_PASSWORD=' "$ENV_FILE"; then
+    echo "DB_PASSWORD=folio" >> "$ENV_FILE"
+    log "添加 DB_PASSWORD=folio"
+fi
 
-# ── 1. Docker 基础设施 ───────────────────────────────────────
-step "1/4 启动 PostgreSQL + Redis"
+if ! grep -q '^JWT_SECRET=' "$ENV_FILE" || \
+   [ "$(grep '^JWT_SECRET=' "$ENV_FILE" | cut -d= -f2- | wc -c)" -lt 33 ]; then
+    jwt_secret="$(openssl rand -base64 48 | tr -d '\n')"
+    sed -i '' '/^JWT_SECRET=/d' "$ENV_FILE" 2>/dev/null || sed -i '/^JWT_SECRET=/d' "$ENV_FILE"
+    echo "JWT_SECRET=$jwt_secret" >> "$ENV_FILE"
+    log "生成 JWT_SECRET"
+fi
+
+dk_key="$(grep '^DEEPSEEK_API_KEY=' "$ENV_FILE" | cut -d= -f2- || true)"
+if [ -z "$dk_key" ]; then
+    warn "DEEPSEEK_API_KEY 为空 — 将使用 mock AI（无真实分析）"
+else
+    log "DEEPSEEK_API_KEY 已配置"
+fi
+
+# ── 2. 停掉可能冲突的旧栈 ────────────────────────────────────
+step "2/4 清理旧进程和容器"
+
+# 停掉 dev 模式的 docker-compose（端口冲突）
+if docker compose -f "$ROOT_DIR/docker-compose.dev.yml" ps --status running 2>/dev/null | grep -q "postgres"; then
+    warn "dev 栈仍在运行，停止中..."
+    docker compose -f "$ROOT_DIR/docker-compose.dev.yml" down 2>/dev/null || true
+fi
+
+# 停掉端口 8080 上的本地进程
+local_pid=$(lsof -ti :8080 2>/dev/null || true)
+if [ -n "$local_pid" ]; then
+    warn "端口 8080 被占用 (PID: $local_pid)，正在终止..."
+    kill $local_pid 2>/dev/null || true
+    sleep 1
+fi
+
+# ── 3. 构建并启动全栈容器 ────────────────────────────────────
+step "3/4 构建并启动容器"
 
 cd "$ROOT_DIR"
-docker compose -f docker-compose.dev.yml up -d
 
-# 等待 PostgreSQL 就绪
-echo -n "  等待 PostgreSQL"
-for i in $(seq 1 30); do
-    if docker compose -f docker-compose.dev.yml exec -T postgres pg_isready -q 2>/dev/null; then
+# 打包 reader 本地依赖
+READER_LIB_DIR="$(cd "$ROOT_DIR/../../reader" 2>/dev/null && pwd || echo "")"
+if [ -z "$READER_LIB_DIR" ] || [ ! -d "$READER_LIB_DIR" ]; then
+    err "@vakra-dev/reader 不存在。请确保 ~/github/reader 目录存在"
+fi
+
+if [ ! -f "$READER_LIB_DIR/dist/index.js" ]; then
+    log "构建 @vakra-dev/reader..."
+    (cd "$READER_LIB_DIR" && /opt/homebrew/bin/npm run build)
+fi
+
+log "打包 @vakra-dev/reader..."
+(cd "$READER_LIB_DIR" && npm pack --pack-destination "$ROOT_DIR/reader-service" 2>/dev/null)
+packed="$(ls -t "$ROOT_DIR/reader-service"/vakra-dev-reader-*.tgz 2>/dev/null | head -1)"
+if [ -n "$packed" ]; then
+    mv "$packed" "$ROOT_DIR/reader-service/reader-local.tgz"
+fi
+
+# 临时修改 package.json 用 tarball
+cd "$ROOT_DIR/reader-service"
+pkg_patched=false
+if grep -q '"file:../../../reader"' package.json; then
+    sed -i '' 's|"file:../../../reader"|"file:./reader-local.tgz"|' package.json 2>/dev/null || \
+    sed -i 's|"file:../../../reader"|"file:./reader-local.tgz"|' package.json
+    pkg_patched=true
+fi
+if [ -f package-lock.json ]; then
+    mv package-lock.json package-lock.json.bak
+fi
+cd "$ROOT_DIR"
+
+# 构建并启动
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up --build -d
+
+# 恢复 package.json
+cd "$ROOT_DIR/reader-service"
+if [ "$pkg_patched" = true ]; then
+    sed -i '' 's|"file:./reader-local.tgz"|"file:../../../reader"|' package.json 2>/dev/null || \
+    sed -i 's|"file:./reader-local.tgz"|"file:../../../reader"|' package.json
+fi
+if [ -f package-lock.json.bak ]; then
+    mv package-lock.json.bak package-lock.json
+fi
+cd "$ROOT_DIR"
+
+# 等待 API 就绪
+echo -n "  等待 API Server"
+for i in $(seq 1 60); do
+    if curl -s http://localhost:8080/health 2>/dev/null | grep -q ok; then
         echo ""
-        log "PostgreSQL 就绪 (localhost:5432)"
+        log "API Server 就绪"
         break
     fi
     echo -n "."
     sleep 1
-    if [ "$i" -eq 30 ]; then
+    if [ "$i" -eq 60 ]; then
         echo ""
-        err "PostgreSQL 启动超时"
+        err "API Server 启动超时"
     fi
-done
-
-# 等待 Redis 就绪
-for i in $(seq 1 15); do
-    if docker compose -f docker-compose.dev.yml exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; then
-        log "Redis 就绪 (localhost:6380)"
-        break
-    fi
-    sleep 1
-    if [ "$i" -eq 15 ]; then err "Redis 启动超时"; fi
-done
-
-# ── 清理残留进程 ───────────────────────────────────────────────
-for port in 3000 8080; do
-    kill_port "$port"
-done
-
-# ── 2. Reader 本地依赖 ───────────────────────────────────────
-step "2/4 启动 Reader Service (:3000)"
-
-if [ -z "$READER_PKG_DIR" ]; then
-    err "@vakra-dev/reader 本地包不存在。请确保 $(cd "$ROOT_DIR/../.." && pwd)/reader 目录存在"
-fi
-
-# 每次都重新构建 reader 包，避免改动未生效
-log "构建 @vakra-dev/reader..."
-(cd "$READER_PKG_DIR" && /opt/homebrew/bin/npm install --silent 2>/dev/null && /opt/homebrew/bin/npm run build)
-
-cd "$ROOT_DIR/reader-service"
-rm -rf node_modules/@vakra-dev
-/opt/homebrew/bin/npm install --silent 2>/dev/null
-npm run dev > "$LOG_DIR/reader.log" 2>&1 &
-PIDS+=($!)
-log "Reader 日志: $LOG_DIR/reader.log"
-
-# 等待 Reader 就绪
-for i in $(seq 1 30); do
-    if curl -s http://localhost:3000/health 2>/dev/null | grep -q ok; then
-        log "Reader Service 就绪"
-        break
-    fi
-    sleep 1
-    if [ "$i" -eq 30 ]; then err "Reader Service 启动超时"; fi
-done
-
-# ── 3. Go API Server ─────────────────────────────────────────
-step "3/4 构建并启动 Go API Server (:8080)"
-
-cd "$ROOT_DIR"
-
-export DATABASE_URL="postgresql://folio:folio@localhost:5432/folio"
-export REDIS_ADDR="localhost:6380"
-export JWT_SECRET="dev-jwt-secret-change-in-production"
-export READER_URL="http://localhost:3000"
-export LOG_LEVEL="debug"
-export PORT="8080"
-
-log "编译 Go server..."
-go build -o "$ROOT_DIR/.bin/folio-server" ./cmd/server
-"$ROOT_DIR/.bin/folio-server" > "$LOG_DIR/api-server.log" 2>&1 &
-PIDS+=($!)
-log "API Server 日志: $LOG_DIR/api-server.log"
-
-for i in $(seq 1 30); do
-    if curl -s http://localhost:8080/health 2>/dev/null | grep -q ok; then
-        log "Go API Server 就绪"
-        break
-    fi
-    sleep 1
-    if [ "$i" -eq 30 ]; then err "Go API Server 启动超时"; fi
 done
 
 # ── 4. 打开 Xcode ────────────────────────────────────────────
@@ -218,27 +162,24 @@ fi
 # ── 完成 ──────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  所有服务已启动！${NC}"
+echo -e "${GREEN}  所有服务已启动！（容器模式）${NC}"
 echo -e "${GREEN}════════════════════════════════════════════════════${NC}"
 echo ""
-echo "  API Server   http://localhost:8080"
-echo "  Reader       http://localhost:3000"
-echo "  PostgreSQL   localhost:5432  (folio/folio)"
-echo "  Redis        localhost:6380"
+echo "  API Server   http://localhost:8080  (容器)"
+echo "  Reader       容器内 :3000"
+echo "  PostgreSQL   容器内 :5432"
+echo "  Redis        容器内 :6379"
 echo ""
-echo "  日志文件:"
-echo "    API Server   $LOG_DIR/api-server.log"
-echo "    Reader       $LOG_DIR/reader.log"
-echo ""
-echo "  实时查看日志:  tail -f $LOG_DIR/*.log"
+echo "  查看日志:  docker compose -f docker-compose.local.yml logs -f"
+echo "  查看状态:  docker compose -f docker-compose.local.yml ps"
 echo ""
 echo "  iOS 测试步骤:"
 echo "    1. Xcode 中选择 iPhone 模拟器，Cmd+R 运行"
-echo "    2. App 启动后通过 Apple 登录"
+echo "    2. App 启动后点击 Dev Login"
 echo "    3. 开始测试：提交文章、浏览、搜索..."
 echo ""
-echo -e "  ${YELLOW}按 Ctrl+C 停止所有服务${NC}"
+echo -e "  ${YELLOW}按 Ctrl+C 停止所有容器${NC}"
 echo ""
 
-# 保持前台，等待 Ctrl+C
-wait
+# 保持前台，跟踪容器日志
+docker compose -f "$COMPOSE_FILE" logs -f

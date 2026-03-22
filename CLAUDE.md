@@ -41,7 +41,7 @@ folio/
     │   ├── run_e2e.sh              # 完整 E2E 测试运行器
     │   └── smoke_api_e2e.sh        # 快速 API 冒烟测试
     ├── docker-compose.yml          # 生产环境（Caddy + API + Reader + PG + Redis）
-    ├── docker-compose.dev.yml      # 开发环境（PostgreSQL :5432 + Redis :6380）
+    ├── docker-compose.local.yml     # 开发环境（全栈容器：API + Reader + PG + Redis）
     ├── docker-compose.test.yml     # E2E 测试（隔离端口 15432/16379）
     ├── Dockerfile                  # 多阶段 Go API 构建
     ├── Caddyfile                   # 反向代理配置
@@ -135,7 +135,7 @@ folio/
 | `DATABASE_URL` | 是 | — | PostgreSQL 连接字符串 |
 | `JWT_SECRET` | 是 | — | JWT 签名密钥 |
 | `PORT` | 否 | 8080 | HTTP 端口 |
-| `REDIS_ADDR` | 否 | localhost:6379 | Redis 地址（开发环境用 6380，见 docker-compose.dev.yml） |
+| `REDIS_ADDR` | 否 | localhost:6379 | Redis 地址（容器内默认 redis:6379） |
 | `READER_URL` | 否 | http://localhost:3000 | Reader 服务 URL |
 | `DEEPSEEK_API_KEY` | 否 | —（空=mock） | DeepSeek API 密钥，为空时使用内置 mock 分析器 |
 | `DEEPSEEK_BASE_URL` | 否 | https://api.deepseek.com | DeepSeek API 基础 URL |
@@ -178,15 +178,7 @@ PostgreSQL 16，迁移文件位于 `server/migrations/001_init.up.sql`。
 
 ## 本地开发
 
-**重要 — 数据库访问**：宿主机上**未安装** `psql`。PostgreSQL 运行在 Docker 内。始终使用 `docker exec` 执行数据库命令：
-```bash
-# 开发数据库（docker-compose.dev.yml）
-docker exec $(docker ps --filter "publish=5432" -q) psql -U folio -d folio -c "YOUR SQL HERE"
-
-# E2E 测试数据库（docker-compose.test.yml）
-docker exec $(docker ps --filter "publish=15432" -q) psql -U folio -d folio -c "YOUR SQL HERE"
-```
-同样，宿主机上也没有 `redis-cli`。Redis 访问也需通过 `docker exec`。
+**全容器模式**：所有后端服务运行在 Docker 容器内（`docker-compose.local.yml`），宿主机只需要安装 Docker。
 
 **一键启动**：
 
@@ -194,13 +186,56 @@ docker exec $(docker ps --filter "publish=15432" -q) psql -U folio -d folio -c "
 cd server && ./scripts/dev-start.sh
 ```
 
-自动完成：通过 gvm 检查/安装 Go 1.24、Docker 启动 PostgreSQL (:5432) + Redis (:6380)、按需构建 reader 本地依赖、启动 Reader (:3000) + Go API (:8080)、打开 Xcode。
+自动完成：检查 `.env` 配置、打包 reader 本地依赖、构建并启动全栈容器（Go API + Reader + PostgreSQL + Redis）、打开 Xcode。
 
-**开发端口**：
-- Go API：8080
-- Reader：3000
-- PostgreSQL：5432（用户：folio，密码：folio，数据库：folio）
-- Redis：6380（注意：不是 6379，在 docker-compose.dev.yml 中映射）
+**宿主机暴露端口**：
+- Go API：8080（唯一对外端口，iOS App 连接此地址）
+
+Reader、PostgreSQL、Redis 仅在容器网络内通信，不暴露到宿主机。
+
+**数据库访问**：宿主机上**未安装** `psql`，通过 `docker compose exec` 访问：
+```bash
+# 开发数据库
+cd server && docker compose -f docker-compose.local.yml exec postgres psql -U folio -d folio -c "YOUR SQL HERE"
+
+# E2E 测试数据库（docker-compose.test.yml）
+docker exec $(docker ps --filter "publish=15432" -q) psql -U folio -d folio -c "YOUR SQL HERE"
+```
+
+**Redis 访问**：
+```bash
+cd server && docker compose -f docker-compose.local.yml exec redis redis-cli
+```
+
+**查看日志**：
+```bash
+# 所有容器日志
+cd server && docker compose -f docker-compose.local.yml logs -f
+
+# 只看 API 日志
+cd server && docker compose -f docker-compose.local.yml logs -f app
+
+# 搜索特定日志（如邮箱验证码）
+cd server && docker compose -f docker-compose.local.yml logs app | grep 'verification code' | tail -5
+
+# 搜索文章抓取结果
+cd server && docker compose -f docker-compose.local.yml logs app | grep 'crawl task completed' | tail -10
+```
+
+**代码改动后重启**：
+```bash
+# 重新构建并重启 API 容器（Reader/DB/Redis 不受影响）
+cd server && docker compose -f docker-compose.local.yml up --build -d app
+
+# 全栈重建（含 Reader）
+cd server && ./scripts/deploy-local.sh rebuild
+```
+
+**停止服务**：在 dev-start.sh 终端按 Ctrl+C，或手动执行：
+```bash
+cd server && docker compose -f docker-compose.local.yml down
+# 加 -v 清除数据卷：docker compose -f docker-compose.local.yml down -v
+```
 
 **iOS 模拟器调试**：在 Xcode 中 Cmd+R → 点击 "Dev Login" 按钮（仅 DEBUG 构建可用）→ 测试功能。
 
@@ -217,17 +252,6 @@ xcrun devicectl device install app --device 00008130-000A61483EC0001C \
 # 3. 启动
 xcrun devicectl device process launch --device 00008130-000A61483EC0001C com.7WSH9CR7KS.folio.app
 ```
-
-**查看日志**：Go 服务器日志输出到 `/tmp/folio-server.log`。常用查询：
-```bash
-# 查看邮箱验证码
-grep 'verification code' /tmp/folio-server.log | tail -5
-
-# 查看文章抓取结果
-grep 'crawl task completed' /tmp/folio-server.log | tail -10
-```
-
-**停止服务**：在脚本终端 Ctrl+C（停止 Reader/Go），然后 `docker compose -f docker-compose.dev.yml down` 停止数据库/Redis。
 
 详见 `docs/local-deploy.md`。
 
@@ -303,16 +327,16 @@ driver = webdriver.Remote("http://localhost:4723", options=options)
 
 | 项目 | 命令 |
 |------|------|
-| Go 服务器（开发） | `cd server && go run ./cmd/server` |
-| Go 服务器（构建） | `cd server && go build -o folio-server ./cmd/server` |
-| Reader 服务（开发） | `cd server/reader-service && npm run dev` |
-| Reader 服务（构建） | `cd server/reader-service && npm run build && npm start` |
+| 开发一键启动（全容器） | `cd server && ./scripts/dev-start.sh` |
+| 开发栈重建（代码改动后） | `cd server && docker compose -f docker-compose.local.yml up --build -d app` |
+| 开发栈全量重建 | `cd server && ./scripts/deploy-local.sh rebuild` |
+| Go 服务器（本地构建） | `cd server && go build -o folio-server ./cmd/server` |
+| Reader 服务（本地构建） | `cd server/reader-service && npm run build` |
 | iOS（Xcode） | 打开 `ios/Folio.xcodeproj`，选择 Folio scheme，Cmd+R |
 | iOS（命令行构建 - 模拟器） | `xcodebuild build -project ios/Folio.xcodeproj -scheme Folio -destination 'generic/platform=iOS Simulator'` |
 | iOS（命令行构建 - 真机） | `xcodebuild build -project ios/Folio.xcodeproj -scheme Folio -destination 'id=00008130-000A61483EC0001C' -allowProvisioningUpdates` |
 | XcodeGen 重新生成 | `cd ios && xcodegen generate` |
 | Docker 生产环境 | `cd server && docker compose up -d` |
-| Docker 开发基础设施 | `cd server && docker compose -f docker-compose.dev.yml up -d` |
 
 ## 语言与国际化
 
