@@ -24,6 +24,7 @@ type RouterDeps struct {
 	SubscriptionHandler *handler.SubscriptionHandler
 	EchoHandler         *handler.EchoHandler
 	HighlightHandler    *handler.HighlightHandler
+	RAGHandler          *handler.RAGHandler
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -90,6 +91,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 			// Echo (spaced repetition)
 			r.Get("/echo/today", deps.EchoHandler.HandleGetToday)
 			r.Post("/echo/{id}/review", deps.EchoHandler.HandleSubmitReview)
+
+			// RAG (question answering over saved articles)
+			r.Post("/rag/query", deps.RAGHandler.HandleQuery)
 		})
 	})
 
