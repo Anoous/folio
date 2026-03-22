@@ -212,23 +212,40 @@ server/internal/
 匹配原型 02 的 4 步交互状态机：
 
 **Step 0 — 问题呈现：**
-- echoBg 背景，14pt 圆角
-- "✦ ECHO" 标签（11px, uppercase, tracking 2.5, textTertiary）
-- 问题文字（v3EchoQuestion 17px 衬线体，居中）
-- 来源信息（12px, textQuaternary）
-- "揭晓答案" 按钮（14px, 边框圆角 24px）
+- echoBg 背景，border-radius 14px，padding 28px 24px
+- "✦ ECHO" 标签（11px, weight 500, uppercase, tracking 2.5px, textTertiary, margin-bottom 20px）
+- 问题文字（Typography.v3EchoQuestion = LXGWWenKaiTC-Regular 17px, textPrimary, 居中, line-height 1.65, max-width 300px）
+- 来源信息（12px system, textQuaternary, margin-bottom 24px）
+- "揭晓答案" 按钮（14px, padding 10px 28px, border 1px solid separator, border-radius 24px, 无背景）
+- 按钮按下：scale(0.96) opacity(0.6)
 
-**Step 1 — 揭晓答案（settle 0.4s 展开）：**
-- 问题缩小变灰（15px, textTertiary, 左对齐）
-- 答案出现（17px 衬线体, 左侧 2px accent 竖线, padding-left 14px）
-- 来源标注（12px, textQuaternary, padding-left 14px）
-- "记得" / "忘了" 按钮（flex 两列，success/error 边框色）
+**Step 1 — 揭晓答案（settle 0.4s cubic-bezier(0.34,1.56,0.64,1) 展开）：**
+- padding 变为 24px
+- 问题缩小变灰（15px, textTertiary, 左对齐, max-width none）
+- 来源信息隐藏
+- 揭晓按钮隐藏
+- 答案出现（LXGWWenKaiTC-Regular 17px, textPrimary, 左侧 2px accent 竖线, padding-left 14px）
+- 答案入场动画：fadeUp（opacity 0→1, translateY 8px→0, settle timing）
+- 来源标注（12px, textQuaternary, padding-left 14px, margin-bottom 22px）
+- "记得" / "忘了" 按钮（flex 两列, gap 10px, 各 flex:1, padding 12px, border-radius 10px, border 0.5px solid separator, bg background, 14px font）
+  - 记得：color success, 左侧绿色圆点 8px, border-color rgba(36,138,61,0.15)
+  - 忘了：color error, 左侧红色圆点 8px, border-color rgba(215,0,21,0.1)
+  - 按下：scale(0.97)
 
-**Step 2 — 反馈后收缩（exit 0.2s）：**
-- 收缩为确认行（14px, textSecondary, 居中）
-- 记得："✓ 记得 · 下次 2 周后回顾"
+**Step 2 — 反馈后收缩（exit 0.2s ease-in）：**
+- padding 变为 18px 24px
+- 所有内容隐藏，只显示确认信息
+- 确认行（14px, textSecondary, 居中）
+- 记得："✓ 已记录 · 下次 2 周后回顾"
 - 忘了："已标记 · 3 天后再来"
-- streak 行："本周回忆率 85% · 已连续 7 天"（12px, textTertiary）
+- streak 行：border-top 0.5px solid separator, padding-top 10px, margin-top 10px
+  - "本周回忆率 85% · 已连续 7 天"（12px, textQuaternary, 居中）
+
+**状态处理：**
+- 离线时：不显示 Echo 卡片（需要网络获取）
+- 同步错误时：不显示 Echo 卡片
+- 处理中状态：不显示 Echo 卡片
+- Free 配额用尽：静默不显示 Echo 卡片（API 返回空 data）
 
 ### 3. HomeView 穿插逻辑
 
