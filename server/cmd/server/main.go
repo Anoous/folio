@@ -49,7 +49,15 @@ func main() {
 
 	// External clients
 	readerClient := client.NewReaderClient(cfg.ReaderURL)
-	aiClient := client.NewDeepSeekAnalyzer(os.Getenv("DEEPSEEK_API_KEY"), cfg.AIServiceURL)
+	// AI analyzer — real DeepSeek API if key is set, mock for development
+	var aiAnalyzer client.Analyzer
+	if cfg.DeepSeekAPIKey != "" {
+		aiAnalyzer = client.NewDeepSeekAnalyzer(cfg.DeepSeekAPIKey, cfg.DeepSeekBaseURL)
+		slog.Info("using DeepSeek AI analyzer")
+	} else {
+		aiAnalyzer = &client.MockAnalyzer{}
+		slog.Warn("DEEPSEEK_API_KEY not set, using mock AI analyzer")
+	}
 
 	// R2 client (optional — nil if not configured)
 	var r2Client *client.R2Client
@@ -104,7 +112,7 @@ func main() {
 	// Worker server
 	jinaClient := client.NewJinaClient(cfg.JinaAPIKey)
 	crawlHandler := worker.NewCrawlHandler(readerClient, jinaClient, articleRepo, taskRepo, asynqClient, r2Client != nil, contentCacheRepo, tagRepo, categoryRepo)
-	aiHandler := worker.NewAIHandler(aiClient, articleRepo, taskRepo, categoryRepo, tagRepo, contentCacheRepo)
+	aiHandler := worker.NewAIHandler(aiAnalyzer, articleRepo, taskRepo, categoryRepo, tagRepo, contentCacheRepo)
 
 	var workerServer *worker.WorkerServer
 	if r2Client != nil {

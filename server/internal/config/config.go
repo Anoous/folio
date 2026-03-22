@@ -10,7 +10,8 @@ type Config struct {
 	DatabaseURL  string
 	RedisAddr    string
 	ReaderURL    string
-	AIServiceURL string
+	DeepSeekAPIKey  string
+	DeepSeekBaseURL string
 	JWTSecret    string
 	R2Endpoint   string
 	R2AccessKey  string
@@ -28,7 +29,8 @@ func Load() (*Config, error) {
 		DatabaseURL:  os.Getenv("DATABASE_URL"),
 		RedisAddr:    envOrDefault("REDIS_ADDR", "localhost:6379"),
 		ReaderURL:    envOrDefault("READER_URL", "http://localhost:3000"),
-		AIServiceURL: envOrDefault("AI_SERVICE_URL", "http://localhost:8000"),
+		DeepSeekAPIKey:  os.Getenv("DEEPSEEK_API_KEY"),
+		DeepSeekBaseURL: envOrDefault("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
 		JWTSecret:    os.Getenv("JWT_SECRET"),
 		R2Endpoint:   os.Getenv("R2_ENDPOINT"),
 		R2AccessKey:  os.Getenv("R2_ACCESS_KEY"),
