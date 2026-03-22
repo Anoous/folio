@@ -18,6 +18,7 @@ type articleCreator interface {
 	Delete(ctx context.Context, id string, userID string) error
 	Search(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error)
 	ExistsByUserAndURL(ctx context.Context, userID, url string) (bool, error)
+	ExistsByUserAndClientID(ctx context.Context, userID, clientID string) (bool, error)
 }
 
 // taskCreator is the subset of TaskRepo used by ArticleService.

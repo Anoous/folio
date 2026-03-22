@@ -8,12 +8,11 @@ class ShareViewController: UIViewController {
     private var hostingController: UIHostingController<CompactShareView>?
 
     private lazy var modelContainer: ModelContainer? = {
-        let schema = Schema([Article.self, Tag.self, Category.self])
         let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier)
         let config = groupURL != nil
-            ? ModelConfiguration("Folio", schema: schema, groupContainer: .identifier(AppConstants.appGroupIdentifier))
-            : ModelConfiguration("Folio", schema: schema)
-        return try? ModelContainer(for: schema, configurations: [config])
+            ? ModelConfiguration("Folio", schema: DataManager.schema, groupContainer: .identifier(AppConstants.appGroupIdentifier))
+            : ModelConfiguration("Folio", schema: DataManager.schema)
+        return try? ModelContainer(for: DataManager.schema, configurations: [config])
     }()
 
     override func viewDidLoad() {

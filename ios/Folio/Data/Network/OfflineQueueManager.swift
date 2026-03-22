@@ -17,11 +17,8 @@ final class OfflineQueueManager {
     private let monitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "com.folio.network-monitor")
 
-    /// Callback invoked when network becomes available and there are pending articles.
-    var onProcessPending: (([Article]) async -> [UUID: Bool])?
-
-    /// Callback invoked when network becomes available to sync pending deletions and updates.
-    var onSyncDeletionsAndUpdates: (() async -> Void)?
+    /// Callback invoked when network becomes available — triggers a full incremental sync.
+    var onNetworkRestored: (() async -> Void)?
 
     init(context: ModelContext) {
         self.context = context
@@ -43,8 +40,8 @@ final class OfflineQueueManager {
                     FolioLogger.network.info("network status changed: \(self.isNetworkAvailable ? "available" : "unavailable")")
                 }
                 if !wasAvailable && self.isNetworkAvailable {
-                    await self.onSyncDeletionsAndUpdates?()
-                    await self.processPendingArticles()
+                    await self.onNetworkRestored?()
+                    self.refreshPendingCount()
                 }
             }
         }
@@ -58,37 +55,6 @@ final class OfflineQueueManager {
             predicate: #Predicate { $0.statusRaw == pendingRaw || $0.statusRaw == clientReadyRaw }
         )
         pendingCount = (try? context.fetchCount(descriptor)) ?? 0
-    }
-
-    func processPendingArticles() async {
-        let pendingRaw = ArticleStatus.pending.rawValue
-        let clientReadyRaw = ArticleStatus.clientReady.rawValue
-        let descriptor = FetchDescriptor<Article>(
-            predicate: #Predicate { $0.statusRaw == pendingRaw || $0.statusRaw == clientReadyRaw },
-            sortBy: [SortDescriptor(\.createdAt)]
-        )
-        guard let pending = try? context.fetch(descriptor), !pending.isEmpty else {
-            FolioLogger.network.debug("no pending articles to process")
-            return
-        }
-
-        FolioLogger.network.info("processing \(pending.count) pending article(s)")
-
-        if let processor = onProcessPending {
-            let results = await processor(pending)
-            for article in pending {
-                let succeeded = results[article.id] ?? false
-                if succeeded {
-                    article.status = .processing
-                }
-                // Don't mark as failed on transient errors — keep status for retry
-            }
-        }
-        // No else — without a processor, articles remain pending for next retry
-
-        try? context.save()
-
-        refreshPendingCount()
     }
 
     // MARK: - Background Tasks

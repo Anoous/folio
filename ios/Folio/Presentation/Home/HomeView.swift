@@ -14,10 +14,6 @@ struct HomeView: View {
     @State private var viewModel: HomeViewModel?
     @State private var searchViewModel: SearchViewModel?
     @State private var searchText = ""
-    @State private var clipboardURL: URL?
-    @State private var clipboardText: String?
-    /// Tracks content we already saved from clipboard so we don't offer it again
-    @State private var lastSavedClipboard: String?
     @State private var showNoteSheet = false
     @State private var noteSheetText = ""
     @State private var articleToDelete: Article?
@@ -153,14 +149,6 @@ struct HomeView: View {
         List {
             statusBanners
 
-            // Clipboard prompts
-            if let url = clipboardURL {
-                clipboardURLBanner(url: url)
-            }
-            if let text = clipboardText {
-                clipboardTextBanner(text: text)
-            }
-
             if let vm = viewModel {
                 ForEach(vm.articles) { article in
                     HomeArticleRow(
@@ -191,84 +179,17 @@ struct HomeView: View {
                 viewModel?.fetchArticles()
             }
         }
+        .overlay(alignment: .top) {
+            if viewModel?.isLoading == true {
+                SyncProgressBar()
+            }
+        }
         .background(Color.folio.background)
         .sheet(isPresented: $showShareSheet) {
             if let items = shareItems {
                 ShareSheet(activityItems: items)
             }
         }
-    }
-
-    // MARK: - Clipboard Banners
-
-    private func clipboardURLBanner(url: URL) -> some View {
-        Button {
-            lastSavedClipboard = url.absoluteString
-            saveURL(url.absoluteString)
-            withAnimation { clipboardURL = nil }
-        } label: {
-            HStack(spacing: Spacing.sm) {
-                Image(systemName: "doc.on.clipboard")
-                    .font(.body)
-                    .foregroundStyle(Color.folio.accent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(String(localized: "home.clipboard.addLink", defaultValue: "Add copied link"))
-                        .font(Typography.body)
-                        .foregroundStyle(Color.folio.textPrimary)
-                    Text(url.host ?? url.absoluteString)
-                        .font(Typography.cardMeta)
-                        .foregroundStyle(Color.folio.textSecondary)
-                        .lineLimit(1)
-                }
-                Spacer()
-                Image(systemName: "xmark")
-                    .font(.caption2)
-                    .foregroundStyle(Color.folio.textTertiary)
-                    .onTapGesture {
-                        lastSavedClipboard = url.absoluteString
-                        withAnimation { clipboardURL = nil }
-                    }
-            }
-            .padding(.vertical, Spacing.xs)
-        }
-        .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
-        .listRowSeparator(.hidden)
-    }
-
-    private func clipboardTextBanner(text: String) -> some View {
-        Button {
-            lastSavedClipboard = text
-            saveManualContent(text)
-            withAnimation { clipboardText = nil }
-        } label: {
-            HStack(spacing: Spacing.sm) {
-                Image(systemName: "doc.on.clipboard")
-                    .font(.body)
-                    .foregroundStyle(Color.folio.accent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(String(localized: "home.clipboard.saveText", defaultValue: "Save copied text"))
-                        .font(Typography.body)
-                        .foregroundStyle(Color.folio.textPrimary)
-                    Text(text.prefix(50) + (text.count > 50 ? "..." : ""))
-                        .font(Typography.cardMeta)
-                        .foregroundStyle(Color.folio.textSecondary)
-                        .lineLimit(1)
-                }
-                Spacer()
-                Image(systemName: "xmark")
-                    .font(.caption2)
-                    .foregroundStyle(Color.folio.textTertiary)
-                    .onTapGesture {
-                        lastSavedClipboard = text
-                        withAnimation { clipboardText = nil }
-                    }
-            }
-            .padding(.vertical, Spacing.xs)
-        }
-        .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
-        .listRowSeparator(.hidden)
     }
 
     // MARK: - Status Banners
@@ -280,17 +201,6 @@ struct HomeView: View {
                 Image(systemName: "wifi.slash")
                     .foregroundStyle(Color.folio.textTertiary)
                 Text(String(localized: "home.offlineBanner", defaultValue: "You're offline. Changes will sync when connected."))
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textSecondary)
-            }
-            .padding(.vertical, Spacing.xxs)
-        }
-
-        if viewModel?.isLoading == true {
-            HStack(spacing: Spacing.xs) {
-                ProgressView()
-                    .scaleEffect(0.7)
-                Text(String(localized: "home.syncing", defaultValue: "Syncing..."))
                     .font(Typography.caption)
                     .foregroundStyle(Color.folio.textSecondary)
             }
@@ -383,6 +293,13 @@ struct HomeView: View {
     // MARK: - Actions
 
     private func saveURL(_ urlString: String) {
+        let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
+        guard SharedDataManager.canSave(isPro: isPro) else {
+            showToast(String(localized: "home.quotaExceeded", defaultValue: "Monthly quota exceeded"), icon: "exclamationmark.triangle.fill")
+            saveFailed.toggle()
+            return
+        }
+
         let manager = SharedDataManager(context: modelContext)
         do {
             _ = try manager.saveArticleFromText(urlString)
@@ -392,7 +309,7 @@ struct HomeView: View {
             saveSucceeded.toggle()
 
             Task {
-                await offlineQueueManager?.processPendingArticles()
+                await syncService?.incrementalSync()
             }
         } catch SharedDataError.duplicateURL {
             showToast(String(localized: "home.addURL.duplicate", defaultValue: "Link already exists"), icon: "exclamationmark.triangle.fill")
@@ -420,7 +337,7 @@ struct HomeView: View {
             saveSucceeded.toggle()
 
             Task {
-                await offlineQueueManager?.processPendingArticles()
+                await syncService?.incrementalSync()
             }
         } catch {
             showToast(String(localized: "home.manualSaveError", defaultValue: "Failed to save"), icon: "xmark.circle.fill")
@@ -432,42 +349,6 @@ struct HomeView: View {
         viewModel?.toastMessage = message
         viewModel?.toastIcon = icon
         withAnimation { viewModel?.showToast = true }
-    }
-
-    // MARK: - Clipboard Detection
-
-    private func checkClipboard() {
-        // Reset previous state
-        clipboardURL = nil
-        clipboardText = nil
-
-        // 1. Check .url first — doesn't trigger paste permission banner
-        if let url = UIPasteboard.general.url {
-            if url.absoluteString == lastSavedClipboard { return }
-            let repo = ArticleRepository(context: modelContext)
-            if (try? repo.existsByURL(url.absoluteString)) == true { return }
-            clipboardURL = url
-            return
-        }
-
-        // 2. Fall back to .string — may trigger paste permission banner on iOS 16+
-        guard let string = UIPasteboard.general.string else { return }
-        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        if trimmed == lastSavedClipboard { return }
-
-        // Check if it's a URL as text
-        if let url = URL(string: trimmed), url.scheme?.hasPrefix("http") == true {
-            let repo = ArticleRepository(context: modelContext)
-            if (try? repo.existsByURL(url.absoluteString)) == true { return }
-            clipboardURL = url
-            return
-        }
-
-        // Non-URL text — offer to save if substantial (>= 10 chars)
-        if trimmed.count >= 10 {
-            clipboardText = trimmed
-        }
     }
 
     // MARK: - Lifecycle
@@ -487,7 +368,6 @@ struct HomeView: View {
             svm.loadPopularTags()
             svm.refreshSyncedCount(context: modelContext)
         }
-        checkClipboard()
     }
 
     private func handleScenePhaseChange(_ newPhase: ScenePhase) {
@@ -500,7 +380,6 @@ struct HomeView: View {
                 searchViewModel?.refreshSyncedCount(context: modelContext)
                 FolioLogger.data.info("home-debug: fetchArticles called, vm.articles.count=\(viewModel?.articles.count ?? -1)")
             }
-            checkClipboard()
         }
     }
 

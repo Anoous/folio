@@ -64,7 +64,7 @@ struct FolioApp: App {
                 if newValue == .signedIn {
                     navigationPath = NavigationPath()
                 }
-                if newValue == .signedIn, let manager = offlineQueueManager, let sync = syncService {
+                if newValue == .signedIn, let sync = syncService {
                     // 将服务端配额同步到 UserDefaults，Share Extension 依赖此值
                     if let user = authViewModel.currentUser {
                         let isPro = user.subscription != AppConstants.subscriptionFree
@@ -74,31 +74,20 @@ struct FolioApp: App {
                             isPro: isPro
                         )
                     }
-                    manager.onProcessPending = { articles in
-                        await sync.submitPendingArticles(articles)
-                    }
-                    manager.onSyncDeletionsAndUpdates = {
-                        await sync.syncDeletions()
+                    // Network restored → run incremental sync (includes pending submission)
+                    offlineQueueManager?.onNetworkRestored = {
+                        await sync.incrementalSync()
                     }
                     Task {
                         await sync.performFullSync()
-                        await manager.processPendingArticles()
                     }
                 } else if newValue == .signedOut {
-                    offlineQueueManager?.onProcessPending = nil
-                    offlineQueueManager?.onSyncDeletionsAndUpdates = nil
+                    offlineQueueManager?.onNetworkRestored = nil
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
-                    if let manager = offlineQueueManager {
-                        manager.refreshPendingCount()
-                        if manager.pendingCount > 0 {
-                            Task {
-                                await manager.processPendingArticles()
-                            }
-                        }
-                    }
+                    offlineQueueManager?.refreshPendingCount()
                     if authViewModel.authState == .signedIn, let sync = syncService {
                         Task { await sync.incrementalSync() }
                     }

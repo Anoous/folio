@@ -55,9 +55,10 @@ type SubmitURLResponse struct {
 }
 
 type SubmitManualContentRequest struct {
-	Content string   `json:"content"`
-	Title   *string  `json:"title,omitempty"`
-	TagIDs  []string `json:"tag_ids,omitempty"`
+	Content  string   `json:"content"`
+	Title    *string  `json:"title,omitempty"`
+	TagIDs   []string `json:"tag_ids,omitempty"`
+	ClientID *string  `json:"client_id,omitempty"`
 }
 
 func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req SubmitURLRequest) (*SubmitURLResponse, error) {
@@ -130,6 +131,16 @@ func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req Submi
 }
 
 func (s *ArticleService) SubmitManualContent(ctx context.Context, userID string, req SubmitManualContentRequest) (*SubmitURLResponse, error) {
+	// Check for duplicate by client_id
+	if req.ClientID != nil && *req.ClientID != "" {
+		if exists, err := s.articleRepo.ExistsByUserAndClientID(ctx, userID, *req.ClientID); err != nil {
+			return nil, fmt.Errorf("check duplicate: %w", err)
+		} else if exists {
+			slog.Debug("duplicate manual content rejected", "user_id", userID, "client_id", *req.ClientID)
+			return nil, ErrDuplicateURL
+		}
+	}
+
 	// Check quota
 	if err := s.quotaService.CheckAndIncrement(ctx, userID); err != nil {
 		return nil, err
@@ -146,6 +157,7 @@ func (s *ArticleService) SubmitManualContent(ctx context.Context, userID string,
 		Title:           req.Title,
 		MarkdownContent: &req.Content,
 		WordCount:       &wordCount,
+		ClientID:        req.ClientID,
 	})
 	if err != nil {
 		_ = s.quotaService.DecrementQuota(ctx, userID)

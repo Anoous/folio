@@ -3,7 +3,6 @@ import NukeUI
 
 struct ArticleCardView: View {
     let article: Article
-    var onRetry: (() -> Void)?
 
     private var isUnread: Bool {
         article.readProgress == 0 && article.status == .ready

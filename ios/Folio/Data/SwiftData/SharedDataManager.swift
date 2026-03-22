@@ -60,10 +60,14 @@ final class SharedDataManager {
     /// Save manual content (no URL required)
     @MainActor
     func saveManualContent(content: String) throws -> Article {
-        let article = Article(content: content)
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw SharedDataError.invalidInput
+        }
+        let article = Article(content: trimmed)
         context.insert(article)
         try context.save()
-        FolioLogger.data.info("manual content saved: \(content.prefix(40))")
+        FolioLogger.data.info("manual content saved: \(trimmed.prefix(40))")
         return article
     }
 

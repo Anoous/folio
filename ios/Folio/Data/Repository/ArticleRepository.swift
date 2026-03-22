@@ -26,16 +26,6 @@ final class ArticleRepository {
         return article
     }
 
-    func saveManualContent(content: String, title: String? = nil, tags: [Tag] = []) throws -> Article {
-        let article = Article(content: content, title: title)
-        context.insert(article)
-        if !tags.isEmpty {
-            article.tags = tags
-        }
-        try context.save()
-        return article
-    }
-
     /// Paginated fetch with optional filtering.
     /// Filters are applied at the predicate level to ensure correct pagination.
     /// When tag filtering is active, over-fetches to compensate for post-fetch

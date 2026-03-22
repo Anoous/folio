@@ -31,6 +31,7 @@ type CreateArticleParams struct {
 	SiteName        *string
 	MarkdownContent *string
 	WordCount       *int
+	ClientID        *string
 }
 
 func (r *ArticleRepo) Create(ctx context.Context, p CreateArticleParams) (*domain.Article, error) {
@@ -41,16 +42,25 @@ func (r *ArticleRepo) Create(ctx context.Context, p CreateArticleParams) (*domai
 
 	var a domain.Article
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO articles (user_id, url, source_type, title, author, site_name, markdown_content, word_count)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO articles (user_id, url, source_type, title, author, site_name, markdown_content, word_count, client_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, user_id, url, status, source_type, created_at, updated_at`,
-		p.UserID, p.URL, p.SourceType, p.Title, p.Author, p.SiteName, p.MarkdownContent, wordCount,
+		p.UserID, p.URL, p.SourceType, p.Title, p.Author, p.SiteName, p.MarkdownContent, wordCount, p.ClientID,
 	).Scan(&a.ID, &a.UserID, &a.URL, &a.Status, &a.SourceType, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("insert article: %w", err)
 	}
 	a.KeyPoints = []string{}
 	return &a, nil
+}
+
+func (r *ArticleRepo) ExistsByUserAndClientID(ctx context.Context, userID, clientID string) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM articles WHERE user_id = $1 AND client_id = $2 AND deleted_at IS NULL)`,
+		userID, clientID,
+	).Scan(&exists)
+	return exists, err
 }
 
 func (r *ArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, error) {

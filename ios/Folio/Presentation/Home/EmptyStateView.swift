@@ -3,7 +3,6 @@ import SwiftUI
 struct EmptyStateView: View {
     let onPasteURL: ((URL) -> Void)?
 
-    @State private var clipboardURL: URL?
     @State private var appeared = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -20,20 +19,17 @@ struct EmptyStateView: View {
                 .font(Typography.cardSummary)
                 .foregroundStyle(Color.folio.textTertiary)
 
-            // Clipboard shortcut — subtle, inline
-            if let url = clipboardURL {
-                Button {
+            // System paste button — no permission dialog, user-initiated
+            PasteButton(payloadType: String.self) { strings in
+                guard let string = strings.first else { return }
+                let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let url = URL(string: trimmed), url.scheme?.hasPrefix("http") == true {
                     onPasteURL?(url)
-                    withAnimation { clipboardURL = nil }
-                } label: {
-                    Text(String(localized: "empty.pasteClipboard", defaultValue: "Add copied link"))
-                        .font(Typography.cardMeta)
-                        .foregroundStyle(Color.folio.accent)
                 }
-                .buttonStyle(.plain)
-                .padding(.top, Spacing.xs)
-                .transition(.opacity)
             }
+            .labelStyle(.titleOnly)
+            .tint(Color.folio.accent)
+            .padding(.top, Spacing.xs)
 
             Spacer()
         }
@@ -41,19 +37,9 @@ struct EmptyStateView: View {
         .offset(y: appeared ? 0 : 8)
         .opacity(appeared ? 1 : 0)
         .onAppear {
-            checkClipboard()
             withAnimation(Motion.resolved(Motion.settle, reduceMotion: reduceMotion) ?? .default) {
                 appeared = true
             }
-        }
-    }
-
-    private func checkClipboard() {
-        if let url = UIPasteboard.general.url {
-            clipboardURL = url
-        } else if let string = UIPasteboard.general.string,
-                  let url = URL(string: string), url.scheme?.hasPrefix("http") == true {
-            clipboardURL = url
         }
     }
 }

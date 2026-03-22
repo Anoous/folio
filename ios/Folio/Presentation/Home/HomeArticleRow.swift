@@ -17,9 +17,7 @@ struct HomeArticleRow: View {
 
     var body: some View {
         NavigationLink(value: article.id) {
-            ArticleCardView(article: article, onRetry: article.status == .failed ? {
-                onAction(.retry)
-            } : nil)
+            ArticleCardView(article: article)
         }
         .onAppear {
             if isLast { onAction(.loadMore) }
@@ -90,12 +88,12 @@ struct HomeArticleRow: View {
             )
         }
 
-        Button {
-            if let urlString = article.url, let url = URL(string: urlString) {
+        if let urlString = article.url, let url = URL(string: urlString) {
+            Button {
                 onAction(.share(url))
+            } label: {
+                Label(String(localized: "reader.share", defaultValue: "Share"), systemImage: "square.and.arrow.up")
             }
-        } label: {
-            Label(String(localized: "reader.share", defaultValue: "Share"), systemImage: "square.and.arrow.up")
         }
 
         if let urlString = article.url, !urlString.isEmpty {

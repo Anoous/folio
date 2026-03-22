@@ -12,10 +12,13 @@ enum URLDetection {
         return match.range.length == range.length
     }
 
-    /// Extracts a URL from text if the text is a single URL.
+    /// Extracts a URL from text if the text is a single URL with an HTTP(S) scheme.
     static func extractURL(from text: String) -> URL? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isURLOnly(trimmed) else { return nil }
-        return URL(string: trimmed)
+        guard let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else { return nil }
+        return url
     }
 }

@@ -14,10 +14,6 @@ struct HomeSearchResultsView: View {
     /// Called when user taps "Save as note"
     var onSaveNote: ((String) -> Void)?
 
-    @State private var showAIAnswer = false
-    @State private var emptyAppeared = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     private var isTextInput: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && detectedURL == nil
@@ -53,24 +49,7 @@ struct HomeSearchResultsView: View {
                     .listRowSeparator(.hidden)
             }
 
-            Section {
-                ForEach(filteredResults) { item in
-                    NavigationLink(value: item.article.id) {
-                        SearchResultRow(
-                            item: item,
-                            searchQuery: searchViewModel.searchText
-                        )
-                    }
-                    .listRowInsets(EdgeInsets())
-                }
-            } header: {
-                let count = filteredResults.count
-                Text("\(count) " + (count == 1
-                    ? String(localized: "search.result", defaultValue: "result")
-                    : String(localized: "search.results", defaultValue: "results")))
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textTertiary)
-            }
+            resultsSection
         }
         .listStyle(.plain)
     }
@@ -114,7 +93,8 @@ struct HomeSearchResultsView: View {
                     Text(String(localized: "search.saveAsNote", defaultValue: "Save as note"))
                         .font(Typography.body)
                         .foregroundStyle(Color.folio.textPrimary)
-                    Text(searchText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60) + (searchText.count > 60 ? "..." : ""))
+                    let trimmedPreview = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    Text(trimmedPreview.prefix(60) + (trimmedPreview.count > 60 ? "..." : ""))
                         .font(Typography.cardMeta)
                         .foregroundStyle(Color.folio.textSecondary)
                         .lineLimit(1)
@@ -161,7 +141,7 @@ struct HomeSearchResultsView: View {
                                 Text(String(localized: "search.saveLink", defaultValue: "Save this link"))
                                     .font(Typography.body)
                                     .foregroundStyle(Color.folio.textPrimary)
-                                Text(url.host ?? url.absoluteString)
+                                Text(url.host() ?? url.absoluteString)
                                     .font(Typography.caption)
                                     .foregroundStyle(Color.folio.textSecondary)
                                     .lineLimit(1)
@@ -175,24 +155,7 @@ struct HomeSearchResultsView: View {
             }
 
             if !filteredResults.isEmpty {
-                Section {
-                    ForEach(filteredResults) { item in
-                        NavigationLink(value: item.article.id) {
-                            SearchResultRow(
-                                item: item,
-                                searchQuery: searchViewModel.searchText
-                            )
-                        }
-                        .listRowInsets(EdgeInsets())
-                    }
-                } header: {
-                    let count = filteredResults.count
-                    Text("\(count) " + (count == 1
-                        ? String(localized: "search.result", defaultValue: "result")
-                        : String(localized: "search.results", defaultValue: "results")))
-                        .font(Typography.caption)
-                        .foregroundStyle(Color.folio.textTertiary)
-                }
+                resultsSection
             }
         }
         .listStyle(.plain)
@@ -209,26 +172,33 @@ struct HomeSearchResultsView: View {
 
     private var resultsList: some View {
         List {
-            Section {
-                ForEach(filteredResults) { item in
-                    NavigationLink(value: item.article.id) {
-                        SearchResultRow(
-                            item: item,
-                            searchQuery: searchViewModel.searchText
-                        )
-                    }
-                    .listRowInsets(EdgeInsets())
-                }
-            } header: {
-                let count = filteredResults.count
-                Text("\(count) " + (count == 1
-                    ? String(localized: "search.result", defaultValue: "result")
-                    : String(localized: "search.results", defaultValue: "results")))
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textTertiary)
-            }
+            resultsSection
         }
         .listStyle(.plain)
+    }
+
+    // MARK: - Shared Results Section
+
+    @ViewBuilder
+    private var resultsSection: some View {
+        Section {
+            ForEach(filteredResults) { item in
+                NavigationLink(value: item.article.id) {
+                    SearchResultRow(
+                        item: item,
+                        searchQuery: searchViewModel.searchText
+                    )
+                }
+                .listRowInsets(EdgeInsets())
+            }
+        } header: {
+            let count = filteredResults.count
+            Text("\(count) " + (count == 1
+                ? String(localized: "search.result", defaultValue: "result")
+                : String(localized: "search.results", defaultValue: "results")))
+                .font(Typography.caption)
+                .foregroundStyle(Color.folio.textTertiary)
+        }
     }
 
     // MARK: - Error State

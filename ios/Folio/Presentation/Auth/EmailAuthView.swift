@@ -103,6 +103,9 @@ struct EmailAuthView: View {
                 Button {
                     Task {
                         await authViewModel?.verifyEmailCode(email: email, code: code)
+                        if authViewModel?.isAuthenticated == true {
+                            dismiss()
+                        }
                     }
                 } label: {
                     Text(String(localized: "emailAuth.verify", defaultValue: "Verify"))

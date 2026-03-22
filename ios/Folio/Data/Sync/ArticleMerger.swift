@@ -11,12 +11,21 @@ struct ArticleMerger {
     func merge(dto: ArticleDTO) throws -> Article? {
         let articleRepo = ArticleRepository(context: context)
 
-        // Server says this article is deleted → delete locally + record
+        // Server says this article is deleted → delete locally + record.
+        // Protect genuinely new articles (pendingUpload with no serverID) from deletion.
+        // Articles reset by 404 recovery (pendingUpload WITH serverID) can be deleted
+        // because the server explicitly marked them as deleted (multi-device delete).
         if dto.deletedAt != nil {
             if let existing = try articleRepo.fetchByServerID(dto.id) {
-                context.delete(existing)
+                let isNewLocalArticle = existing.syncState == .pendingUpload && existing.serverID == nil
+                if !isNewLocalArticle {
+                    context.delete(existing)
+                }
             } else if let url = dto.url, let byURL = try articleRepo.fetchByURL(url) {
-                context.delete(byURL)
+                let isNewLocalArticle = byURL.syncState == .pendingUpload && byURL.serverID == nil
+                if !isNewLocalArticle {
+                    context.delete(byURL)
+                }
             }
             recordDeletion(serverID: dto.id)
             return nil
@@ -36,11 +45,19 @@ struct ArticleMerger {
             )
             article = existing
         } else if let url = dto.url, let byURL = try articleRepo.fetchByURL(url) {
-            byURL.updateFromDTO(
-                dto,
-                preservePendingLocalChanges: byURL.syncState == .pendingUpdate
-            )
-            article = byURL
+            // Don't overwrite genuinely new articles (never uploaded) —
+            // just link them to the server record by setting serverID.
+            if byURL.syncState == .pendingUpload && byURL.serverID == nil {
+                byURL.serverID = dto.id
+                byURL.syncState = .synced
+                article = byURL
+            } else {
+                byURL.updateFromDTO(
+                    dto,
+                    preservePendingLocalChanges: byURL.syncState == .pendingUpdate
+                )
+                article = byURL
+            }
         } else {
             let newArticle = Article.fromDTO(dto)
             context.insert(newArticle)

@@ -66,6 +66,8 @@ services:
       - ./migrations/003_sync_epoch.up.sql:/docker-entrypoint-initdb.d/004_sync_epoch.sql
       - ./migrations/004_fix_category_names.up.sql:/docker-entrypoint-initdb.d/005_fix_category_names.sql
       - ./migrations/005_fix_precision.up.sql:/docker-entrypoint-initdb.d/006_fix_precision.sql
+      - ./migrations/006_manual_content.up.sql:/docker-entrypoint-initdb.d/007_manual_content.sql
+      - ./migrations/007_client_id.up.sql:/docker-entrypoint-initdb.d/008_client_id.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U folio -d folio"]
       interval: 10s

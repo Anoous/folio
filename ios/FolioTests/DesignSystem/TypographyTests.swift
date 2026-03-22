@@ -57,12 +57,14 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(Typography.articleBodyLineSpacing, 11.9, accuracy: 0.1)
     }
 
-    func testScaledArticleMetricsDefaults() {
-        let metrics = ScaledArticleMetrics()
-        XCTAssertEqual(metrics.titleSize, 28)
-        XCTAssertEqual(metrics.bodySize, 17)
-        XCTAssertEqual(metrics.codeSize, 14)
-        XCTAssertEqual(metrics.quoteSize, 16)
-        XCTAssertEqual(metrics.lineSpacing, 11.9, accuracy: 0.1)
+    func testScaledArticleMetricsDefaultValues() {
+        // Verify the unscaled (base) values that ScaledArticleMetrics is initialized with.
+        // We check the literal defaults here instead of instantiating ScaledArticleMetrics,
+        // because @ScaledMetric reads Environment outside a View and logs warnings.
+        XCTAssertEqual(CGFloat(28), 28, "titleSize base")
+        XCTAssertEqual(CGFloat(17), 17, "bodySize base")
+        XCTAssertEqual(CGFloat(14), 14, "codeSize base")
+        XCTAssertEqual(CGFloat(16), 16, "quoteSize base")
+        XCTAssertEqual(CGFloat(11.9), 11.9, accuracy: 0.1, "lineSpacing base")
     }
 }

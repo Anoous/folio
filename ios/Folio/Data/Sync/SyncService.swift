@@ -7,6 +7,7 @@ import SwiftData
 final class SyncService {
     private let apiClient: APIClient
     private let context: ModelContext
+    private var isSyncing = false
 
     private static let pollMaxAttempts = 10
     private static let pollInterval: Duration = .seconds(5)
@@ -39,11 +40,15 @@ final class SyncService {
                 let response: SubmitArticleResponse
                 if article.sourceType == .manual {
                     guard let content = article.markdownContent, !content.isEmpty else {
+                        article.status = .failed
+                        article.fetchError = "No content to submit"
+                        results[article.id] = false
                         continue
                     }
                     response = try await apiClient.submitManualContent(
                         content: content,
-                        title: article.title
+                        title: article.title,
+                        clientId: article.id.uuidString
                     )
                 } else if article.extractionSource == .client {
                     response = try await apiClient.submitArticle(
@@ -92,6 +97,30 @@ final class SyncService {
 
         try? context.save()
         return results
+    }
+
+    // MARK: - Submit Local Pending Articles
+
+    /// Fetch and submit articles that are pending upload to the server.
+    private func submitLocalPendingArticles() async {
+        let pendingRaw = ArticleStatus.pending.rawValue
+        let clientReadyRaw = ArticleStatus.clientReady.rawValue
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { $0.statusRaw == pendingRaw || $0.statusRaw == clientReadyRaw },
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        guard let pending = try? context.fetch(descriptor), !pending.isEmpty else { return }
+
+        // Clear stale serverIDs (article was 404'd but not deleted by merger,
+        // meaning it should be re-uploaded as a new article).
+        for article in pending {
+            if article.serverID != nil {
+                article.serverID = nil
+            }
+        }
+
+        FolioLogger.sync.info("submitting \(pending.count) local pending article(s)")
+        _ = await submitPendingArticles(pending)
     }
 
     // MARK: - Task Polling
@@ -209,12 +238,20 @@ final class SyncService {
     // MARK: - Full Sync
 
     func performFullSync() async {
+        guard !isSyncing else {
+            FolioLogger.sync.debug("full sync skipped — already syncing")
+            return
+        }
+        isSyncing = true
+        defer { isSyncing = false }
+
         FolioLogger.sync.info("starting full sync")
         await syncDeletions()
         await syncPendingUpdates()
         await syncCategories()
         await syncTags()
-        await fullSyncArticles()
+        await fullSyncArticles()           // Pull server state (including deletions)
+        await submitLocalPendingArticles()  // THEN submit remaining pending articles
         await syncUserQuota()
         cleanupOldDeletionRecords()
         FolioLogger.sync.info("full sync completed")
@@ -223,9 +260,17 @@ final class SyncService {
     // MARK: - Incremental Sync (public entry point)
 
     func incrementalSync() async {
+        guard !isSyncing else {
+            FolioLogger.sync.debug("incremental sync skipped — already syncing")
+            return
+        }
+        isSyncing = true
+        defer { isSyncing = false }
+
         await syncDeletions()
         await syncPendingUpdates()
-        await incrementalSyncArticles()
+        await incrementalSyncArticles()     // Pull server state (including deletions)
+        await submitLocalPendingArticles()  // THEN submit remaining pending articles
         await fetchProcessingArticles()
     }
 
@@ -464,6 +509,20 @@ final class SyncService {
                     readProgress: article.readProgress
                 ))
                 article.syncState = .synced
+            } catch let error as APIError where error == .notFound {
+                // Server no longer has this article.
+                // Keep serverID so ArticleMerger can still match if the server
+                // sends a deletion notification (multi-device delete scenario).
+                // Mark as pendingUpload; submitLocalPendingArticles will re-upload
+                // only if incrementalSync didn't delete it first.
+                FolioLogger.sync.info("article gone from server, marking for re-upload: \(serverID)")
+                article.syncState = .pendingUpload
+                if article.markdownContent != nil {
+                    article.extractionSource = .client
+                    article.status = .clientReady
+                } else {
+                    article.status = .pending
+                }
             } catch {
                 FolioLogger.sync.error("update sync failed: \(serverID) — \(error)")
             }

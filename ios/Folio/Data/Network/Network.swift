@@ -82,6 +82,13 @@ struct SubmitManualContentRequest: Encodable {
     let content: String
     var title: String?
     var tagIds: [String]?
+    var clientId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case content, title
+        case tagIds = "tag_ids"
+        case clientId = "client_id"
+    }
 }
 
 struct ArticleDTO: Decodable {
@@ -199,7 +206,7 @@ final class APIClient: @unchecked Sendable {
         static let defaultBaseURL = URL(string: "http://localhost:8080")!
         #else
         // Local network IP for real device debugging
-        static let defaultBaseURL = URL(string: "http://192.168.115.123:8080")!
+        static let defaultBaseURL = URL(string: "http://192.168.1.14:8080")!
         #endif
     #else
     static let defaultBaseURL = URL(string: "https://api.folio.app")!
@@ -480,10 +487,11 @@ final class APIClient: @unchecked Sendable {
         return try await request(method: "POST", path: "/api/v1/articles", body: body)
     }
 
-    func submitManualContent(content: String, title: String? = nil, tagIds: [String] = []) async throws -> SubmitArticleResponse {
+    func submitManualContent(content: String, title: String? = nil, tagIds: [String] = [], clientId: String? = nil) async throws -> SubmitArticleResponse {
         var body = SubmitManualContentRequest(content: content)
         body.title = title
         body.tagIds = tagIds.isEmpty ? nil : tagIds
+        body.clientId = clientId
         return try await request(method: "POST", path: "/api/v1/articles/manual", body: body)
     }
 

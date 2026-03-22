@@ -160,7 +160,7 @@ final class HomeViewModel {
         article.status = .pending
         article.fetchError = nil
         article.retryCount += 1
-        article.updatedAt = Date()
+        article.updatedAt = .now
         ModelContext.safeSave(context)
         fetchArticles()
 
@@ -169,9 +169,21 @@ final class HomeViewModel {
         if isAuthenticated {
             Task {
                 do {
-                    // Re-submit URL to server for processing
                     let response: SubmitArticleResponse
-                    if article.extractionSource == .client {
+                    if article.sourceType == .manual {
+                        guard let content = article.markdownContent, !content.isEmpty else {
+                            article.status = .failed
+                            article.fetchError = "No content to submit"
+                            ModelContext.safeSave(context)
+                            fetchArticles()
+                            return
+                        }
+                        response = try await apiClient.submitManualContent(
+                            content: content,
+                            title: article.title,
+                            clientId: article.id.uuidString
+                        )
+                    } else if article.extractionSource == .client {
                         response = try await apiClient.submitArticle(
                             url: article.url,
                             title: article.title,
@@ -186,7 +198,7 @@ final class HomeViewModel {
                     article.serverID = response.articleId
                     article.status = .processing
                 } catch {
-                    FolioLogger.sync.error("retryArticle failed: \(error) — \(article.url ?? "manual")")
+                    FolioLogger.sync.error("retryArticle failed: \(error) — \(article.url ?? SourceType.manual.rawValue)")
                     article.status = .failed
                     article.fetchError = error.localizedDescription
                 }

@@ -38,55 +38,31 @@ final class OfflineQueueManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testNetworkAvailable_triggerProcessing() async throws {
-        let a = Article(url: "https://example.com/pending")
-        a.status = .pending
-        context.insert(a)
-        try context.save()
-
+    func testNetworkRestored_callbackInvoked() async throws {
         let manager = OfflineQueueManager(context: context)
-        var processCalled = false
-        manager.onProcessPending = { articles in
-            processCalled = true
-            return Dictionary(uniqueKeysWithValues: articles.map { ($0.id, true) })
+        var callbackInvoked = false
+        manager.onNetworkRestored = {
+            callbackInvoked = true
         }
 
-        await manager.processPendingArticles()
-        XCTAssertTrue(processCalled)
+        // Verify callback is set (actual network trigger requires NWPathMonitor)
+        XCTAssertNotNil(manager.onNetworkRestored)
+        await manager.onNetworkRestored?()
+        XCTAssertTrue(callbackInvoked)
     }
 
     @MainActor
-    func testProcessPending_updatesStatus() async throws {
-        let a = Article(url: "https://example.com/pending")
-        a.status = .pending
+    func testRefreshPendingCount_afterInsert() throws {
+        let manager = OfflineQueueManager(context: context)
+        XCTAssertEqual(manager.pendingCount, 0)
+
+        let a = Article(url: "https://example.com/new")
+        a.status = .clientReady
         context.insert(a)
         try context.save()
 
-        let manager = OfflineQueueManager(context: context)
-        manager.onProcessPending = { articles in
-            Dictionary(uniqueKeysWithValues: articles.map { ($0.id, true) })
-        }
-
-        await manager.processPendingArticles()
-        XCTAssertNotEqual(a.status, .pending)
-        XCTAssertEqual(a.status, .processing)
-    }
-
-    @MainActor
-    func testProcessFailed_keepsStatusForRetry() async throws {
-        let a = Article(url: "https://example.com/fail")
-        a.status = .pending
-        context.insert(a)
-        try context.save()
-
-        let manager = OfflineQueueManager(context: context)
-        manager.onProcessPending = { articles in
-            Dictionary(uniqueKeysWithValues: articles.map { ($0.id, false) })
-        }
-
-        await manager.processPendingArticles()
-        // Transient failures keep original status for retry, not marked as failed
-        XCTAssertEqual(a.status, .pending)
+        manager.refreshPendingCount()
+        XCTAssertEqual(manager.pendingCount, 1)
     }
 
     @MainActor

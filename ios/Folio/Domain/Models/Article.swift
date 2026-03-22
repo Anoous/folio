@@ -217,7 +217,6 @@ final class Article {
         self.init(url: nil, title: title, sourceType: .manual)
         self.markdownContent = content
         self.wordCount = Self.countWords(content)
-        self.statusRaw = ArticleStatus.pending.rawValue
     }
 
     /// Count words: CJK characters counted individually; non-CJK runs split by whitespace.

@@ -102,6 +102,8 @@ final class ReaderViewModel {
                 FolioLogger.data.error("reader: client extraction failed — \(error)")
                 contentLoadError = error.localizedDescription
             }
+        } else if article.sourceType == .manual {
+            contentLoadError = String(localized: "reader.noContent", defaultValue: "Content not available")
         } else {
             contentLoadError = String(localized: "reader.invalidURL", defaultValue: "Invalid URL")
         }
