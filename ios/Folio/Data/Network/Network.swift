@@ -263,6 +263,30 @@ struct EchoStreak: Codable {
     let display: String
 }
 
+// MARK: - RAG DTOs
+
+struct RAGQueryRequest: Codable {
+    let question: String
+    let conversationId: String?
+}
+
+struct RAGQueryResponse: Codable {
+    let answer: String
+    let sources: [RAGSource]
+    let sourceCount: Int
+    let followupSuggestions: [String]
+    let conversationId: String
+}
+
+struct RAGSource: Codable {
+    let articleId: String
+    let title: String
+    let siteName: String?
+    let summary: String?
+    let createdAt: Date
+    let relevance: Double
+}
+
 // MARK: - APIClient
 
 final class APIClient: @unchecked Sendable {
@@ -660,6 +684,13 @@ final class APIClient: @unchecked Sendable {
 
     func deleteHighlight(id: String) async throws {
         try await requestVoid(method: "DELETE", path: "/api/v1/highlights/\(id)")
+    }
+
+    // MARK: - RAG
+
+    func ragQuery(question: String, conversationId: String? = nil) async throws -> RAGQueryResponse {
+        let body = RAGQueryRequest(question: question, conversationId: conversationId)
+        return try await request(method: "POST", path: "/api/v1/rag/query", body: body)
     }
 }
 

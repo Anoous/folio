@@ -333,6 +333,68 @@ final class HomeViewModel {
         showToast = true
     }
 
+    // MARK: - RAG State
+
+    var ragResponse: RAGQueryResponse?
+    var ragIsLoading = false
+    var ragError: RAGErrorView.ErrorType?
+    var ragConversationId: String?
+
+    func isRAGQuery(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > 10 else { return false }
+        let indicators = ["？", "?", "什么", "哪些", "如何", "为什么", "怎么", "怎样", "是否", "有没有", "能不能", "多少"]
+        return indicators.contains { trimmed.contains($0) }
+    }
+
+    private var ragDebounceTask: Task<Void, Never>?
+
+    func submitRAGQuery(_ question: String) {
+        ragDebounceTask?.cancel()
+        ragDebounceTask = Task {
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            await executeRAGQuery(question)
+        }
+    }
+
+    @MainActor
+    private func executeRAGQuery(_ question: String) async {
+        ragIsLoading = true
+        ragError = nil
+        do {
+            let response = try await apiClient.ragQuery(
+                question: question,
+                conversationId: ragConversationId
+            )
+            ragResponse = response
+            ragConversationId = response.conversationId
+        } catch let error as APIError {
+            if case .quotaExceeded = error {
+                ragError = .quota
+            } else {
+                ragError = .error
+            }
+            ragResponse = nil
+        } catch {
+            ragError = .error
+            ragResponse = nil
+        }
+        ragIsLoading = false
+    }
+
+    func submitFollowup(_ question: String) {
+        submitRAGQuery(question)
+    }
+
+    func clearRAG() {
+        ragResponse = nil
+        ragConversationId = nil
+        ragError = nil
+        ragIsLoading = false
+        ragDebounceTask?.cancel()
+    }
+
     // MARK: - Private
 
     private func loadPage(reset: Bool) {

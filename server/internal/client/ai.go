@@ -11,10 +11,18 @@ import (
 	"time"
 )
 
+// RAGResult is the parsed output from the RAG LLM call.
+type RAGResult struct {
+	Answer              string   `json:"answer"`
+	CitedIndices        []int    `json:"cited_indices"`
+	FollowupSuggestions []string `json:"followup_suggestions"`
+}
+
 // Analyzer abstracts AI analysis so callers can swap implementations (real vs mock).
 type Analyzer interface {
 	Analyze(ctx context.Context, req AnalyzeRequest) (*AnalyzeResponse, error)
 	GenerateEchoCards(ctx context.Context, title string, source string, keyPoints []string) ([]EchoQAPair, error)
+	GenerateRAGAnswer(ctx context.Context, systemPrompt, userPrompt string) (*RAGResult, error)
 }
 
 // AnalyzeRequest is the input for AI article analysis.
@@ -384,6 +392,90 @@ func (d *DeepSeekAnalyzer) GenerateEchoCards(ctx context.Context, title string, 
 // generateMockEchoCards returns deterministic echo cards without calling any API.
 func generateMockEchoCards(title, source string, keyPoints []string) []EchoQAPair {
 	return echoFallbackCards(title, source, keyPoints)
+}
+
+// GenerateRAGAnswer calls DeepSeek to produce a RAG answer from a system + user prompt.
+// Uses a 30-second timeout. If no API key is configured, returns a mock fallback.
+func (d *DeepSeekAnalyzer) GenerateRAGAnswer(ctx context.Context, systemPrompt, userPrompt string) (*RAGResult, error) {
+	if d.apiKey == "" {
+		return &RAGResult{
+			Answer:              "这是一个模拟回答。基于你的收藏¹，...",
+			CitedIndices:        []int{1},
+			FollowupSuggestions: []string{"还有什么相关的？"},
+		}, nil
+	}
+
+	chatReq := chatRequest{
+		Model: "deepseek-chat",
+		Messages: []chatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+		Temperature:    0.3,
+		MaxTokens:      2048,
+		ResponseFormat: &respFormat{Type: "json_object"},
+	}
+
+	body, err := json.Marshal(chatReq)
+	if err != nil {
+		return nil, fmt.Errorf("marshal rag chat request: %w", err)
+	}
+
+	// Use a 30-second timeout for RAG calls.
+	ragCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	httpReq, err := http.NewRequestWithContext(ragCtx, "POST", d.baseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create rag request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+d.apiKey)
+
+	resp, err := d.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("rag deepseek request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read rag response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("rag deepseek api error: status %d, body: %s", resp.StatusCode, string(respBody))
+	}
+
+	var chatResp chatResponse
+	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		return nil, fmt.Errorf("decode rag chat response: %w", err)
+	}
+
+	if chatResp.Error != nil {
+		return nil, fmt.Errorf("rag deepseek api error: %s", chatResp.Error.Message)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return nil, fmt.Errorf("rag deepseek returned no choices")
+	}
+
+	content := chatResp.Choices[0].Message.Content
+
+	var result RAGResult
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		return nil, fmt.Errorf("decode rag json: %w (raw: %s)", err, content)
+	}
+
+	// Ensure slices are non-nil.
+	if result.CitedIndices == nil {
+		result.CitedIndices = []int{}
+	}
+	if result.FollowupSuggestions == nil {
+		result.FollowupSuggestions = []string{}
+	}
+
+	return &result, nil
 }
 
 // echoFallbackCards builds 1-2 template-based echo cards from key points.

@@ -145,7 +145,15 @@ struct HomeView: View {
                         .textInputAutocapitalization(.never)
                         .onSubmit { handleSearchTextChange(searchText) }
                         .onChange(of: searchText) { _, newValue in
-                            handleSearchTextChange(newValue)
+                            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if let vm = viewModel, vm.isRAGQuery(trimmed) {
+                                vm.submitRAGQuery(trimmed)
+                                // Clear FTS state when switching to RAG
+                                searchViewModel?.searchText = ""
+                            } else {
+                                viewModel?.clearRAG()
+                                handleSearchTextChange(newValue)
+                            }
                         }
                     if !searchText.isEmpty {
                         Button {
@@ -164,6 +172,7 @@ struct HomeView: View {
 
                 Button("取消") {
                     searchText = ""
+                    viewModel?.clearRAG()
                     isSearchActive = false
                 }
                 .font(.system(size: 16))
@@ -172,20 +181,44 @@ struct HomeView: View {
             .padding(.horizontal, Spacing.screenPadding)
             .padding(.vertical, 10)
 
-            // Search results
+            // Search results — RAG and FTS are mutually exclusive
             let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty, let svm = searchViewModel {
-                HomeSearchResultsView(
-                    searchViewModel: svm,
-                    searchText: $searchText,
-                    detectedURL: URLDetection.extractURL(from: trimmed),
-                    existingArticle: findExistingArticle(for: trimmed),
-                    onSaveURL: { url in saveURL(url) },
-                    onSaveNote: { content in
-                        noteSheetText = content
-                        showNoteSheet = true
+            if !trimmed.isEmpty {
+                if let vm = viewModel, vm.isRAGQuery(trimmed) {
+                    // RAG mode
+                    if vm.ragIsLoading {
+                        RAGLoadingView()
+                    } else if let error = vm.ragError {
+                        RAGErrorView(errorType: error, onRetry: { vm.submitRAGQuery(trimmed) })
+                    } else if let response = vm.ragResponse {
+                        ScrollView {
+                            RAGAnswerView(
+                                response: response,
+                                onSourceTap: { articleId in
+                                    // TODO: Navigate to reader for this article
+                                },
+                                onFollowup: { question in
+                                    vm.submitFollowup(question)
+                                }
+                            )
+                        }
+                    } else {
+                        Spacer() // RAG not yet triggered
                     }
-                )
+                } else if let svm = searchViewModel {
+                    // FTS mode (existing search results)
+                    HomeSearchResultsView(
+                        searchViewModel: svm,
+                        searchText: $searchText,
+                        detectedURL: URLDetection.extractURL(from: trimmed),
+                        existingArticle: findExistingArticle(for: trimmed),
+                        onSaveURL: { url in saveURL(url) },
+                        onSaveNote: { content in
+                            noteSheetText = content
+                            showNoteSheet = true
+                        }
+                    )
+                }
             } else {
                 Spacer()
             }

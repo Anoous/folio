@@ -270,6 +270,15 @@ func (m *MockAnalyzer) GenerateEchoCards(_ context.Context, title string, source
 	return pairs, nil
 }
 
+// GenerateRAGAnswer returns a deterministic mock RAG answer without calling any API.
+func (m *MockAnalyzer) GenerateRAGAnswer(_ context.Context, _, _ string) (*RAGResult, error) {
+	return &RAGResult{
+		Answer:              "这是一个模拟回答。基于你的收藏¹，...",
+		CitedIndices:        []int{1},
+		FollowupSuggestions: []string{"还有什么相关的？"},
+	}, nil
+}
+
 // isASCII reports whether s contains only ASCII characters.
 func isASCII(s string) bool {
 	for i := 0; i < len(s); i++ {
