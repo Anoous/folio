@@ -27,9 +27,13 @@ struct HomeView: View {
 
     var body: some View {
         mainContent
-            .navigationTitle("Folio")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Text("页集")
+                        .font(Typography.v3PageTitle)
+                        .foregroundStyle(Color.folio.textPrimary)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink(value: HomeDestination.settings) {
                         Circle()
@@ -143,23 +147,56 @@ struct HomeView: View {
         return String(localized: "reader.deleteConfirm", defaultValue: "Delete this article?") + (title.isEmpty ? "" : "\n\"\(title)\"")
     }
 
-    // MARK: - Article List (flat, no date grouping)
+    // MARK: - Article List (sectioned by date)
 
     private var articleList: some View {
         List {
             statusBanners
 
-            if let vm = viewModel {
-                ForEach(vm.articles) { article in
-                    HomeArticleRow(
-                        article: article,
-                        isLast: article.id == vm.articles.last?.id
-                    ) { action in
-                        handleArticleAction(action, article: article, vm: vm)
-                    }
-                }
+            // Date header
+            Text(formattedDate())
+                .font(.system(size: 13))
+                .foregroundStyle(Color.folio.textTertiary)
+                .tracking(0.5)
                 .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
                 .listRowSeparator(.hidden)
+                .padding(.top, Spacing.md)
+
+            if let vm = viewModel {
+                ForEach(vm.groupedArticles, id: \.group) { section in
+                    Section {
+                        ForEach(Array(section.articles.enumerated()), id: \.element.id) { index, article in
+                            if section.group == .today && index == 0 && article.readProgress == 0 && article.status == .ready {
+                                NavigationLink(value: article.id) {
+                                    HeroArticleCardView(article: article)
+                                }
+                                .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
+                                .listRowSeparator(.hidden)
+                                .onAppear {
+                                    if article.id == vm.articles.last?.id {
+                                        vm.loadNextPage()
+                                    }
+                                }
+                            } else {
+                                HomeArticleRow(
+                                    article: article,
+                                    isLast: article.id == vm.articles.last?.id
+                                ) { action in
+                                    handleArticleAction(action, article: article, vm: vm)
+                                }
+                                .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
+                                .listRowSeparator(.hidden)
+                            }
+                        }
+                    } header: {
+                        Text(section.group.rawValue)
+                            .font(Typography.v3SectionHeader)
+                            .foregroundStyle(Color.folio.textTertiary)
+                            .tracking(0.3)
+                            .textCase(nil)
+                    }
+                    .listSectionSeparator(.hidden)
+                }
             }
         }
         .listStyle(.plain)
@@ -190,6 +227,15 @@ struct HomeView: View {
                 ShareSheet(activityItems: items)
             }
         }
+    }
+
+    // MARK: - Date Formatting
+
+    private func formattedDate() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日，EEEE"
+        return formatter.string(from: .now)
     }
 
     // MARK: - Status Banners
