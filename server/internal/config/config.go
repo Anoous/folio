@@ -20,6 +20,7 @@ type Config struct {
 	R2PublicURL  string
 	JinaAPIKey     string
 	AppleBundleID  string
+	ResendAPIKey   string
 	AppMode        string // "api" | "worker" | "all" (default "all")
 }
 
@@ -38,6 +39,7 @@ func Load() (*Config, error) {
 		R2BucketName: envOrDefault("R2_BUCKET_NAME", "folio-images"),
 		R2PublicURL:  os.Getenv("R2_PUBLIC_URL"),
 		JinaAPIKey:    os.Getenv("JINA_API_KEY"),
+		ResendAPIKey:  os.Getenv("RESEND_API_KEY"),
 		AppleBundleID: envOrDefault("APPLE_BUNDLE_ID", "com.7WSH9CR7KS.folio.app"),
 	}
 

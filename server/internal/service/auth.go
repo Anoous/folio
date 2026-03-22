@@ -17,6 +17,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
+	"folio-server/internal/client"
 	"folio-server/internal/domain"
 	"folio-server/internal/repository"
 )
@@ -25,13 +26,15 @@ type AuthService struct {
 	userRepo      *repository.UserRepo
 	jwtSecret     []byte
 	appleBundleID string
+	resend        *client.ResendClient
 }
 
-func NewAuthService(userRepo *repository.UserRepo, jwtSecret string, appleBundleID string) *AuthService {
+func NewAuthService(userRepo *repository.UserRepo, jwtSecret string, appleBundleID string, resend *client.ResendClient) *AuthService {
 	return &AuthService{
 		userRepo:      userRepo,
 		jwtSecret:     []byte(jwtSecret),
 		appleBundleID: appleBundleID,
+		resend:        resend,
 	}
 }
 
@@ -151,7 +154,13 @@ func (s *AuthService) SendEmailCode(ctx context.Context, req SendCodeRequest) er
 	// Store send time for cooldown
 	codeCooldown.Store(email, time.Now())
 
-	slog.Info("[AUTH] verification code", "email", email, "code", code)
+	// Send email via Resend (falls back to logging if no API key)
+	if err := s.resend.SendVerificationCode(email, code); err != nil {
+		slog.Error("failed to send verification email", "email", email, "error", err)
+		// Still log the code so dev/test can proceed
+		slog.Info("[AUTH] verification code (email failed)", "email", email, "code", code)
+		return nil
+	}
 	return nil
 }
 

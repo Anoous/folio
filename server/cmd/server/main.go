@@ -78,7 +78,8 @@ func main() {
 
 	// Services
 	quotaService := service.NewQuotaService(userRepo)
-	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.AppleBundleID)
+	resendClient := client.NewResendClient(cfg.ResendAPIKey, "EchoLore <noreply@echolore.ai>")
+	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.AppleBundleID, resendClient)
 	tagService := service.NewTagService(tagRepo)
 	articleService := service.NewArticleService(
 		articleRepo, taskRepo, tagRepo, categoryRepo,
