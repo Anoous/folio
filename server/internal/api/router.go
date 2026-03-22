@@ -57,6 +57,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Post("/auth/email/code", deps.AuthHandler.HandleSendCode)
 		r.Post("/auth/email/verify", deps.AuthHandler.HandleVerifyCode)
 
+		// Apple webhook — public endpoint (Apple calls without JWT)
+		r.Post("/webhook/apple", deps.SubscriptionHandler.HandleWebhook)
+
 		// Protected routes
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.JWTAuth(deps.AuthService))

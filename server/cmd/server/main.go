@@ -59,6 +59,16 @@ func main() {
 		slog.Warn("DEEPSEEK_API_KEY not set, using mock AI analyzer")
 	}
 
+	// Apple Store client — real if key path is set, mock for development
+	appleClient, err := client.NewAppleClient(
+		cfg.AppleAPIKeyID, cfg.AppleAPIIssuerID, cfg.AppleAPIKeyPath,
+		cfg.AppleBundleID, cfg.APNSSandbox,
+	)
+	if err != nil {
+		slog.Error("failed to create Apple client", "error", err)
+		os.Exit(1)
+	}
+
 	// R2 client (optional — nil if not configured)
 	var r2Client *client.R2Client
 	if cfg.R2Endpoint != "" && cfg.R2AccessKey != "" && cfg.R2SecretKey != "" {
@@ -85,6 +95,7 @@ func main() {
 		articleRepo, taskRepo, tagRepo, categoryRepo,
 		quotaService, asynqClient,
 	)
+	subscriptionService := service.NewSubscriptionService(appleClient, userRepo, cfg.AppleBundleID)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authService)
@@ -93,7 +104,7 @@ func main() {
 	tagHandler := handler.NewTagHandler(tagService)
 	categoryHandler := handler.NewCategoryHandler(categoryRepo)
 	taskHandler := handler.NewTaskHandler(taskRepo)
-	subscriptionHandler := handler.NewSubscriptionHandler()
+	subscriptionHandler := handler.NewSubscriptionHandler(subscriptionService)
 
 	// Content cache repository
 	contentCacheRepo := repository.NewContentCacheRepo(pool)
