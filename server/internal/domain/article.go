@@ -48,6 +48,7 @@ type Article struct {
 	IsFavorite      bool          `json:"is_favorite"`
 	IsArchived      bool          `json:"is_archived"`
 	ReadProgress    float64       `json:"read_progress"`
+	HighlightCount  int           `json:"highlight_count"`
 	LastReadAt      *time.Time    `json:"last_read_at,omitempty"`
 	PublishedAt     *time.Time    `json:"published_at,omitempty"`
 	CreatedAt       time.Time     `json:"created_at"`
