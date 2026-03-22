@@ -139,8 +139,8 @@ func (r *EchoRepo) CreateReview(ctx context.Context, review *domain.EchoReview) 
 	err := r.db.QueryRow(ctx, `
 		INSERT INTO echo_reviews (id, card_id, user_id, result, response_time_ms, reviewed_at)
 		VALUES (
-			COALESCE(NULLIF($1, ''), uuid_generate_v4()::text),
-			$2, $3, $4, $5, COALESCE($6, NOW())
+			COALESCE(NULLIF($1, '')::uuid, uuid_generate_v4()),
+			$2::uuid, $3::uuid, $4, $5, COALESCE($6, NOW())
 		)
 		RETURNING id, reviewed_at`,
 		review.ID, review.CardID, review.UserID, review.Result, review.ResponseTimeMs, review.ReviewedAt,
