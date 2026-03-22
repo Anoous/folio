@@ -25,6 +25,32 @@ struct HomeView: View {
     @State private var saveFailed = false
     @State private var deleteConfirmTrigger = false
     @State private var refreshTrigger = false
+    @AppStorage("dismissed_milestones") private var dismissedMilestonesRaw = ""
+
+    // MARK: - Milestone Helpers
+
+    private var dismissedMilestones: Set<Int> {
+        Set(dismissedMilestonesRaw.split(separator: ",").compactMap { Int($0) })
+    }
+
+    private var activeMilestone: Milestone? {
+        let count = viewModel?.articles.count ?? 0
+        guard count > 0 else { return nil }
+        let shown = dismissedMilestones
+        // Show highest unshown milestone whose threshold has been reached
+        for m in Milestone.allCases.reversed() {
+            if count >= m.rawValue && !shown.contains(m.rawValue) {
+                return m
+            }
+        }
+        return nil
+    }
+
+    private func dismissMilestone(_ milestone: Milestone) {
+        var set = dismissedMilestones
+        set.insert(milestone.rawValue)
+        dismissedMilestonesRaw = set.sorted().map(String.init).joined(separator: ",")
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -263,6 +289,16 @@ struct HomeView: View {
             dateHeader
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
+
+            if let milestone = activeMilestone {
+                MilestoneCardView(
+                    milestone: milestone,
+                    articleCount: viewModel?.articles.count ?? 0,
+                    onDismiss: { dismissMilestone(milestone) }
+                )
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+            }
 
             if let vm = viewModel {
                 ForEach(vm.feedSections, id: \.group) { section in
