@@ -106,11 +106,11 @@ func (m *MockAnalyzer) Analyze(_ context.Context, req AnalyzeRequest) (*AnalyzeR
 		Tags:         tags,
 		Summary:      summary,
 		KeyPoints: []string{
-			fmt.Sprintf("Mock analysis for: %s", title),
-			fmt.Sprintf("Source: %s", orDefault(req.Source, "web")),
-			fmt.Sprintf("Author: %s", orDefault(req.Author, "unknown")),
+			fmt.Sprintf("来源：%s", orDefault(req.Source, "web")),
+			fmt.Sprintf("作者：%s", orDefault(req.Author, "unknown")),
+			"Mock 模式，未调用 AI",
 		},
-		Language: "en",
+		Language: detectLanguage(title),
 	}, nil
 }
 
@@ -198,7 +198,7 @@ func extractMockTags(title, content string) []string {
 }
 
 // cleanForSummary removes markdown artifacts, URLs, and noise from content,
-// then truncates to 120 runes.
+// then returns a punchy single-sentence insight (truncated to 40 runes).
 func cleanForSummary(text string) string {
 	// Remove markdown links but keep text: [text](url) -> text
 	text = reMDLink.ReplaceAllString(text, "$1")
@@ -211,9 +211,26 @@ func cleanForSummary(text string) string {
 	text = strings.TrimSpace(text)
 
 	if text == "" {
-		return "Mock summary generated for local integration."
+		return "Mock 模式：此文章尚未经过真实 AI 分析。"
 	}
-	return truncate(text, 120)
+	// Take only the first sentence to form a punchy insight
+	for _, sep := range []string{"。", "！", "？", ". ", "! ", "? "} {
+		if idx := strings.Index(text, sep); idx != -1 {
+			sentence := strings.TrimSpace(text[:idx+len(sep)])
+			if utf8.RuneCountInString(sentence) >= 8 {
+				return truncate(sentence, 40)
+			}
+		}
+	}
+	return truncate(text, 40)
+}
+
+// detectLanguage returns "zh" if the text contains Chinese characters, else "en".
+func detectLanguage(text string) string {
+	if reChineseChunk.MatchString(text) {
+		return "zh"
+	}
+	return "en"
 }
 
 // orDefault returns s if non-empty, otherwise fallback.
