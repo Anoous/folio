@@ -16,23 +16,39 @@ struct ArticleCardView: View {
         if article.status == .pending && article.title == nil && article.markdownContent == nil && article.sourceType != .manual {
             ShimmerView()
         } else {
-            VStack(alignment: .leading, spacing: 0) {
-                // Title — serif font, weight signals unread
-                Text(article.displayTitle)
-                    .font(isUnread ? Typography.cardTitleUnread : Typography.cardTitle)
-                    .foregroundStyle(isFailed ? Color.folio.textTertiary : (isUnread ? Color.folio.textPrimary : Color.folio.textSecondary))
-                    .lineLimit(3)
+            cardContent
+        }
+    }
 
-                // Summary
-                if let summary = article.displaySummary {
-                    Text(summary)
-                        .font(Typography.cardSummary)
-                        .foregroundStyle(Color.folio.textTertiary)
-                        .lineLimit(2)
-                        .padding(.top, Spacing.xs)
+    // MARK: - Card Content
+
+    private var cardContent: some View {
+        HStack(alignment: .top, spacing: 14) {
+            // Left: text content
+            VStack(alignment: .leading, spacing: 0) {
+                // Title — v3 LXGW WenKai TC font, weight signals unread
+                Text(article.displayTitle)
+                    .font(isUnread ? Typography.v3CardTitleUnread : Typography.v3CardTitle)
+                    .foregroundStyle(isFailed ? Color.folio.textTertiary : Color.folio.textPrimary)
+                    .lineSpacing((isUnread ? Typography.v3CardTitleUnread : Typography.v3CardTitle).lineSpacingFor(lineHeight: 1.45, size: 17))
+                    .lineLimit(2)
+
+                // Insight pull quote
+                if let summary = article.displaySummary, !summary.isEmpty {
+                    HStack(alignment: .top, spacing: 0) {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(isUnread ? Color.folio.accent : Color.folio.textQuaternary)
+                            .frame(width: 2)
+                        Text(summary)
+                            .font(Typography.v3CardInsight)
+                            .foregroundStyle(isUnread ? Color.folio.textSecondary : Color.folio.textTertiary)
+                            .lineLimit(2)
+                            .padding(.leading, 14)
+                    }
+                    .padding(.top, Spacing.xs)
                 }
 
-                // Source + time — minimal
+                // Metadata line
                 metaLine
                     .padding(.top, Spacing.sm)
 
@@ -45,43 +61,52 @@ struct ArticleCardView: View {
                         .padding(.top, Spacing.xs)
                 }
             }
-            .padding(.vertical, Spacing.md)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(accessibilityDescription)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Right: thumbnail (if available)
+            if let coverURL = article.coverImageURL,
+               let url = URL(string: coverURL) {
+                LazyImage(url: url) { state in
+                    if let image = state.image {
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 72, height: 72)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    } else {
+                        Color.folio.cardBackground
+                            .frame(width: 72, height: 72)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .frame(width: 72, height: 72)
+            }
         }
+        .padding(.vertical, Spacing.md)
+        .overlay(alignment: .topTrailing) {
+            if article.isFavorite {
+                Text("★")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.folio.warning.opacity(0.6))
+                    .padding(.top, Spacing.md)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityDescription)
     }
 
-    // MARK: - Meta Line (source + time only)
+    // MARK: - Meta Line (source · time · tags)
 
     private var metaLine: some View {
         HStack(spacing: 0) {
-            // Source name
-            if let sourceName = effectiveSourceName {
-                Text(sourceName)
-                    .font(Typography.cardMeta)
-                    .foregroundStyle(Color.folio.textTertiary)
-
-                Text(" \u{00B7} ")
-                    .font(Typography.cardMeta)
-                    .foregroundStyle(Color.folio.textTertiary)
-            }
-
-            // Time
-            Text(article.createdAt.relativeFormatted())
-                .font(Typography.cardMeta)
-                .foregroundStyle(Color.folio.textTertiary)
+            Text(metaLineText)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.folio.textQuaternary)
+                .lineLimit(1)
 
             Spacer(minLength: 0)
 
-            // Favorite — subtle
-            if article.isFavorite {
-                Image(systemName: "heart.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.pink.opacity(0.7))
-                    .accessibilityLabel(Text(String(localized: "status.favorited", defaultValue: "Favorited")))
-            }
-
-            // Failed — only status that still shows
+            // Failed indicator
             if isFailed {
                 Image(systemName: "exclamationmark.circle")
                     .font(.caption2)
@@ -89,6 +114,17 @@ struct ArticleCardView: View {
                     .accessibilityLabel(Text(String(localized: "status.failed", defaultValue: "Failed")))
             }
         }
+    }
+
+    private var metaLineText: String {
+        var parts: [String] = []
+        if let sourceName = effectiveSourceName {
+            parts.append(sourceName)
+        }
+        parts.append(article.createdAt.relativeFormatted())
+        let tagNames = article.tags.prefix(2).map(\.name)
+        parts.append(contentsOf: tagNames)
+        return parts.joined(separator: " \u{00B7} ")
     }
 
     // MARK: - Helpers
@@ -114,6 +150,16 @@ struct ArticleCardView: View {
     }
 }
 
+// MARK: - Font line-height helper
+
+private extension Font {
+    /// Returns SwiftUI `lineSpacing` to achieve the desired `lineHeight` multiplier.
+    /// lineSpacing = (lineHeight * fontSize) - fontSize
+    func lineSpacingFor(lineHeight: CGFloat, size: CGFloat) -> CGFloat {
+        (lineHeight - 1.0) * size
+    }
+}
+
 #Preview("Editorial") {
     List {
         ArticleCardView(article: {
@@ -134,11 +180,23 @@ struct ArticleCardView: View {
         ArticleCardView(article: {
             let a = Article(url: "https://x.com/user/status/123", title: "Claude Code is amazing", sourceType: .twitter)
             a.siteName = "Yanhua on X"
+            a.coverImageURL = "https://picsum.photos/200"
             a.statusRaw = ArticleStatus.ready.rawValue
             a.isFavorite = true
+            return a
+        }())
+        ArticleCardView(article: {
+            let a = Article(url: "https://example.com/pending", title: nil, sourceType: .web)
+            a.statusRaw = ArticleStatus.pending.rawValue
+            return a
+        }())
+        ArticleCardView(article: {
+            let a = Article(url: "https://example.com/failed", title: "Failed article", sourceType: .web)
+            a.statusRaw = ArticleStatus.failed.rawValue
             return a
         }())
     }
     .listStyle(.plain)
     .listRowSeparator(.hidden)
+    .listRowInsets(EdgeInsets())
 }
