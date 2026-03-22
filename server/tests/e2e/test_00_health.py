@@ -26,9 +26,3 @@ class TestHealth:
         resp = http.get(f"{reader_url}/health")
         assert resp.status_code == 200
 
-    def test_ai_health(self, http, ai_url):
-        """AI service /health returns 200."""
-        resp = http.get(f"{ai_url}/health")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["status"] == "ok"

@@ -19,8 +19,6 @@ def pytest_addoption(parser):
                      help="Base URL of the Folio API server.")
     parser.addoption("--reader-url", default="http://localhost:13000",
                      help="Base URL of the Reader service (for direct health checks).")
-    parser.addoption("--ai-url", default="http://localhost:18000",
-                     help="Base URL of the AI service (for direct health checks).")
 
 
 # ---------------------------------------------------------------------------
@@ -35,11 +33,6 @@ def base_url(request) -> str:
 @pytest.fixture(scope="session")
 def reader_url(request) -> str:
     return request.config.getoption("--reader-url")
-
-
-@pytest.fixture(scope="session")
-def ai_url(request) -> str:
-    return request.config.getoption("--ai-url")
 
 
 @pytest.fixture(scope="session")

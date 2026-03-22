@@ -4,7 +4,7 @@ set -euo pipefail
 # =============================================================================
 # Folio E2E Test Runner
 #
-# Runs Postgres + Redis in Docker, then starts API / Reader / AI locally.
+# Runs Postgres + Redis in Docker, then starts API / Reader locally.
 #
 # Usage:
 #   ./scripts/run_e2e.sh              # full test suite
@@ -15,15 +15,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 READER_DIR="$SERVER_DIR/reader-service"
-AI_DIR="$SERVER_DIR/ai-service"
-
 cd "$SERVER_DIR"
 
 SMOKE_ONLY=false
 USE_DOCKER=true
 BASE_URL="http://localhost:18080"
 READER_URL="http://localhost:13000"
-AI_URL="http://localhost:18000"
 EXTRA_ARGS=()
 
 # ---------- parse flags ----------
@@ -103,20 +100,6 @@ start_reader() {
   wait_for "$READER_URL/health" "Reader service" 30
 }
 
-# ---------- start AI service locally ----------
-start_ai() {
-  info "Installing AI service dependencies ..."
-  pip install -q -r "$AI_DIR/requirements.txt"
-
-  info "Starting AI service on port 18000 ..."
-  (cd "$AI_DIR" && \
-    REDIS_URL="redis://localhost:16379" \
-    python3 -m uvicorn app.main:app --host 127.0.0.1 --port 18000 --log-level warning \
-  ) 2>&1 | sed 's/^/  [ai] /' &
-  PIDS+=($!)
-  wait_for "$AI_URL/health" "AI service" 30
-}
-
 # ---------- build & start Go API server locally ----------
 start_api() {
   info "Building Go API server ..."
@@ -126,7 +109,6 @@ start_api() {
   DATABASE_URL="postgresql://folio:folio_test@localhost:15432/folio_test" \
   REDIS_ADDR="localhost:16379" \
   READER_URL="$READER_URL" \
-  AI_SERVICE_URL="$AI_URL" \
   JWT_SECRET="e2e-test-secret-key-not-for-production" \
   PORT="18080" \
   /tmp/folio-e2e-server 2>&1 | sed 's/^/  [api] /' &
@@ -162,13 +144,12 @@ unset ALL_PROXY HTTPS_PROXY HTTP_PROXY all_proxy https_proxy http_proxy 2>/dev/n
 
 if $USE_DOCKER; then
   # Kill leftover processes on test ports
-  for p in 13000 18000 18080; do
+  for p in 13000 18080; do
     lsof -ti :"$p" 2>/dev/null | xargs kill 2>/dev/null || true
   done
   sleep 1
   start_docker
   start_reader
-  start_ai
   start_api
 fi
 
@@ -177,7 +158,6 @@ PYTEST_ARGS=(
   "${E2E_DIR}"
   "--base-url=${BASE_URL}"
   "--reader-url=${READER_URL}"
-  "--ai-url=${AI_URL}"
   "--html=${REPORT_DIR}/e2e-report.html"
   "--self-contained-html"
   "--junitxml=${REPORT_DIR}/e2e-results.xml"
