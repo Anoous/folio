@@ -43,6 +43,8 @@ targets:
           - "**/.DS_Store"
       - path: Shared/Extraction
       - path: Shared/Constants
+    resources:
+      - path: Folio/Resources/Fonts
     info:
       path: Folio/Info.plist
       properties:
@@ -50,6 +52,10 @@ targets:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoads: true
         UILaunchScreen: {}
+        UIAppFonts:
+          - LXGWWenKaiTC-Regular.ttf
+          - LXGWWenKaiTC-Medium.ttf
+          - LXGWWenKaiTC-Light.ttf
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.7WSH9CR7KS.folio.app

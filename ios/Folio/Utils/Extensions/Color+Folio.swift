@@ -13,6 +13,7 @@ struct FolioColors {
     let textPrimary = Color("Colors/textPrimary")
     let textSecondary = Color("Colors/textSecondary")
     let textTertiary = Color("Colors/textTertiary")
+    let textQuaternary = Color("Colors/textQuaternary")
 
     // MARK: - UI Elements
     let separator = Color("Colors/separator")
@@ -31,4 +32,8 @@ struct FolioColors {
 
     // MARK: - Code
     let codeBackground = Color("Colors/codeBackground")
+
+    // MARK: - Semantic
+    let echoBg = Color("Colors/echoBg")
+    let accentSoft = Color("Colors/accentSoft")
 }

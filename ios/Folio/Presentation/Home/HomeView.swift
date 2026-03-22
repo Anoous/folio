@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var viewModel: HomeViewModel?
     @State private var searchViewModel: SearchViewModel?
     @State private var searchText = ""
+    @State private var isSearchActive = false
     @State private var showNoteSheet = false
     @State private var noteSheetText = ""
     @State private var articleToDelete: Article?
@@ -26,32 +27,40 @@ struct HomeView: View {
     @State private var refreshTrigger = false
 
     var body: some View {
-        mainContent
-            .navigationTitle("Folio")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink(value: HomeDestination.settings) {
-                        Circle()
-                            .fill(Color.folio.textTertiary.opacity(0.2))
-                            .frame(width: 30, height: 30)
-                            .overlay {
-                                Image(systemName: "person.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(Color.folio.textTertiary)
-                            }
+        VStack(spacing: 0) {
+            // Custom top bar (prototype 01)
+            if !isSearchActive {
+                HStack {
+                    Text("页集")
+                        .font(Typography.v3PageTitle)
+                        .foregroundStyle(Color.folio.textPrimary)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Button { isSearchActive = true } label: {
+                            Circle().fill(Color.clear).frame(width: 38, height: 38)
+                                .overlay {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundStyle(Color.folio.textSecondary)
+                                }
+                        }
+                        NavigationLink(value: HomeDestination.settings) {
+                            Circle().fill(Color.clear).frame(width: 38, height: 38)
+                                .overlay {
+                                    Image(systemName: "gearshape")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundStyle(Color.folio.textSecondary)
+                                }
+                        }
                     }
-                    .accessibilityLabel(String(localized: "tab.settings", defaultValue: "Settings"))
                 }
+                .padding(.horizontal, Spacing.screenPadding)
+                .padding(.top, 6)
             }
-            .searchable(
-                text: $searchText,
-                placement: .navigationBarDrawer(displayMode: .automatic),
-                prompt: String(localized: "search.prompt", defaultValue: "Search or paste a link...")
-            )
-            .onChange(of: searchText) { _, newValue in
-                handleSearchTextChange(newValue)
-            }
+
+            mainContent
+        }
+        .navigationBarHidden(true)
             .navigationDestination(for: UUID.self) { articleID in
                 if let article = viewModel?.articles.first(where: { $0.id == articleID }) {
                     ReaderView(article: article)
@@ -103,28 +112,93 @@ struct HomeView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isSearchActive = !trimmed.isEmpty
-
-        if isSearchActive, let svm = searchViewModel {
-            HomeSearchResultsView(
-                searchViewModel: svm,
-                searchText: $searchText,
-                detectedURL: URLDetection.extractURL(from: trimmed),
-                existingArticle: findExistingArticle(for: trimmed),
-                onSaveURL: { url in saveURL(url) },
-                onSaveNote: { content in
-                    noteSheetText = content
-                    showNoteSheet = true
-                }
-            )
+        if isSearchActive {
+            searchContent
         } else if viewModel?.articles.isEmpty ?? true {
-            EmptyStateView(onPasteURL: { url in
-                saveURL(url.absoluteString)
-            })
+            VStack(spacing: 0) {
+                dateHeader
+                EmptyStateView(onPasteURL: { url in
+                    saveURL(url.absoluteString)
+                })
+            }
         } else {
             articleList
         }
+    }
+
+    // MARK: - Search Content
+
+    private var searchContent: some View {
+        VStack(spacing: 0) {
+            // Search bar
+            HStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Color.folio.textTertiary)
+                    TextField("搜索，或提问", text: $searchText)
+                        .font(.system(size: 16))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .onSubmit { handleSearchTextChange(searchText) }
+                        .onChange(of: searchText) { _, newValue in
+                            handleSearchTextChange(newValue)
+                        }
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 15))
+                                .foregroundStyle(Color.folio.textTertiary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color.folio.echoBg)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                Button("取消") {
+                    searchText = ""
+                    isSearchActive = false
+                }
+                .font(.system(size: 16))
+                .foregroundStyle(Color.folio.accent)
+            }
+            .padding(.horizontal, Spacing.screenPadding)
+            .padding(.vertical, 10)
+
+            // Search results
+            let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, let svm = searchViewModel {
+                HomeSearchResultsView(
+                    searchViewModel: svm,
+                    searchText: $searchText,
+                    detectedURL: URLDetection.extractURL(from: trimmed),
+                    existingArticle: findExistingArticle(for: trimmed),
+                    onSaveURL: { url in saveURL(url) },
+                    onSaveNote: { content in
+                        noteSheetText = content
+                        showNoteSheet = true
+                    }
+                )
+            } else {
+                Spacer()
+            }
+        }
+    }
+
+    // MARK: - Date Header
+
+    private var dateHeader: some View {
+        Text(formattedDate())
+            .font(.system(size: 13))
+            .foregroundStyle(Color.folio.textTertiary)
+            .tracking(0.5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Spacing.screenPadding)
+            .padding(.top, 4)
     }
 
     // MARK: - Toast Binding
@@ -143,23 +217,52 @@ struct HomeView: View {
         return String(localized: "reader.deleteConfirm", defaultValue: "Delete this article?") + (title.isEmpty ? "" : "\n\"\(title)\"")
     }
 
-    // MARK: - Article List (flat, no date grouping)
+    // MARK: - Article List (sectioned by date)
 
     private var articleList: some View {
         List {
             statusBanners
 
-            if let vm = viewModel {
-                ForEach(vm.articles) { article in
-                    HomeArticleRow(
-                        article: article,
-                        isLast: article.id == vm.articles.last?.id
-                    ) { action in
-                        handleArticleAction(action, article: article, vm: vm)
-                    }
-                }
-                .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
+            // Date header
+            dateHeader
+                .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
+
+            if let vm = viewModel {
+                ForEach(vm.groupedArticles, id: \.group) { section in
+                    Section {
+                        ForEach(Array(section.articles.enumerated()), id: \.element.id) { index, article in
+                            if section.group == .today && index == 0 && article.readProgress == 0 && article.status == .ready {
+                                NavigationLink(value: article.id) {
+                                    HeroArticleCardView(article: article)
+                                }
+                                .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
+                                .listRowSeparator(.hidden)
+                                .onAppear {
+                                    if article.id == vm.articles.last?.id {
+                                        vm.loadNextPage()
+                                    }
+                                }
+                            } else {
+                                HomeArticleRow(
+                                    article: article,
+                                    isLast: article.id == vm.articles.last?.id
+                                ) { action in
+                                    handleArticleAction(action, article: article, vm: vm)
+                                }
+                                .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
+                                .listRowSeparator(.hidden)
+                            }
+                        }
+                    } header: {
+                        Text(section.group.rawValue)
+                            .font(Typography.v3SectionHeader)
+                            .foregroundStyle(Color.folio.textTertiary)
+                            .tracking(0.3)
+                            .textCase(nil)
+                    }
+                    .listSectionSeparator(.hidden)
+                }
             }
         }
         .listStyle(.plain)
@@ -190,6 +293,15 @@ struct HomeView: View {
                 ShareSheet(activityItems: items)
             }
         }
+    }
+
+    // MARK: - Date Formatting
+
+    private func formattedDate() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日，EEEE"
+        return formatter.string(from: .now)
     }
 
     // MARK: - Status Banners

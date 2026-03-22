@@ -4,15 +4,14 @@ import SwiftUI
 struct ReadingProgressBar: View {
     let progress: Double
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
         GeometryReader { geometry in
             Rectangle()
-                .fill(Color.folio.accent.opacity(progress >= 1.0 ? 0.5 : 0.3))
+                .fill(Color.folio.accent)
                 .frame(width: geometry.size.width * min(max(progress, 0), 1.0))
-                .animation(Motion.resolved(Motion.quick, reduceMotion: reduceMotion), value: progress)
+                .animation(.linear(duration: 0.1), value: progress)
         }
-        .frame(height: 1.5)
+        .frame(height: 2)
+        .padding(.horizontal, Spacing.screenPadding)
     }
 }

@@ -3,6 +3,51 @@ import os
 import SwiftData
 import SwiftUI
 
+enum TimeGroup: String, CaseIterable {
+    case today = "今天"
+    case yesterday = "昨天"
+    case thisWeek = "本周"
+    case lastWeek = "上周"
+    case earlier = "更早"
+
+    static func group(dates: [Date], calendar: Calendar = .current, now: Date = .now) -> [(group: TimeGroup, indices: [Int])] {
+        let startOfToday = calendar.startOfDay(for: now)
+        let startOfYesterday = calendar.date(byAdding: .day, value: -1, to: startOfToday)!
+        let weekday = calendar.component(.weekday, from: now)
+        let daysSinceMonday = (weekday + 5) % 7
+        let startOfThisWeek = calendar.date(byAdding: .day, value: -daysSinceMonday, to: startOfToday)!
+        let startOfLastWeek = calendar.date(byAdding: .day, value: -7, to: startOfThisWeek)!
+
+        var buckets: [TimeGroup: [Int]] = [:]
+
+        for (i, date) in dates.enumerated() {
+            let group: TimeGroup
+            if date >= startOfToday {
+                group = .today
+            } else if date >= startOfYesterday {
+                group = .yesterday
+            } else if date >= startOfThisWeek {
+                group = .thisWeek
+            } else if date >= startOfLastWeek {
+                group = .lastWeek
+            } else {
+                group = .earlier
+            }
+            buckets[group, default: []].append(i)
+        }
+
+        return TimeGroup.allCases.compactMap { g in
+            guard let indices = buckets[g], !indices.isEmpty else { return nil }
+            return (group: g, indices: indices)
+        }
+    }
+
+    static func groupArticles(_ articles: [Article], calendar: Calendar = .current, now: Date = .now) -> [(group: TimeGroup, articles: [Article])] {
+        let dated = group(dates: articles.map(\.createdAt), calendar: calendar, now: now)
+        return dated.map { (group: $0.group, articles: $0.indices.map { articles[$0] }) }
+    }
+}
+
 @MainActor
 @Observable
 final class HomeViewModel {
@@ -10,6 +55,11 @@ final class HomeViewModel {
     private let apiClient: APIClient
 
     var articles: [Article] = []
+
+    var groupedArticles: [(group: TimeGroup, articles: [Article])] {
+        TimeGroup.groupArticles(articles)
+    }
+
     var selectedCategory: Folio.Category?
     var selectedTags: [Tag] = []
     var isLoading = false

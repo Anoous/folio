@@ -25,6 +25,12 @@ enum AppConstants {
     /// Free tier subscription identifier (matches server domain.SubscriptionFree).
     static let subscriptionFree = "free"
 
+    /// Pro tier subscription identifier (matches server domain.SubscriptionPro).
+    static let subscriptionPro = "pro"
+
+    /// Legacy pro_plus tier — treated as "pro" on the client side.
+    static let subscriptionProPlus = "pro_plus"
+
     // MARK: - Task Status
 
     /// Server task status values (matches server domain.TaskStatus* constants).

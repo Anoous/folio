@@ -13,6 +13,6 @@ enum Spacing {
     static let lg: CGFloat = 24
     /// 32pt
     static let xl: CGFloat = 32
-    /// 16pt — standard screen edge padding
-    static let screenPadding: CGFloat = 16
+    /// 20pt — standard screen edge padding (v3 prototypes)
+    static let screenPadding: CGFloat = 20
 }

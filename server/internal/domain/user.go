@@ -5,9 +5,8 @@ import "time"
 type Subscription string
 
 const (
-	SubscriptionFree    Subscription = "free"
-	SubscriptionPro     Subscription = "pro"
-	SubscriptionProPlus Subscription = "pro_plus"
+	SubscriptionFree Subscription = "free"
+	SubscriptionPro  Subscription = "pro"
 )
 
 type User struct {

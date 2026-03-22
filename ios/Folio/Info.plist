@@ -25,6 +25,12 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>UIAppFonts</key>
+	<array>
+		<string>LXGWWenKaiTC-Regular.ttf</string>
+		<string>LXGWWenKaiTC-Medium.ttf</string>
+		<string>LXGWWenKaiTC-Light.ttf</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

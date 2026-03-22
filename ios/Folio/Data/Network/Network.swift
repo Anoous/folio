@@ -59,6 +59,18 @@ struct UserDTO: Decodable {
     let createdAt: Date
     let updatedAt: Date
     let syncEpoch: Int?
+
+    /// Normalizes "pro_plus" → "pro" for client-side display.
+    var effectiveSubscription: String {
+        subscription == AppConstants.subscriptionProPlus
+            ? AppConstants.subscriptionPro
+            : subscription
+    }
+
+    /// Whether this user has an active Pro (or Pro+) subscription.
+    var isPro: Bool {
+        effectiveSubscription == AppConstants.subscriptionPro
+    }
 }
 
 // MARK: Articles
@@ -205,8 +217,8 @@ final class APIClient: @unchecked Sendable {
         #if targetEnvironment(simulator)
         static let defaultBaseURL = URL(string: "http://localhost:8080")!
         #else
-        // Staging server (self-signed cert, Caddy on :8443)
-        static let defaultBaseURL = URL(string: "https://43.138.233.19:8443")!
+        // Staging server via Cloudflare Tunnel
+        static let defaultBaseURL = URL(string: "https://api.echolore.ai")!
         #endif
     #else
     static let defaultBaseURL = URL(string: "https://api.folio.app")!

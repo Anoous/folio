@@ -13,8 +13,9 @@ struct ReaderView: View {
     @State private var showsReadingPreferences = false
     @State private var showsWebView = false
     @State private var showsDeleteConfirmation = false
+    @State private var showMoreMenu = false
     @Environment(\.openURL) private var openURL
-    @State private var summaryExpanded = false
+    @State private var isInsightExpanded = false
     @State private var metrics = ScaledArticleMetrics()
     @State private var showToastState = false
 
@@ -50,8 +51,19 @@ struct ReaderView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                moreMenuButton
+                Button {
+                    showMoreMenu = true
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(Color.folio.textPrimary)
+                }
+                .accessibilityLabel(String(localized: "button.more", defaultValue: "More options"))
             }
+        }
+        .sheet(isPresented: $showMoreMenu) {
+            readerMenuSheet
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
         }
         .toast(isPresented: $showToastState, message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
         .onChange(of: viewModel?.showToast) { _, newValue in
@@ -121,9 +133,13 @@ struct ReaderView: View {
                     .padding(.top, Spacing.lg)
                     .opacity(metaVisible ? 1 : 0)
 
-                    // AI Summary
-                    if let summary = article.displaySummary {
-                        aiSummarySection(summary: summary)
+                    // Insight panel
+                    if let summary = article.displaySummary, !summary.isEmpty {
+                        insightPanel
+                            .padding(.top, Spacing.lg)
+                            .opacity(metaVisible ? 1 : 0)
+                    } else if !article.keyPoints.isEmpty {
+                        insightPanel
                             .padding(.top, Spacing.lg)
                             .opacity(metaVisible ? 1 : 0)
                     }
@@ -215,39 +231,64 @@ struct ReaderView: View {
         }
     }
 
-    // MARK: - AI Summary Section
+    // MARK: - Insight Panel
 
-    private func aiSummarySection(summary: String) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
+    private var insightPanel: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header (always visible)
             Button {
-                withAnimation(Motion.settle) { summaryExpanded.toggle() }
+                withAnimation(Motion.settle) { isInsightExpanded.toggle() }
             } label: {
-                HStack(spacing: Spacing.xxs) {
-                    Text("\u{2726}")
-                        .font(.caption)
+                HStack(spacing: 10) {
+                    Text("✦")
+                        .font(.system(size: 14))
                         .foregroundStyle(Color.folio.accent)
-                    Text("AI")
-                        .font(Typography.tag)
-                        .foregroundStyle(Color.folio.accent)
+
+                    Text(article.displaySummary ?? "")
+                        .font(Typography.v3InsightMain)
+                        .foregroundStyle(Color.folio.textPrimary)
+                        .lineSpacing(15 * 0.55)
+                        .lineLimit(isInsightExpanded ? nil : 2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
                     Image(systemName: "chevron.down")
-                        .font(.caption2)
-                        .foregroundStyle(Color.folio.textTertiary)
-                        .rotationEffect(.degrees(summaryExpanded ? 180 : 0))
-                        .animation(Motion.quick, value: summaryExpanded)
-                    Spacer()
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.folio.textQuaternary)
+                        .rotationEffect(.degrees(isInsightExpanded ? 180 : 0))
                 }
             }
             .buttonStyle(.plain)
 
-            if summaryExpanded {
-                Text(summary)
-                    .font(.system(size: CGFloat(fontSize) - 1))
-                    .foregroundStyle(readingTheme.secondaryTextColor)
-                    .lineSpacing(Typography.articleBodyLineSpacing)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+            // Detail (expanded only)
+            if isInsightExpanded {
+                VStack(alignment: .leading, spacing: 0) {
+                    Rectangle()
+                        .fill(Color.folio.separator)
+                        .frame(height: 0.5)
+                        .padding(.top, 14)
+                        .padding(.bottom, 12)
+
+                    ForEach(article.keyPoints, id: \.self) { point in
+                        HStack(alignment: .top, spacing: 0) {
+                            Text("·")
+                                .foregroundStyle(Color.folio.textQuaternary)
+                                .frame(width: 24)
+                            Text(point)
+                                .font(.system(size: 14))
+                                .foregroundStyle(Color.folio.textSecondary)
+                                .lineSpacing(14 * 0.6)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .padding(16)
+        .background(Color.folio.accentSoft)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, Spacing.screenPadding)
+        .padding(.bottom, 24)
     }
 
     // MARK: - Content Unavailable
@@ -330,102 +371,162 @@ struct ReaderView: View {
         .padding(.vertical, Spacing.xl)
     }
 
-    // MARK: - More Menu
+    // MARK: - Menu Sheet
 
-    private var moreMenuButton: some View {
-        Menu {
-            Button {
-                viewModel?.toggleFavorite()
-            } label: {
-                Label(
-                    article.isFavorite
-                        ? String(localized: "reader.unfavorite", defaultValue: "Remove Favorite")
-                        : String(localized: "reader.favorite", defaultValue: "Favorite"),
-                    systemImage: article.isFavorite ? "heart.fill" : "heart"
-                )
-            }
+    private var readerMenuSheet: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                menuRow(
+                    icon: article.isFavorite ? "bookmark.fill" : "bookmark",
+                    label: article.isFavorite
+                        ? String(localized: "reader.unfavorite", defaultValue: "取消收藏")
+                        : String(localized: "reader.favorite", defaultValue: "收藏")
+                ) {
+                    showMoreMenu = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        viewModel?.toggleFavorite()
+                    }
+                }
 
-            Button {
-                viewModel?.copyMarkdown()
-            } label: {
-                Label(String(localized: "reader.copyMarkdown", defaultValue: "Copy Markdown"), systemImage: "doc.on.doc")
-            }
+                menuSeparator
 
-            Button {
-                showsReadingPreferences = true
-            } label: {
-                Label(String(localized: "reader.readingPrefs", defaultValue: "Reading Preferences"), systemImage: "textformat.size")
-            }
+                menuRow(icon: "doc.on.doc", label: String(localized: "reader.copyMarkdown", defaultValue: "复制 Markdown")) {
+                    showMoreMenu = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        viewModel?.copyMarkdown()
+                    }
+                }
 
-            Button {
-                viewModel?.archiveArticle()
-            } label: {
-                Label(
-                    article.isArchived
-                        ? String(localized: "reader.unarchive", defaultValue: "Unarchive")
-                        : String(localized: "reader.archive", defaultValue: "Archive"),
-                    systemImage: article.isArchived ? "archivebox.fill" : "archivebox"
-                )
-            }
+                menuSeparator
 
-            if article.url != nil {
-                Button {
-                    openOriginal()
-                } label: {
-                    Label(String(localized: "reader.openInBrowser", defaultValue: "Open Original"), systemImage: "safari")
+                menuRow(icon: "textformat.size", label: String(localized: "reader.readingPrefs", defaultValue: "阅读偏好")) {
+                    showMoreMenu = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        showsReadingPreferences = true
+                    }
+                }
+
+                menuSeparator
+
+                menuRow(
+                    icon: article.isArchived ? "archivebox.fill" : "archivebox",
+                    label: article.isArchived
+                        ? String(localized: "reader.unarchive", defaultValue: "取消归档")
+                        : String(localized: "reader.archive", defaultValue: "归档")
+                ) {
+                    showMoreMenu = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        viewModel?.archiveArticle()
+                    }
+                }
+
+                if article.url != nil {
+                    menuSeparator
+
+                    menuRow(icon: "globe", label: String(localized: "reader.openInBrowser", defaultValue: "查看原文")) {
+                        showMoreMenu = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            openOriginal()
+                        }
+                    }
+                }
+
+                menuSeparator
+
+                menuRow(icon: "trash", label: String(localized: "reader.delete", defaultValue: "删除"), isDestructive: true) {
+                    showMoreMenu = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        showsDeleteConfirmation = true
+                    }
                 }
             }
+            .padding(.horizontal, Spacing.screenPadding)
 
-            Divider()
+            Spacer().frame(height: Spacing.lg)
 
-            Button(role: .destructive) {
-                showsDeleteConfirmation = true
+            // Cancel button
+            Button {
+                showMoreMenu = false
             } label: {
-                Label(String(localized: "reader.delete", defaultValue: "Delete"), systemImage: "trash")
+                Text(String(localized: "button.cancel", defaultValue: "取消"))
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Color.folio.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.folio.accentSoft)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
             }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .foregroundStyle(Color.folio.textPrimary)
+            .padding(.horizontal, Spacing.screenPadding)
         }
-        .accessibilityLabel(String(localized: "button.more", defaultValue: "More options"))
+        .padding(.top, Spacing.md)
+        .padding(.bottom, 34)
+        .background(Color.folio.background)
+    }
+
+    private func menuRow(icon: String, label: String, isDestructive: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .imageScale(.medium)
+                    .symbolRenderingMode(.monochrome)
+                    .fontWeight(.regular)
+                    .foregroundStyle(isDestructive ? Color.folio.error : Color.folio.textPrimary)
+                    .frame(width: 24, alignment: .center)
+
+                Text(label)
+                    .font(.system(size: 16))
+                    .foregroundStyle(isDestructive ? Color.folio.error : Color.folio.textPrimary)
+
+                Spacer()
+            }
+            .padding(.vertical, 14)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var menuSeparator: some View {
+        Rectangle()
+            .fill(Color.folio.separator)
+            .frame(height: 0.5)
     }
 
     // MARK: - Bottom Toolbar
 
     private var bottomToolbar: some View {
         HStack {
-            if article.url != nil {
-                Button {
-                    openOriginal()
-                } label: {
-                    HStack(spacing: Spacing.xxs) {
-                        Image(systemName: "safari")
-                        Text(String(localized: "reader.original", defaultValue: "Original"))
-                            .font(Typography.caption)
-                    }
+            // Globe: open original URL
+            Button {
+                openOriginal()
+            } label: {
+                Image(systemName: "globe")
+                    .font(.system(size: 18))
                     .foregroundStyle(Color.folio.textSecondary)
-                }
-                .accessibilityLabel(String(localized: "reader.openOriginal", defaultValue: "Open Original"))
+                    .frame(width: 40, height: 40)
             }
+            .accessibilityLabel(String(localized: "reader.openOriginal", defaultValue: "Open Original"))
+            .opacity(article.url != nil ? 1 : 0)
+            .disabled(article.url == nil)
 
             Spacer()
 
-            Text("\(Int(round((viewModel?.readingProgress ?? 0) * 100)))%")
-                .font(Typography.caption)
+            // Progress percentage
+            Text("\(Int((viewModel?.readingProgress ?? 0) * 100))%")
+                .font(.system(size: 13, weight: .medium))
+                .tracking(0.5)
                 .foregroundStyle(Color.folio.textTertiary)
-                .accessibilityLabel(String(localized: "reader.progressLabel", defaultValue: "Reading progress \(Int(round((viewModel?.readingProgress ?? 0) * 100))) percent"))
+                .accessibilityLabel(String(localized: "reader.progressLabel", defaultValue: "Reading progress \(Int((viewModel?.readingProgress ?? 0) * 100)) percent"))
 
             Spacer()
 
+            // Share button
             Button {
                 showsShareSheet = true
             } label: {
-                HStack(spacing: Spacing.xxs) {
-                    Image(systemName: "square.and.arrow.up")
-                    Text(String(localized: "reader.share", defaultValue: "Share"))
-                        .font(Typography.caption)
-                }
-                .foregroundStyle(Color.folio.textSecondary)
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 18))
+                    .foregroundStyle(Color.folio.textSecondary)
+                    .frame(width: 40, height: 40)
             }
             .accessibilityLabel(String(localized: "reader.shareArticle", defaultValue: "Share article"))
             .sheet(isPresented: $showsShareSheet) {
@@ -434,9 +535,18 @@ struct ReaderView: View {
                 }
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, Spacing.sm)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, Spacing.screenPadding)
+        .padding(.bottom, 34)
+        .background(
+            LinearGradient(
+                stops: [
+                    .init(color: Color.folio.background.opacity(0), location: 0),
+                    .init(color: Color.folio.background, location: 0.3),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
     }
 
     // MARK: - Open Original
