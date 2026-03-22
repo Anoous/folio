@@ -46,7 +46,7 @@ ensure_env() {
   local dk_key
   dk_key="$(grep '^DEEPSEEK_API_KEY=' "$ENV_FILE" | cut -d= -f2-)"
   if [ -z "$dk_key" ]; then
-    warn "DEEPSEEK_API_KEY is empty — AI service will start but analysis calls will fail"
+    warn "DEEPSEEK_API_KEY is empty — mock AI analyzer will be used (no real analysis)"
     warn "Set it in $ENV_FILE if you have one"
   fi
 }
