@@ -85,6 +85,7 @@ struct ReaderView: View {
         }
         .task {
             await viewModel?.fetchContentIfNeeded()
+            await viewModel?.fetchHighlights()
         }
         .sheet(isPresented: $showsReadingPreferences) {
             ReadingPreferenceView()
@@ -113,7 +114,8 @@ struct ReaderView: View {
 
     @ViewBuilder
     private func readerContent(viewModel: ReaderViewModel) -> some View {
-        GeometryReader { outerProxy in
+        VStack(spacing: 0) {
+            // Native SwiftUI header (non-scrolling)
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     // Article title
@@ -147,84 +149,94 @@ struct ReaderView: View {
                     // Divider before body
                     Divider()
                         .padding(.top, Spacing.md)
-                        .padding(.bottom, Spacing.md)
-
-                    // Markdown body
-                    Group {
-                        if let content = article.markdownContent {
-                            MarkdownRenderer(
-                                markdownText: MarkdownRenderer.preprocessed(content, title: article.title),
-                                fontSize: CGFloat(fontSize),
-                                lineSpacing: CGFloat(lineSpacing),
-                                fontFamily: readingFontFamily,
-                                textColor: readingTheme.textColor,
-                                secondaryTextColor: readingTheme.secondaryTextColor
-                            )
-                        } else if viewModel.isLoadingContent {
-                            VStack(spacing: Spacing.md) {
-                                ProgressView()
-                                Text(String(localized: "reader.loadingContent", defaultValue: "Loading content..."))
-                                    .font(Typography.caption)
-                                    .foregroundStyle(Color.folio.textSecondary)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, Spacing.xl)
-                        } else {
-                            contentUnavailableView
-                        }
-
-                        // Related articles
-                        if article.markdownContent != nil {
-                            RelatedArticlesSection()
-                                .padding(.top, Spacing.xl)
-                        }
-                    }
-                    .opacity(contentVisible ? 1 : 0)
                 }
                 .frame(maxWidth: 600)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)
-                .padding(.bottom, 80)
-                .background(
-                    GeometryReader { innerProxy in
-                        Color.clear.preference(
-                            key: ScrollMetricsPreferenceKey.self,
-                            value: ScrollMetrics(
-                                contentHeight: innerProxy.size.height,
-                                offsetY: innerProxy.frame(in: .named("scroll")).minY
-                            )
-                        )
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .fixedSize(horizontal: false, vertical: true)
+
+            // WebView article body (handles its own scrolling)
+            Group {
+                if let markdown = article.markdownContent {
+                    let highlightTuples = viewModel.highlights.map {
+                        (id: $0.id, startOffset: $0.startOffset, endOffset: $0.endOffset)
                     }
-                )
-            }
-            .background(readingTheme.backgroundColor)
-            .coordinateSpace(name: "scroll")
-            .overlay(alignment: .top) {
-                ReadingProgressBar(progress: viewModel.readingProgress)
-            }
-            .onPreferenceChange(ScrollMetricsPreferenceKey.self) { metrics in
-                let viewportHeight = outerProxy.size.height
-                let scrollableDistance = metrics.contentHeight - viewportHeight
-                guard scrollableDistance > 0 else { return }
-                let scrolled = -metrics.offsetY
-                let progress = scrolled / scrollableDistance
-                self.viewModel?.updateReadingProgress(progress)
-            }
-            .safeAreaInset(edge: .bottom) {
-                bottomToolbar
-            }
-            .task {
-                guard !titleVisible else { return }
-                if reduceMotion {
-                    titleVisible = true
-                    metaVisible = true
-                    contentVisible = true
-                    return
+                    ArticleWebView(
+                        htmlContent: MarkdownToHTML.convert(
+                            markdown: markdown,
+                            title: article.title,
+                            highlights: highlightTuples,
+                            fontSize: CGFloat(fontSize),
+                            lineSpacing: CGFloat(lineSpacing),
+                            fontFamily: readingFontFamily,
+                            theme: readingTheme
+                        ),
+                        initialProgress: article.readProgress,
+                        onHighlightCreate: { text, start, end in
+                            viewModel.createHighlight(text: text, startOffset: start, endOffset: end)
+                        },
+                        onHighlightRemove: { id in
+                            viewModel.deleteHighlight(id: id)
+                        },
+                        onScrollProgress: { progress in
+                            viewModel.updateReadingProgress(progress)
+                        },
+                        onImageTap: { _ in
+                            // TODO: Show ImageViewerOverlay
+                        },
+                        onLinkTap: { href in
+                            if let url = URL(string: href) {
+                                UIApplication.shared.open(url)
+                            }
+                        },
+                        onToast: { message in
+                            viewModel.showToastMessage(message, icon: nil)
+                        },
+                        onContentReady: {
+                            if !contentVisible {
+                                withAnimation(Motion.ink) { contentVisible = true }
+                            }
+                        }
+                    )
+                    .opacity(contentVisible ? 1 : 0)
+                } else if viewModel.isLoadingContent {
+                    VStack(spacing: Spacing.md) {
+                        ProgressView()
+                        Text(String(localized: "reader.loadingContent", defaultValue: "Loading content..."))
+                            .font(Typography.caption)
+                            .foregroundStyle(Color.folio.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.vertical, Spacing.xl)
+                } else {
+                    contentUnavailableView
                 }
-                try? await Task.sleep(for: .milliseconds(150))
-                withAnimation(Motion.ink) { titleVisible = true }
-                try? await Task.sleep(for: .milliseconds(100))
-                withAnimation(Motion.ink) { metaVisible = true }
+            }
+        }
+        .background(readingTheme.backgroundColor)
+        .overlay(alignment: .top) {
+            ReadingProgressBar(progress: viewModel.readingProgress)
+        }
+        .safeAreaInset(edge: .bottom) {
+            bottomToolbar
+        }
+        .task {
+            guard !titleVisible else { return }
+            if reduceMotion {
+                titleVisible = true
+                metaVisible = true
+                contentVisible = true
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(150))
+            withAnimation(Motion.ink) { titleVisible = true }
+            try? await Task.sleep(for: .milliseconds(100))
+            withAnimation(Motion.ink) { metaVisible = true }
+            // contentVisible is triggered by onContentReady when WebView is used;
+            // for non-WebView states (loading/error), show immediately.
+            if article.markdownContent == nil {
                 try? await Task.sleep(for: .milliseconds(100))
                 withAnimation(Motion.ink) { contentVisible = true }
             }
@@ -565,20 +577,6 @@ struct ReaderView: View {
         }
     }
 
-}
-
-// MARK: - Scroll Metrics
-
-private struct ScrollMetrics: Equatable {
-    var contentHeight: CGFloat = 0
-    var offsetY: CGFloat = 0
-}
-
-private struct ScrollMetricsPreferenceKey: PreferenceKey {
-    static var defaultValue = ScrollMetrics()
-    static func reduce(value: inout ScrollMetrics, nextValue: () -> ScrollMetrics) {
-        value = nextValue()
-    }
 }
 
 // MARK: - Share Sheet (UIKit wrapper)
