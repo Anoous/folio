@@ -26,7 +26,8 @@ services:
       - DATABASE_URL=postgresql://folio:${DB_PASSWORD}@postgres:5432/folio
       - REDIS_ADDR=redis:6379
       - READER_URL=http://reader:3000
-      - AI_SERVICE_URL=http://ai:8000
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       - R2_ENDPOINT=${R2_ENDPOINT}
       - R2_ACCESS_KEY=${R2_ACCESS_KEY}
       - R2_SECRET_KEY=${R2_SECRET_KEY}
@@ -38,8 +39,6 @@ services:
       redis:
         condition: service_healthy
       reader:
-        condition: service_healthy
-      ai:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/health"]
@@ -61,7 +60,8 @@ services:
       - DATABASE_URL=postgresql://folio:${DB_PASSWORD}@postgres:5432/folio
       - REDIS_ADDR=redis:6379
       - READER_URL=http://reader:3000
-      - AI_SERVICE_URL=http://ai:8000
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       - R2_ENDPOINT=${R2_ENDPOINT}
       - R2_ACCESS_KEY=${R2_ACCESS_KEY}
       - R2_SECRET_KEY=${R2_SECRET_KEY}
@@ -73,8 +73,6 @@ services:
       redis:
         condition: service_healthy
       reader:
-        condition: service_healthy
-      ai:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -94,24 +92,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    restart: unless-stopped
-    networks:
-      - backend
-
-  ai:
-    build: ./ai-service
-    environment:
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
     restart: unless-stopped
     networks:
       - backend
