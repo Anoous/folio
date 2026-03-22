@@ -250,6 +250,26 @@ func truncate(s string, maxRunes int) string {
 	return string(runes[:maxRunes]) + "..."
 }
 
+// GenerateEchoCards returns deterministic mock echo Q&A pairs without calling any API.
+func (m *MockAnalyzer) GenerateEchoCards(_ context.Context, title string, source string, keyPoints []string) ([]EchoQAPair, error) {
+	if len(keyPoints) == 0 {
+		return nil, nil
+	}
+
+	pairs := make([]EchoQAPair, 0, len(keyPoints))
+	for i, kp := range keyPoints {
+		if i >= 2 {
+			break // Max 2 mock cards
+		}
+		pairs = append(pairs, EchoQAPair{
+			Question:      fmt.Sprintf("关于「%s」，%s 的要点是什么？", orDefault(title, "本文"), kp),
+			Answer:        kp,
+			SourceContext: kp,
+		})
+	}
+	return pairs, nil
+}
+
 // isASCII reports whether s contains only ASCII characters.
 func isASCII(s string) bool {
 	for i := 0; i < len(s); i++ {

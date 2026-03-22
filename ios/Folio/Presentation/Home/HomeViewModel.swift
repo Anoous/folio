@@ -55,9 +55,44 @@ final class HomeViewModel {
     private let apiClient: APIClient
 
     var articles: [Article] = []
+    var echoCards: [EchoCardDTO] = []
 
     var groupedArticles: [(group: TimeGroup, articles: [Article])] {
         TimeGroup.groupArticles(articles)
+    }
+
+    // MARK: - Feed Interleaving
+
+    enum FeedItem: Identifiable {
+        case article(Article)
+        case echo(EchoCardDTO)
+
+        var id: String {
+            switch self {
+            case .article(let a): return "article-\(a.id)"
+            case .echo(let e): return "echo-\(e.id)"
+            }
+        }
+    }
+
+    struct FeedSection {
+        let group: TimeGroup
+        let items: [FeedItem]
+    }
+
+    var feedSections: [FeedSection] {
+        var echoIdx = 0
+        return groupedArticles.map { section in
+            var items: [FeedItem] = []
+            for (i, article) in section.articles.enumerated() {
+                items.append(.article(article))
+                if (i + 1) % 4 == 0, echoIdx < echoCards.count {
+                    items.append(.echo(echoCards[echoIdx]))
+                    echoIdx += 1
+                }
+            }
+            return FeedSection(group: section.group, items: items)
+        }
     }
 
     var selectedCategory: Folio.Category?
@@ -117,6 +152,32 @@ final class HomeViewModel {
 
         fetchArticles()
         isLoading = false
+    }
+
+    // MARK: - Echo
+
+    func fetchEchoCards() async {
+        guard isAuthenticated else { return }
+        do {
+            let response = try await apiClient.getEchoToday()
+            echoCards = response.data
+        } catch {
+            echoCards = []
+        }
+    }
+
+    func submitEchoReview(cardID: String, result: String, completion: @escaping (EchoReviewResponse?) -> Void) {
+        // Remove card from local list immediately (optimistic)
+        echoCards.removeAll { $0.id == cardID }
+
+        Task {
+            do {
+                let response = try await apiClient.submitEchoReview(cardID: cardID, result: result)
+                await MainActor.run { completion(response) }
+            } catch {
+                await MainActor.run { completion(nil) }
+            }
+        }
     }
 
     // MARK: - Merge Server Articles

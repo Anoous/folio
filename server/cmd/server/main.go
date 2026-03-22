@@ -95,6 +95,15 @@ func main() {
 	taskHandler := handler.NewTaskHandler(taskRepo)
 	subscriptionHandler := handler.NewSubscriptionHandler()
 
+	// Content cache repository
+	contentCacheRepo := repository.NewContentCacheRepo(pool)
+
+	// Echo repository
+	echoRepo := repository.NewEchoRepo(pool)
+
+	echoService := service.NewEchoService(echoRepo, userRepo)
+	echoAPIHandler := handler.NewEchoHandler(echoService)
+
 	// Router
 	router := api.NewRouter(api.RouterDeps{
 		AuthService:         authService,
@@ -105,22 +114,21 @@ func main() {
 		CategoryHandler:     categoryHandler,
 		TaskHandler:         taskHandler,
 		SubscriptionHandler: subscriptionHandler,
+		EchoHandler:         echoAPIHandler,
 	})
-
-	// Content cache repository
-	contentCacheRepo := repository.NewContentCacheRepo(pool)
 
 	// Worker server
 	jinaClient := client.NewJinaClient(cfg.JinaAPIKey)
 	crawlHandler := worker.NewCrawlHandler(readerClient, jinaClient, articleRepo, taskRepo, asynqClient, r2Client != nil, contentCacheRepo, tagRepo, categoryRepo)
-	aiHandler := worker.NewAIHandler(aiAnalyzer, articleRepo, taskRepo, categoryRepo, tagRepo, contentCacheRepo)
+	aiHandler := worker.NewAIHandler(aiAnalyzer, articleRepo, taskRepo, categoryRepo, tagRepo, contentCacheRepo, asynqClient)
+	echoHandler := worker.NewEchoHandler(aiAnalyzer, articleRepo, echoRepo)
 
 	var workerServer *worker.WorkerServer
 	if r2Client != nil {
 		imageHandler := worker.NewImageHandler(r2Client, articleRepo)
-		workerServer = worker.NewWorkerServer(cfg.RedisAddr, crawlHandler, aiHandler, imageHandler)
+		workerServer = worker.NewWorkerServer(cfg.RedisAddr, crawlHandler, aiHandler, imageHandler, echoHandler)
 	} else {
-		workerServer = worker.NewWorkerServer(cfg.RedisAddr, crawlHandler, aiHandler, nil)
+		workerServer = worker.NewWorkerServer(cfg.RedisAddr, crawlHandler, aiHandler, nil, echoHandler)
 	}
 
 	// HTTP server
