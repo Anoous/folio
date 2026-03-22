@@ -25,6 +25,7 @@ type RouterDeps struct {
 	EchoHandler         *handler.EchoHandler
 	HighlightHandler    *handler.HighlightHandler
 	RAGHandler          *handler.RAGHandler
+	StatsHandler        *handler.StatsHandler
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -94,6 +95,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 			// RAG (question answering over saved articles)
 			r.Post("/rag/query", deps.RAGHandler.HandleQuery)
+
+			// Stats (knowledge map)
+			r.Get("/stats/monthly", deps.StatsHandler.HandleMonthlyStats)
+			r.Get("/stats/echo", deps.StatsHandler.HandleEchoStats)
 		})
 	})
 
