@@ -13,6 +13,7 @@ final class DataManager {
         Category.self,
         PendingDeletion.self,
         DeletionRecord.self,
+        EchoCard.self,
     ]
 
     static let schema = Schema(modelTypes)

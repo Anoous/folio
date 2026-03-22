@@ -201,6 +201,47 @@ struct ListResponse<T: Decodable>: Decodable {
     let syncEpoch: Int?
 }
 
+// MARK: - Echo DTOs
+
+struct EchoCardDTO: Codable {
+    let id: String
+    let articleId: String
+    let articleTitle: String
+    let cardType: String
+    let question: String
+    let answer: String
+    let sourceContext: String?
+    let nextReviewAt: Date
+    let intervalDays: Int
+    let reviewCount: Int
+}
+
+struct EchoTodayResponse: Codable {
+    let data: [EchoCardDTO]
+    let remainingToday: Int
+    let weeklyCount: Int
+    let weeklyLimit: Int?
+}
+
+struct EchoReviewRequest: Codable {
+    let result: String
+    let responseTimeMs: Int?
+}
+
+struct EchoReviewResponse: Codable {
+    let nextReviewAt: Date
+    let intervalDays: Int
+    let reviewCount: Int
+    let correctCount: Int
+    let streak: EchoStreak
+}
+
+struct EchoStreak: Codable {
+    let weeklyRate: Int
+    let consecutiveDays: Int
+    let display: String
+}
+
 // MARK: - APIClient
 
 final class APIClient: @unchecked Sendable {
@@ -570,6 +611,19 @@ final class APIClient: @unchecked Sendable {
 
     func listCategories() async throws -> ListResponse<CategoryDTO> {
         return try await request(method: "GET", path: "/api/v1/categories")
+    }
+
+    // MARK: - Echo
+
+    func getEchoToday(limit: Int = 5) async throws -> EchoTodayResponse {
+        return try await request(method: "GET", path: "/api/v1/echo/today", queryItems: [
+            URLQueryItem(name: "limit", value: "\(limit)")
+        ])
+    }
+
+    func submitEchoReview(cardID: String, result: String, responseTimeMs: Int? = nil) async throws -> EchoReviewResponse {
+        let body = EchoReviewRequest(result: result, responseTimeMs: responseTimeMs)
+        return try await request(method: "POST", path: "/api/v1/echo/\(cardID)/review", body: body)
     }
 }
 
