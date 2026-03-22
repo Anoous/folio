@@ -46,6 +46,11 @@ type aiContentCacheRepo interface {
 	Upsert(ctx context.Context, cache *domain.ContentCache) error
 }
 
+// aiEnqueuer abstracts the asynq client for enqueueing tasks from AIHandler.
+type aiEnqueuer interface {
+	EnqueueContext(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
+}
+
 type AIHandler struct {
 	aiClient     analyzer
 	articleRepo  aiArticleRepo
@@ -53,6 +58,7 @@ type AIHandler struct {
 	categoryRepo *repository.CategoryRepo
 	tagRepo      aiTagRepo
 	cacheRepo    aiContentCacheRepo
+	asynqClient  aiEnqueuer
 }
 
 func NewAIHandler(
@@ -62,6 +68,7 @@ func NewAIHandler(
 	categoryRepo *repository.CategoryRepo,
 	tagRepo *repository.TagRepo,
 	cacheRepo *repository.ContentCacheRepo,
+	asynqClient *asynq.Client,
 ) *AIHandler {
 	return &AIHandler{
 		aiClient:     aiClient,
@@ -70,6 +77,7 @@ func NewAIHandler(
 		categoryRepo: categoryRepo,
 		tagRepo:      tagRepo,
 		cacheRepo:    cacheRepo,
+		asynqClient:  asynqClient,
 	}
 }
 
@@ -200,6 +208,17 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 					AIAnalyzedAt:    &now,
 				}) // Non-fatal: cache write failure doesn't affect the article
 			}
+		}
+	}
+
+	// Enqueue echo card generation (non-blocking)
+	echoTask, err := NewEchoTask(p.ArticleID, p.UserID)
+	if err == nil {
+		if _, err := h.asynqClient.EnqueueContext(ctx, echoTask); err != nil {
+			slog.Error("[ECHO] failed to enqueue for article",
+				"article_id", p.ArticleID,
+				"error", err,
+			)
 		}
 	}
 

@@ -9,7 +9,7 @@ type WorkerServer struct {
 	mux    *asynq.ServeMux
 }
 
-func NewWorkerServer(redisAddr string, crawl *CrawlHandler, ai *AIHandler, image *ImageHandler) *WorkerServer {
+func NewWorkerServer(redisAddr string, crawl *CrawlHandler, ai *AIHandler, image *ImageHandler, echo *EchoHandler) *WorkerServer {
 	srv := asynq.NewServer(
 		asynq.RedisClientOpt{Addr: redisAddr},
 		asynq.Config{
@@ -27,6 +27,9 @@ func NewWorkerServer(redisAddr string, crawl *CrawlHandler, ai *AIHandler, image
 	mux.HandleFunc(TypeAIProcess, ai.ProcessTask)
 	if image != nil {
 		mux.HandleFunc(TypeImageUpload, image.ProcessTask)
+	}
+	if echo != nil {
+		mux.HandleFunc(TypeEchoGenerate, echo.ProcessTask)
 	}
 
 	return &WorkerServer{server: srv, mux: mux}

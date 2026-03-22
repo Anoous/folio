@@ -11,6 +11,7 @@ const (
 	TypeCrawlArticle = "article:crawl"
 	TypeAIProcess    = "article:ai"
 	TypeImageUpload  = "article:images"
+	TypeEchoGenerate = "echo:generate"
 
 	QueueCritical = "critical"
 	QueueDefault  = "default"
@@ -68,6 +69,23 @@ func NewAIProcessTask(articleID, taskID, userID, title, markdown, source, author
 		asynq.MaxRetry(3),
 		asynq.Timeout(60*time.Second),
 	)
+}
+
+type EchoPayload struct {
+	ArticleID string `json:"article_id"`
+	UserID    string `json:"user_id"`
+}
+
+func NewEchoTask(articleID, userID string) (*asynq.Task, error) {
+	payload, err := json.Marshal(EchoPayload{ArticleID: articleID, UserID: userID})
+	if err != nil {
+		return nil, err
+	}
+	return asynq.NewTask(TypeEchoGenerate, payload,
+		asynq.Queue(QueueDefault),
+		asynq.MaxRetry(2),
+		asynq.Timeout(30*time.Second),
+	), nil
 }
 
 func NewImageUploadTask(articleID string, imageURLs []string) *asynq.Task {

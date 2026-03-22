@@ -24,4 +24,7 @@ type User struct {
 	CreatedAt            time.Time    `json:"created_at"`
 	UpdatedAt            time.Time    `json:"updated_at"`
 	SyncEpoch            int          `json:"sync_epoch"`
+	// Echo quota fields (migration 008)
+	EchoCountThisWeek int        `json:"echo_count_this_week"`
+	EchoWeekResetAt   *time.Time `json:"echo_week_reset_at,omitempty"`
 }
