@@ -14,6 +14,15 @@ enum ReadingFontFamily: String, CaseIterable {
         }
     }
 
+    /// CSS font-family value used by the WKWebView reader.
+    var cssName: String {
+        switch self {
+        case .notoSerif: return "\"Noto Serif SC\", serif"
+        case .system: return "-apple-system, system-ui, sans-serif"
+        case .serif: return "\"Georgia\", serif"
+        }
+    }
+
     var previewFont: Font {
         font(size: 16)
     }
