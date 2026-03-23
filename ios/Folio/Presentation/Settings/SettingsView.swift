@@ -1,13 +1,53 @@
 import SwiftUI
+import SwiftData
+
+// MARK: - Export Data Models
+
+private struct ExportArticle: Encodable {
+    let title: String
+    let url: String
+    let summary: String
+    let keyPoints: [String]
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case title, url, summary
+        case keyPoints = "key_points"
+        case createdAt = "created_at"
+    }
+
+    init(from article: Article) {
+        self.title = article.displayTitle
+        self.url = article.url ?? ""
+        self.summary = article.summary ?? ""
+        self.keyPoints = article.keyPoints
+        self.createdAt = article.createdAt
+    }
+}
+
+private struct ExportPayload: Encodable {
+    let exportedAt: Date
+    let articleCount: Int
+    let articles: [ExportArticle]
+
+    enum CodingKeys: String, CodingKey {
+        case exportedAt = "exported_at"
+        case articleCount = "article_count"
+        case articles
+    }
+}
 
 // MARK: - SettingsView (4-State)
 
 struct SettingsView: View {
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
     @Environment(SubscriptionManager.self) private var subscriptionManager: SubscriptionManager?
+    @Environment(\.modelContext) private var modelContext
     @State private var logoutTrigger = false
     @State private var showUpgradeComparison = false
     @State private var showReadingPreferences = false
+    @State private var showExportShareSheet = false
+    @State private var exportShareItems: [Any] = []
 
     /// Derived user state for cleaner branching.
     private enum UserState {
@@ -59,6 +99,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showReadingPreferences) {
             ReadingPreferenceView()
+        }
+        .sheet(isPresented: $showExportShareSheet) {
+            ShareSheet(activityItems: exportShareItems)
         }
     }
 
@@ -265,7 +308,9 @@ struct SettingsView: View {
                     sublabel: isPro ? nil : "已使用 \(localStorageMB) MB / 1 GB"
                 )
                 sectionSeparator
-                settingsRow(icon: "square.and.arrow.up", label: "导出数据")
+                settingsRow(icon: "square.and.arrow.up", label: "导出数据") {
+                    exportData()
+                }
             }
 
             // 关于
@@ -384,6 +429,33 @@ struct SettingsView: View {
             .font(.system(size: 12))
             .foregroundStyle(Color.folio.textQuaternary)
             .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    // MARK: - Export Data
+
+    private func exportData() {
+        let descriptor = FetchDescriptor<Article>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let articles = (try? modelContext.fetch(descriptor)) ?? []
+
+        let payload = ExportPayload(
+            exportedAt: Date(),
+            articleCount: articles.count,
+            articles: articles.map { ExportArticle(from: $0) }
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(payload) else { return }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("folio-export.json")
+        try? data.write(to: tempURL)
+
+        exportShareItems = [tempURL]
+        showExportShareSheet = true
     }
 
     // MARK: - Local Storage

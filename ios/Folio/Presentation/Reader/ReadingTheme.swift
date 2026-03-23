@@ -50,4 +50,33 @@ enum ReadingTheme: String, CaseIterable {
         case .sepia: return Color(red: 0.45, green: 0.40, blue: 0.33)
         }
     }
+
+    /// Hex color strings for the WKWebView reader CSS variables.
+    /// These must stay in sync with `MarkdownToHTML.themeColors`.
+    var bgHex: String {
+        switch self {
+        case .system: return "#FAF9F6"
+        case .light: return "#FFFFFF"
+        case .dark: return "#1F1F1F"
+        case .sepia: return "#F5F0E8"
+        }
+    }
+
+    var textHex: String {
+        switch self {
+        case .system: return "#1D1D1F"
+        case .light: return "#1A1A1A"
+        case .dark: return "#E0E0E0"
+        case .sepia: return "#3B3328"
+        }
+    }
+
+    var secondaryTextHex: String {
+        switch self {
+        case .system: return "#6E6E73"
+        case .light: return "#666666"
+        case .dark: return "#999999"
+        case .sepia: return "#735F4D"
+        }
+    }
 }

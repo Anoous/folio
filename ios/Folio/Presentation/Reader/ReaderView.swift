@@ -197,6 +197,12 @@ struct ReaderView: View {
                             theme: readingTheme
                         ),
                         initialProgress: article.readProgress,
+                        fontSize: CGFloat(fontSize),
+                        lineSpacing: CGFloat(lineSpacing),
+                        fontFamily: readingFontFamily.cssName,
+                        themeBg: readingTheme.bgHex,
+                        themeText: readingTheme.textHex,
+                        themeSecondary: readingTheme.secondaryTextHex,
                         onHighlightCreate: { text, start, end in
                             viewModel.createHighlight(text: text, startOffset: start, endOffset: end)
                         },

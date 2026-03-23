@@ -225,6 +225,7 @@ struct HomeView: View {
                     } else if let response = vm.ragResponse {
                         ScrollView {
                             RAGAnswerView(
+                                thread: vm.ragThread,
                                 response: response,
                                 onSourceTap: { articleId in
                                     // TODO: Navigate to reader for this article

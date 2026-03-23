@@ -23,6 +23,15 @@ class HighlightableWebView: WKWebView {
 struct ArticleWebView: UIViewRepresentable {
     let htmlContent: String
     let initialProgress: Double
+
+    // Reading preferences (live-updated via JS, no page reload)
+    let fontSize: CGFloat
+    let lineSpacing: CGFloat
+    let fontFamily: String      // CSS font-family string
+    let themeBg: String         // hex background color
+    let themeText: String       // hex primary text color
+    let themeSecondary: String  // hex secondary text color
+
     let onHighlightCreate: (String, Int, Int) -> Void  // text, startOffset, endOffset
     let onHighlightRemove: (String) -> Void             // highlightId
     let onScrollProgress: (Double) -> Void
@@ -56,9 +65,21 @@ struct ArticleWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: HighlightableWebView, context: Context) {
-        if context.coordinator.lastLoadedHTML != htmlContent {
-            context.coordinator.lastLoadedHTML = htmlContent
+        let coord = context.coordinator
+
+        // Reload only when HTML content changes
+        if coord.lastLoadedHTML != htmlContent {
+            coord.lastLoadedHTML = htmlContent
             uiView.loadHTMLString(htmlContent, baseURL: nil)
+        }
+
+        // Live-update reading preferences via JS (no reload, preserves scroll)
+        let lineHeightRatio = (fontSize + lineSpacing) / fontSize
+        let prefsKey = "\(fontSize)-\(lineSpacing)-\(fontFamily)-\(themeBg)-\(themeText)-\(themeSecondary)"
+        if coord.lastPrefsKey != prefsKey {
+            coord.lastPrefsKey = prefsKey
+            let js = "setPreferences(\(fontSize), \(String(format: "%.2f", lineHeightRatio)), '\(fontFamily)', '\(themeBg)', '\(themeText)', '\(themeSecondary)')"
+            coord.callJS(js)
         }
     }
 
@@ -68,6 +89,7 @@ struct ArticleWebView: UIViewRepresentable {
         private let parent: ArticleWebView
         weak var webView: WKWebView?
         var lastLoadedHTML: String?
+        var lastPrefsKey: String?
 
         init(parent: ArticleWebView) {
             self.parent = parent

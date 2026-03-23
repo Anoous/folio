@@ -69,29 +69,13 @@ struct MarkdownToHTML {
     }
 
     private static func themeColors(_ theme: ReadingTheme) -> ThemeColors {
-        switch theme {
-        case .system:
-            return ThemeColors(bg: "#FAF9F6", text1: "#1D1D1F", text2: "#6E6E73")
-        case .light:
-            return ThemeColors(bg: "#FFFFFF", text1: "#1A1A1A", text2: "#666666")
-        case .dark:
-            return ThemeColors(bg: "#1F1F1F", text1: "#E0E0E0", text2: "#999999")
-        case .sepia:
-            return ThemeColors(bg: "#F5F0E8", text1: "#3B3328", text2: "#735F4D")
-        }
+        ThemeColors(bg: theme.bgHex, text1: theme.textHex, text2: theme.secondaryTextHex)
     }
 
     // MARK: - Font Family
 
     private static func cssFontFamilyValue(_ family: ReadingFontFamily) -> String {
-        switch family {
-        case .notoSerif:
-            return "\"Noto Serif SC\", serif"
-        case .system:
-            return "-apple-system, system-ui, sans-serif"
-        case .serif:
-            return "\"Georgia\", serif"
-        }
+        family.cssName
     }
 
     // MARK: - CSS Template
