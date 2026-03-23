@@ -118,7 +118,7 @@ LIMIT $3
 - **三路召回，各取所长**：
   - `semantic_keywords && $2::text[]`：数组重叠操作符，走 GIN 索引，O(1) 查找。最精准的语义匹配。
   - `title % kw.word`：pg_trgm 操作符，走 GIN trigram 索引。标题短、三元组匹配效果好。
-  - `summary ILIKE` / `key_points::text ILIKE`：子串匹配，无索引但 5000 行下足够快。兜底召回。
+  - `summary ILIKE` / `key_points::text ILIKE`：子串匹配。summary 有 GIN trigram 索引（migration 012 新增），PostgreSQL GIN `gin_trgm_ops` 支持 `ILIKE` infix 查询加速。key_points 为 JSONB 转 text，走顺序扫描但 5000 行下足够快。
 - **评分层级**：semantic_keywords 命中 = 1.0（最高），title 三元组 = 0.5+similarity，ILIKE = 0.1。确保语义匹配的文章排在最前。
 - `DISTINCT ON (id)` 确保同篇文章只出现一次，取最高分。
 - 返回 `key_points` 给下游 LLM 更多上下文。
