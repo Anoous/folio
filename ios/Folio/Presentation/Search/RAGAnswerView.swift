@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - RAGAnswerView
 
 struct RAGAnswerView: View {
+    let thread: [(question: String, response: RAGQueryResponse)]
     let response: RAGQueryResponse
     let onSourceTap: (String) -> Void
     let onFollowup: (String) -> Void
@@ -13,6 +14,12 @@ struct RAGAnswerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // 0. Previous Q&A thread
+            if !thread.isEmpty {
+                threadView
+                    .padding(.bottom, 24)
+            }
+
             // 1. Badge
             badgeView
                 .padding(.bottom, 16)
@@ -38,6 +45,33 @@ struct RAGAnswerView: View {
         }
         .padding(.horizontal, Spacing.screenPadding)
         .padding(.vertical, Spacing.lg)
+    }
+
+    // MARK: - Thread
+
+    private var threadView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(thread.enumerated()), id: \.offset) { _, pair in
+                // User question (gray left border)
+                HStack(alignment: .top, spacing: 0) {
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color.folio.textQuaternary)
+                        .frame(width: 2)
+                    Text(pair.question)
+                        .font(.system(size: 15))
+                        .foregroundStyle(Color.folio.textTertiary)
+                        .padding(.leading, 12)
+                }
+                .padding(.bottom, 12)
+
+                // AI answer (answer text only — no sources repeat)
+                Text(pair.response.answer)
+                    .font(Font.custom("LXGWWenKaiTC-Regular", size: 16))
+                    .foregroundStyle(Color.folio.textPrimary)
+                    .lineSpacing(16 * 0.75)
+                    .padding(.bottom, 24)
+            }
+        }
     }
 
     // MARK: - Badge

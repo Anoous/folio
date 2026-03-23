@@ -339,6 +339,7 @@ final class HomeViewModel {
     var ragIsLoading = false
     var ragError: RAGErrorView.ErrorType?
     var ragConversationId: String?
+    var ragThread: [(question: String, response: RAGQueryResponse)] = []
 
     func isRAGQuery(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -384,12 +385,18 @@ final class HomeViewModel {
     }
 
     func submitFollowup(_ question: String) {
+        // Save current response to thread before making new query
+        if let current = ragResponse {
+            ragThread.append((question: question, response: current))
+        }
+        ragResponse = nil
         submitRAGQuery(question)
     }
 
     func clearRAG() {
         ragResponse = nil
         ragConversationId = nil
+        ragThread = []
         ragError = nil
         ragIsLoading = false
         ragDebounceTask?.cancel()
