@@ -34,7 +34,7 @@ Folio v3.0 剩余 8 个功能中，有 3 个依赖检索基础设施：语义搜
 │    → 新增输出: semantic_keywords (10-15 个)            │
 │                       ↓                              │
 │          async article:relate worker                 │
-│    semantic_keywords 跨库 pg_trgm 召回 Top 30         │
+│    semantic_keywords 跨库召回 Top 30（BroadRecallSummaries）         │
 │    → DeepSeek 挑 Top 5 → 缓存到 article_relations    │
 └──────────────────────────────────────────────────────┘
 
@@ -124,6 +124,29 @@ LIMIT $3
 - 返回 `key_points` 给下游 LLM 更多上下文。
 - **预期性能**：semantic_keywords GIN + title GIN 两路索引扫描 + 5000 行 ILIKE 顺序扫描，合计 < 100ms。
 
+### ILIKE 通配符转义
+
+LLM 生成的关键词可能包含 `%` 或 `_`（ILIKE 通配符）。Go 代码在构建查询前必须转义：
+
+```go
+func escapeILIKE(s string) string {
+    s = strings.ReplaceAll(s, `\`, `\\`)
+    s = strings.ReplaceAll(s, `%`, `\%`)
+    s = strings.ReplaceAll(s, `_`, `\_`)
+    return s
+}
+// 对 $2::text[] 中的每个关键词调用 escapeILIKE
+// semantic_keywords && 和 title % 不受影响（不使用 ILIKE 语法）
+```
+
+### BroadRecall 自排除
+
+relate worker 需要从结果中排除当前文章。BroadRecall 新增可选参数 `excludeID`：
+
+```sql
+AND ($4::uuid IS NULL OR a.id != $4)  -- $4 = 排除的文章 ID，搜索时传 NULL
+```
+
 ### 索引依赖
 
 - `idx_articles_title_trgm`（已存在，migration 001）
@@ -152,7 +175,8 @@ ExpandQuery(ctx context.Context, question string) ([]string, error)
 2. 包含同义词和近义表达
 3. 包含中英文双语翻译（如问题是中文，补英文关键词；反之亦然）
 4. 包含上下位概念（如"React"→ 补"前端框架"）
-5. 不要解释，直接输出 JSON 数组
+5. 所有关键词输出为小写（英文小写，中文无影响）
+6. 不要解释，直接输出 JSON 数组
 
 用户问题：{question}
 
@@ -289,9 +313,10 @@ type RelatedResult struct {
 ### 逻辑
 
 1. 读取本文的 `semantic_keywords`
-2. 调用 `BroadRecall`（复用宽召回层），排除自身，Top 30
+2. 调用 `BroadRecallSummaries`（复用宽召回层），传 `excludeID=本文 ID`，Top 30
 3. 将 30 篇候选摘要 + 本文摘要送 DeepSeek（`SelectRelatedArticles`）
-4. 结果写入 `article_relations` 表，`score` = 按返回顺序递减（第 1 篇=5，第 2 篇=4...）
+4. 先 `DELETE FROM article_relations WHERE source_article_id = X`（幂等：重试安全）
+5. 批量 `INSERT` 结果到 `article_relations`，`score` = 按返回顺序递减（第 1 篇=5，第 2 篇=4...）
 
 ### 队列配置
 
@@ -354,7 +379,7 @@ func (s *RAGService) applyTokenBudget(ctx context.Context, userID, question stri
             }
             return articles[:ragSearchFallbackSize]
         }
-        recalled, err := s.ragRepo.BroadRecall(ctx, userID, keywords, ragSearchFallbackSize)
+        recalled, err := s.ragRepo.BroadRecallSummaries(ctx, userID, keywords, ragSearchFallbackSize)
         if err != nil || len(recalled) == 0 {
             slog.Warn("broad recall failed, falling back to pg_trgm", "error", err)
             searched, _ := s.ragRepo.SearchArticleSummaries(ctx, userID, question, ragSearchFallbackSize)
@@ -493,7 +518,8 @@ ALTER TABLE articles DROP COLUMN IF EXISTS semantic_keywords;
 | Domain | `domain/rag.go` | 修改 | `RAGSource` 加 `KeyPoints []string`（BroadRecall 输出用，RAG prompt 可选使用） |
 | Client | `client/ai.go` | 修改 | `AnalyzeResponse` 加 `SemanticKeywords`；`Analyzer` 接口新增 `ExpandQuery`、`RerankArticles`、`SelectRelatedArticles` |
 | Client | `client/ai_mock.go` | 修改 | 四个新方法/字段的 mock 实现（SemanticKeywords + ExpandQuery + RerankArticles + SelectRelatedArticles） |
-| Repository | `repository/article.go` | 修改 | `UpdateAIResult` 写入 semantic_keywords；新增 `BroadRecallSummaries`（返回 RAGSource）、`BroadRecallArticles`（返回 Article） |
+| Repository | `repository/article.go` | 修改 | `UpdateAIResult` 写入 semantic_keywords；新增 `BroadRecallArticles`（返回 Article，语义搜索用） |
+| Repository | `repository/rag.go` | 修改 | 新增 `BroadRecallSummaries`（返回 RAGSource，RAG + relate worker 用）|
 | Repository | 新文件 `repository/relation.go` | 新增 | article_relations CRUD（Save batch、ListBySource、DeleteBySource） |
 | Service | `service/rag.go` | 修改 | `applyTokenBudget` 替换 ≥500 篇逻辑 |
 | Service | `service/article.go` | 修改 | `NewArticleService` 加 `aiClient` 依赖；新增 `SemanticSearch` 方法 |
@@ -534,3 +560,62 @@ ALTER TABLE articles DROP COLUMN IF EXISTS semantic_keywords;
 | RAG（≥500 篇） | 扩展 300ms → SQL 100ms → 生成回答 2s | ~2.5s |
 | 语义搜索 | 扩展 300ms → SQL 100ms → 精排 1s | ~1.5s |
 | 相关文章查询 | 读缓存表 | < 10ms |
+
+## 15. 存量数据回填
+
+Migration 后所有已有文章的 `semantic_keywords` 为空数组 `{}`。BroadRecall 的语义召回路径对这些文章无效，退化为 title trigram + ILIKE（与当前 pg_trgm 搜索效果相当）。
+
+### 回填策略
+
+新增一次性 worker 任务 `article:backfill-keywords`：
+
+1. 查询所有 `status = 'ready' AND semantic_keywords = '{}'` 的文章
+2. 对每篇文章，用现有 `summary + key_points` 构造一个轻量 prompt：
+   ```
+   基于以下文章摘要和关键点，生成 10-15 个语义检索关键词（全部小写）。
+   标题：{title}
+   摘要：{summary}
+   关键点：{key_points}
+   输出 JSON 数组：["keyword1", "关键词2", ...]
+   ```
+3. 写入 `semantic_keywords` 列
+4. 入队 `article:relate`（为老文章也生成关联）
+
+### 执行方式
+
+- 手动触发（CLI 命令或一次性 API 端点），不自动运行
+- Low 队列，逐篇处理，rate limit 避免打满 DeepSeek API
+- 预估：1000 篇 × ~$0.0001/篇 = ~$0.10，可忽略
+
+### 优先级
+
+非上线阻塞。可在功能上线后按需执行。上线时新文章自动生成 semantic_keywords，老文章走 title trigram + ILIKE 降级路径。
+
+## 16. 测试策略
+
+### 单元测试
+
+| 测试目标 | 文件 | 覆盖内容 |
+|---------|------|---------|
+| BroadRecall SQL | `repository/article_test.go` | 三路召回各自命中、评分层级、DISTINCT 去重、自排除、ILIKE 通配符转义 |
+| ExpandQuery | `client/ai_test.go` | JSON 解析、小写归一化、降级到原始问题 |
+| RerankArticles | `client/ai_test.go` | JSON 解析、index 越界保护、空结果处理 |
+| SelectRelatedArticles | `client/ai_test.go` | JSON 解析、score 赋值、reason 提取 |
+| article:relate 幂等性 | `worker/relate_handler_test.go` | 重复执行不报错（DELETE + INSERT） |
+| SemanticSearch 降级链 | `service/article_test.go` | ExpandQuery 失败 → keyword 降级；Rerank 失败 → 召回排序降级 |
+
+### E2E 测试
+
+新增 `server/tests/e2e/test_smart_retrieval.py`：
+
+1. **语义搜索**：创建 3 篇不同主题文章 → 等待 AI 分析完成 → `GET /articles/search?q=...&mode=semantic` → 验证返回相关文章
+2. **相关文章**：创建 2 篇相关主题文章 → 等待 relate worker 完成 → `GET /articles/{id}/related` → 验证返回关联
+3. **RAG 升级**：（需要 >500 篇文章，E2E 中可调低 `ragArticleFallbackCap` 常量来模拟）
+4. **降级路径**：mock DeepSeek 返回错误 → 验证降级到关键词搜索
+
+### Mock 分析器覆盖
+
+`ai_mock.go` 的新方法需要返回确定性结果：
+- `ExpandQuery`：基于问题关键词返回固定扩展列表
+- `RerankArticles`：按 index 顺序返回前 N 个（简单直通）
+- `SelectRelatedArticles`：返回前 3 个候选作为关联
