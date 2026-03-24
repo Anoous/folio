@@ -5,6 +5,7 @@ enum ShareState {
     case duplicate(domain: String)
     case quotaExceeded
     case error
+    case processing
 }
 
 struct CompactShareView: View {
@@ -35,6 +36,13 @@ struct CompactShareView: View {
                 statusIcon("xmark.circle.fill", color: Color.folio.error)
                 Text(String(localized: "share.error", defaultValue: "Save failed"))
                     .font(Typography.listTitle)
+
+            case .processing:
+                ProgressView()
+                    .controlSize(.large)
+                Text(String(localized: "share.processing", defaultValue: "正在识别..."))
+                    .font(Typography.listTitle)
+                    .foregroundStyle(Color.folio.textSecondary)
             }
         }
         .padding(Spacing.xl)
