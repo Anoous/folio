@@ -38,7 +38,8 @@ final class SyncService {
         for article in articles {
             do {
                 let response: SubmitArticleResponse
-                if article.sourceType == .manual {
+                let textOnlyTypes: [SourceType] = [.manual, .screenshot, .voice]
+                if textOnlyTypes.contains(article.sourceType) {
                     guard let content = article.markdownContent, !content.isEmpty else {
                         article.status = .failed
                         article.fetchError = "No content to submit"
@@ -48,7 +49,8 @@ final class SyncService {
                     response = try await apiClient.submitManualContent(
                         content: content,
                         title: article.title,
-                        clientId: article.id.uuidString
+                        clientId: article.id.uuidString,
+                        sourceType: article.sourceType.rawValue
                     )
                 } else if article.extractionSource == .client {
                     response = try await apiClient.submitArticle(

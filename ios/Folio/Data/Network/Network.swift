@@ -95,11 +95,13 @@ struct SubmitManualContentRequest: Encodable {
     var title: String?
     var tagIds: [String]?
     var clientId: String?
+    var sourceType: String?
 
     enum CodingKeys: String, CodingKey {
         case content, title
         case tagIds = "tag_ids"
         case clientId = "client_id"
+        case sourceType = "source_type"
     }
 }
 
@@ -615,11 +617,12 @@ final class APIClient: @unchecked Sendable {
         return try await request(method: "POST", path: "/api/v1/articles", body: body)
     }
 
-    func submitManualContent(content: String, title: String? = nil, tagIds: [String] = [], clientId: String? = nil) async throws -> SubmitArticleResponse {
+    func submitManualContent(content: String, title: String? = nil, tagIds: [String] = [], clientId: String? = nil, sourceType: String? = nil) async throws -> SubmitArticleResponse {
         var body = SubmitManualContentRequest(content: content)
         body.title = title
         body.tagIds = tagIds.isEmpty ? nil : tagIds
         body.clientId = clientId
+        body.sourceType = sourceType
         return try await request(method: "POST", path: "/api/v1/articles/manual", body: body)
     }
 
