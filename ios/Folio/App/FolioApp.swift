@@ -87,6 +87,7 @@ struct FolioApp: App {
                 await subscriptionManager.fetchProducts()
                 await subscriptionManager.checkEntitlements()
                 _ = subscriptionManager.listenForTransactions()
+                cleanupOrphanImages()
             }
             .onChange(of: authViewModel.authState) { _, newValue in
                 if newValue == .signedIn {
@@ -124,5 +125,32 @@ struct FolioApp: App {
             }
         }
         .modelContainer(container)
+    }
+
+    // MARK: - Orphan Image Cleanup
+
+    private func cleanupOrphanImages() {
+        guard let containerURL = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier
+        ) else { return }
+
+        let imagesDir = containerURL.appendingPathComponent("Images")
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: imagesDir, includingPropertiesForKeys: nil
+        ) else { return }
+
+        let context = container.mainContext
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate { $0.localImagePath != nil }
+        )
+        let articles = (try? context.fetch(descriptor)) ?? []
+        let validPaths = Set(articles.compactMap(\.localImagePath))
+
+        for file in files {
+            let relativePath = "Images/\(file.lastPathComponent)"
+            if !validPaths.contains(relativePath) {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
     }
 }
