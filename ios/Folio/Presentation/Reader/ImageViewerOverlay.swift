@@ -28,23 +28,31 @@ struct ImageViewerOverlay: View {
                 .opacity(backgroundOpacity)
 
             // Image
-            LazyImage(url: url) { state in
-                if let image = state.image {
-                    image
+            Group {
+                if url.isFileURL, let uiImage = UIImage(contentsOfFile: url.path) {
+                    Image(uiImage: uiImage)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                } else if state.error != nil {
-                    VStack(spacing: Spacing.sm) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 40))
-                            .foregroundStyle(.white.opacity(0.6))
-                        Text(String(localized: "image.loadFailed", defaultValue: "Failed to load image"))
-                            .font(Typography.body)
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
                 } else {
-                    ProgressView()
-                        .tint(.white)
+                    LazyImage(url: url) { state in
+                        if let image = state.image {
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        } else if state.error != nil {
+                            VStack(spacing: Spacing.sm) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.system(size: 40))
+                                    .foregroundStyle(.white.opacity(0.6))
+                                Text(String(localized: "image.loadFailed", defaultValue: "Failed to load image"))
+                                    .font(Typography.body)
+                                    .foregroundStyle(.white.opacity(0.6))
+                            }
+                        } else {
+                            ProgressView()
+                                .tint(.white)
+                        }
+                    }
                 }
             }
             .scaleEffect(scale)

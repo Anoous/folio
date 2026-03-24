@@ -5,8 +5,10 @@ struct ReaderView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
+    @Environment(\.heroNamespace) private var heroNamespace
 
     let article: Article
+    var onDismiss: (() -> Void)? = nil
 
     @State private var viewModel: ReaderViewModel?
     @State private var showsShareSheet = false
@@ -25,6 +27,9 @@ struct ReaderView: View {
     @State private var metaVisible = false
     @State private var contentVisible = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // Swipe-to-dismiss
+    @GestureState private var dragOffset: CGFloat = 0
 
     // Reading preferences
     @AppStorage(ReadingPreferenceKeys.fontSize) private var fontSize: Double = 17
@@ -49,12 +54,31 @@ struct ReaderView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .offset(x: dragOffset)
+        .scaleEffect(1 - abs(dragOffset) / 1000)
+        .gesture(
+            onDismiss == nil ? nil : DragGesture()
+                .updating($dragOffset) { value, state, _ in
+                    if value.translation.width > 0 {
+                        state = value.translation.width
+                    }
+                }
+                .onEnded { value in
+                    if value.translation.width > 80 {
+                        onDismiss?()
+                    }
+                }
+        )
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
-                    dismiss()
+                    if let onDismiss {
+                        onDismiss()
+                    } else {
+                        dismiss()
+                    }
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
@@ -126,7 +150,11 @@ struct ReaderView: View {
             Button(String(localized: "button.cancel", defaultValue: "Cancel"), role: .cancel) {}
             Button(String(localized: "reader.delete", defaultValue: "Delete"), role: .destructive) {
                 viewModel?.deleteArticle()
-                dismiss()
+                if let onDismiss {
+                    onDismiss()
+                } else {
+                    dismiss()
+                }
             }
         } message: {
             Text(String(localized: "reader.deleteMessage", defaultValue: "This article will be permanently removed."))
@@ -146,6 +174,7 @@ struct ReaderView: View {
                         .font(.custom("NotoSerifSC-Bold", size: metrics.titleSize))
                         .foregroundStyle(readingTheme.textColor)
                         .fixedSize(horizontal: false, vertical: true)
+                        .modifier(HeroGeometryModifier(id: "title-\(article.id)", namespace: heroNamespace))
                         .padding(.top, 40)
                         .opacity(titleVisible ? 1 : 0)
 
@@ -180,9 +209,22 @@ struct ReaderView: View {
             .scrollBounceBehavior(.basedOnSize)
             .fixedSize(horizontal: false, vertical: true)
 
-            // WebView article body (handles its own scrolling)
+            // Article body
             Group {
-                if let markdown = article.markdownContent {
+                if article.sourceType == .screenshot || article.sourceType == .voice {
+                    // Native rendering for screenshot/voice articles
+                    ScrollView {
+                        screenshotContentView
+                            .padding(.top, Spacing.md)
+                            .padding(.bottom, 80)
+                    }
+                    .opacity(contentVisible ? 1 : 0)
+                    .onAppear {
+                        if !contentVisible {
+                            withAnimation(Motion.ink) { contentVisible = true }
+                        }
+                    }
+                } else if let markdown = article.markdownContent {
                     let highlightTuples = viewModel.highlights.map {
                         (id: $0.id, startOffset: $0.startOffset, endOffset: $0.endOffset)
                     }
@@ -268,6 +310,57 @@ struct ReaderView: View {
             if article.markdownContent == nil {
                 try? await Task.sleep(for: .milliseconds(100))
                 withAnimation(Motion.ink) { contentVisible = true }
+            }
+        }
+    }
+
+    // MARK: - Screenshot / Voice Content
+
+    @ViewBuilder
+    private var screenshotContentView: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            // Screenshot image thumbnail (only for .screenshot with localImagePath)
+            if article.sourceType == .screenshot,
+               let localPath = article.localImagePath,
+               let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) {
+                let imageURL = containerURL.appendingPathComponent(localPath)
+                if let uiImage = UIImage(contentsOfFile: imageURL.path) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 80, height: 120)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .onTapGesture {
+                                tappedImageURL = imageURL
+                            }
+
+                        Button {
+                            tappedImageURL = imageURL
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("查看原图")
+                                    .font(.system(size: 14))
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12))
+                            }
+                            .foregroundStyle(Color.folio.accent)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, Spacing.screenPadding)
+                }
+            }
+
+            // Text content (OCR text or voice transcription)
+            if let content = article.markdownContent, !content.isEmpty {
+                Text(content)
+                    .font(Typography.body)
+                    .foregroundStyle(Color.folio.textPrimary)
+                    .lineSpacing(17 * 0.65)
+                    .padding(.horizontal, Spacing.screenPadding)
+                    .textSelection(.enabled)
             }
         }
     }
