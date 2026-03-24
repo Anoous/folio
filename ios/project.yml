@@ -74,6 +74,9 @@ targets:
         product: NukeUI
       - package: KeychainAccess
       - package: SwiftSoup
+      - sdk: Vision.framework
+      - sdk: Speech.framework
+      - sdk: AVFoundation.framework
 
   ShareExtension:
     type: app-extension
@@ -112,6 +115,7 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
     dependencies:
       - package: SwiftSoup
+      - sdk: Vision.framework
 
   FolioTests:
     type: bundle.unit-test

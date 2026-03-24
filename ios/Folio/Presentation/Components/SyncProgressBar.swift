@@ -20,7 +20,7 @@ struct SyncProgressBar: View {
             if reduceMotion {
                 offset = 0.5
             } else {
-                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                withAnimation(Motion.slow.repeatForever(autoreverses: true)) {
                     offset = 1
                 }
             }

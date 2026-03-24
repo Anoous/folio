@@ -64,6 +64,9 @@ struct EchoCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .padding(.horizontal, Spacing.screenPadding)
         .padding(.vertical, 12)
+        .sensoryFeedback(.impact(weight: .light), trigger: step) { oldValue, newValue in
+            newValue == 1
+        }
     }
 
     // MARK: - Step 0: Question

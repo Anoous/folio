@@ -10,6 +10,7 @@ struct RAGAnswerView: View {
 
     @State private var expandedSourceId: String?
     @State private var followupText = ""
+    @State private var sourcesVisible = false
     @FocusState private var isFollowupFocused: Bool
 
     var body: some View {
@@ -32,6 +33,13 @@ struct RAGAnswerView: View {
             if !response.sources.isEmpty {
                 sourcesSection
                     .padding(.bottom, 24)
+                    .opacity(sourcesVisible ? 1 : 0)
+                    .offset(y: sourcesVisible ? 0 : 8)
+                    .onAppear {
+                        withAnimation(Motion.ink.delay(0.3)) {
+                            sourcesVisible = true
+                        }
+                    }
             }
 
             // 4. Follow-up suggestions
@@ -339,7 +347,7 @@ struct RAGLoadingView: View {
         .padding(.top, 60)
         .opacity(opacity)
         .onAppear {
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+            withAnimation(Motion.slow.repeatForever(autoreverses: true)) {
                 opacity = 1.0
             }
         }

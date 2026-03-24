@@ -826,7 +826,7 @@ struct HomeView: View {
     private func showToast(_ message: String, icon: String?) {
         viewModel?.toastMessage = message
         viewModel?.toastIcon = icon
-        withAnimation { viewModel?.showToast = true }
+        withAnimation(Motion.ink) { viewModel?.showToast = true }
     }
 
     // MARK: - Lifecycle

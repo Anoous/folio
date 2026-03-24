@@ -7,6 +7,8 @@ struct HomeSearchResultsView: View {
     @Binding var searchText: String
     var categoryFilter: String = ""
 
+    @State private var resultAppeared: [UUID: Bool] = [:]
+
     /// URL detected in the search text (nil if not a URL)
     var detectedURL: URL?
     /// The article if this URL is already saved
@@ -23,21 +25,26 @@ struct HomeSearchResultsView: View {
     }
 
     var body: some View {
-        if searchViewModel.isSearching && detectedURL == nil && !isTextInput {
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let error = searchViewModel.searchError, detectedURL == nil {
-            errorState(error: error)
-        } else if detectedURL != nil {
-            urlActionList
-        } else if !filteredResults.isEmpty {
-            // Has search results — show note action at top + results
-            resultsWithNoteAction
-        } else if searchViewModel.showsEmptyState || isTextInput {
-            // No results — show note action prominently
-            emptyWithNoteAction
-        } else {
-            resultsList
+        Group {
+            if searchViewModel.isSearching && detectedURL == nil && !isTextInput {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let error = searchViewModel.searchError, detectedURL == nil {
+                errorState(error: error)
+            } else if detectedURL != nil {
+                urlActionList
+            } else if !filteredResults.isEmpty {
+                // Has search results — show note action at top + results
+                resultsWithNoteAction
+            } else if searchViewModel.showsEmptyState || isTextInput {
+                // No results — show note action prominently
+                emptyWithNoteAction
+            } else {
+                resultsList
+            }
+        }
+        .onChange(of: searchText) {
+            resultAppeared = [:]
         }
     }
 
@@ -185,7 +192,7 @@ struct HomeSearchResultsView: View {
     @ViewBuilder
     private var resultsSection: some View {
         Section {
-            ForEach(filteredResults) { item in
+            ForEach(Array(filteredResults.enumerated()), id: \.element.id) { index, item in
                 Button { selectArticle(item.article) } label: {
                     SearchResultRow(
                         item: item,
@@ -194,6 +201,13 @@ struct HomeSearchResultsView: View {
                 }
                 .buttonStyle(.plain)
                 .listRowInsets(EdgeInsets())
+                .opacity(resultAppeared[item.article.id] ?? false ? 1 : 0)
+                .offset(y: resultAppeared[item.article.id] ?? false ? 0 : 4)
+                .onAppear {
+                    withAnimation(Motion.ink.delay(Double(index) * 0.03)) {
+                        resultAppeared[item.article.id] = true
+                    }
+                }
             }
         } header: {
             let count = filteredResults.count

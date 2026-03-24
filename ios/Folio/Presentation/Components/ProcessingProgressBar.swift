@@ -17,7 +17,7 @@ struct ProcessingProgressBar: View {
             if reduceMotion {
                 progress = 1.0
             } else {
-                withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+                withAnimation(Motion.slow.repeatForever(autoreverses: true)) {
                     progress = 1.0
                 }
             }
