@@ -51,6 +51,8 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoads: true
+        NSMicrophoneUsageDescription: "Folio uses microphone to capture your voice notes"
+        NSSpeechRecognitionUsageDescription: "Folio uses speech recognition to transcribe your voice notes"
         UILaunchScreen: {}
         UIAppFonts:
           - LXGWWenKaiTC-Regular.ttf

@@ -107,6 +107,7 @@
 		A117B50DABEB97BBED1C50E0 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92ED4253BB778A67007D44F9 /* HomeView.swift */; };
 		A5AAF9D40149BE73367AEDFE /* KnowledgeMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35E26D7F875BE587BC8EFB0E /* KnowledgeMapView.swift */; };
 		A64A9F8723F23F66269D19C0 /* ReaderViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF9CAB5F865B73864CBB8D0 /* ReaderViewModelTests.swift */; };
+		A662348D2A6AAA6C2646935F /* AudioWaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A6EF3F64B26B6F4DEE999D /* AudioWaveformView.swift */; };
 		A91786BA95D52A556F0E7228 /* LXGWWenKaiTC-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 226EF5A7F1A8F124A6D03346 /* LXGWWenKaiTC-Light.ttf */; };
 		A95781A16054B0E872585C43 /* SyncProgressBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38AAAA316228DB20DF81F5D8 /* SyncProgressBar.swift */; };
 		AD7F210489B58CDDA1A59D10 /* Category.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F05970EB8BBD7890F0F92A /* Category.swift */; };
@@ -298,6 +299,7 @@
 		9CE65C71FD8F91522096F787 /* ImageOCRExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageOCRExtractor.swift; sourceTree = "<group>"; };
 		9F561B5821A5D2E5B7C02ED6 /* OnboardingPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPage.swift; sourceTree = "<group>"; };
 		A188A06C3CDE3BAF608F9539 /* CompactShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactShareView.swift; sourceTree = "<group>"; };
+		A1A6EF3F64B26B6F4DEE999D /* AudioWaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioWaveformView.swift; sourceTree = "<group>"; };
 		A1F05970EB8BBD7890F0F92A /* Category.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Category.swift; sourceTree = "<group>"; };
 		A67E53FF74BB6FEEE2EAA186 /* ProcessingProgressBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingProgressBar.swift; sourceTree = "<group>"; };
 		A6B33B32B6B5CC8C97CF5594 /* ArticleMetaInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleMetaInfoView.swift; sourceTree = "<group>"; };
@@ -599,6 +601,7 @@
 		864C6DC23F7E5680F3D73AFE /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				A1A6EF3F64B26B6F4DEE999D /* AudioWaveformView.swift */,
 				4D21B5897AD7898900B99FAA /* CornerRadius.swift */,
 				7861C8ADE901E7621567A32A /* FlowLayout.swift */,
 				BD0B7D8133F4B50289FEFB75 /* FolioButton.swift */,
@@ -1086,6 +1089,7 @@
 				F5BE0ECDAAACF5B2E049067E /* ArticleMetaInfoView.swift in Sources */,
 				700EBAE0A4FF2CEB48DAEC19 /* ArticleRepository.swift in Sources */,
 				3BC4EE64CB4E1E192A8FDAC2 /* ArticleWebView.swift in Sources */,
+				A662348D2A6AAA6C2646935F /* AudioWaveformView.swift in Sources */,
 				F342756FA9C74A480F5FE1C0 /* AuthViewModel.swift in Sources */,
 				E45E707A884BC51FB0F7CF93 /* CaptureBarView.swift in Sources */,
 				AD7F210489B58CDDA1A59D10 /* Category.swift in Sources */,
