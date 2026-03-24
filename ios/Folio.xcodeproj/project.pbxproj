@@ -21,6 +21,7 @@
 		0EE77D1C57EAC172FDA4D21C /* ReaderViewModelProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97E445CCFB8607C347E9907 /* ReaderViewModelProgressTests.swift */; };
 		12E7039FF19AB72091BE5F9E /* FolioButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0B7D8133F4B50289FEFB75 /* FolioButton.swift */; };
 		1397296F66027078195997BA /* Spacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1FAF40CAE7C1C5DE1346CF /* Spacing.swift */; };
+		1404B307079B7481852EC780 /* HeroTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3E64C2D6C8622F71C535073 /* HeroTransition.swift */; };
 		15AEC919BFC574F863C3D0D0 /* Color+Folio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 169A0B494F30137A1EB80458 /* Color+Folio.swift */; };
 		18EBA37DC442DCF0B26FB210 /* UIComponentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C4278242512E2D2CE54A080 /* UIComponentTests.swift */; };
 		19354F549EAB77483542F264 /* Spacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1FAF40CAE7C1C5DE1346CF /* Spacing.swift */; };
@@ -321,6 +322,7 @@
 		BD93E0D8B058DF31A85582CC /* VoiceRecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecordingView.swift; sourceTree = "<group>"; };
 		BFF29B7B9F12CD2807CB2590 /* MarkdownRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownRendererTests.swift; sourceTree = "<group>"; };
 		C1CF36A18455EBEE914D8516 /* SearchResultRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchResultRow.swift; sourceTree = "<group>"; };
+		C3E64C2D6C8622F71C535073 /* HeroTransition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroTransition.swift; sourceTree = "<group>"; };
 		C5BBCF93626F7CCCD8B69BA5 /* DataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataManager.swift; sourceTree = "<group>"; };
 		C8244B3437FA244ECDCEC9B8 /* DeletionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeletionRecord.swift; sourceTree = "<group>"; };
 		CBC4A3D740679FF85C68A4FA /* LXGWWenKaiTC-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "LXGWWenKaiTC-Regular.ttf"; sourceTree = "<group>"; };
@@ -600,6 +602,7 @@
 				4D21B5897AD7898900B99FAA /* CornerRadius.swift */,
 				7861C8ADE901E7621567A32A /* FlowLayout.swift */,
 				BD0B7D8133F4B50289FEFB75 /* FolioButton.swift */,
+				C3E64C2D6C8622F71C535073 /* HeroTransition.swift */,
 				B5041624FC6579F84D2F415B /* Motion.swift */,
 				A67E53FF74BB6FEEE2EAA186 /* ProcessingProgressBar.swift */,
 				5F1CE534E4841B018C1B9B69 /* ReadingFontFamily.swift */,
@@ -1108,6 +1111,7 @@
 				43579BBC415E1F84F30E446E /* HTMLFetcher.swift in Sources */,
 				79CCE48DFC615027AAB1D290 /* HTMLToMarkdownConverter.swift in Sources */,
 				0D917096DDC450D0D5FE745A /* HeroArticleCardView.swift in Sources */,
+				1404B307079B7481852EC780 /* HeroTransition.swift in Sources */,
 				F5EABC68993203D6ABD19C55 /* Highlight.swift in Sources */,
 				8470C7EEC3C2192484ED45FE /* HomeArticleRow.swift in Sources */,
 				B2CF52674E5288D085E6A9D8 /* HomeSearchResultsView.swift in Sources */,

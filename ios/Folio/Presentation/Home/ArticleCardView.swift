@@ -2,6 +2,8 @@ import SwiftUI
 import NukeUI
 
 struct ArticleCardView: View {
+    @Environment(\.heroNamespace) private var heroNamespace
+
     let article: Article
 
     private var isUnread: Bool {
@@ -27,11 +29,19 @@ struct ArticleCardView: View {
             // Left: text content
             VStack(alignment: .leading, spacing: 0) {
                 // Title — v3 LXGW WenKai TC font, weight signals unread
-                Text(article.displayTitle)
-                    .font(isUnread ? Typography.v3CardTitleUnread : Typography.v3CardTitle)
-                    .foregroundStyle(isFailed ? Color.folio.textTertiary : Color.folio.textPrimary)
-                    .lineSpacing((isUnread ? Typography.v3CardTitleUnread : Typography.v3CardTitle).lineSpacingFor(lineHeight: 1.45, size: 17))
-                    .lineLimit(2)
+                HStack(spacing: 4) {
+                    if article.sourceType == .voice {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.folio.textTertiary)
+                    }
+                    Text(article.displayTitle)
+                        .font(isUnread ? Typography.v3CardTitleUnread : Typography.v3CardTitle)
+                        .foregroundStyle(isFailed ? Color.folio.textTertiary : Color.folio.textPrimary)
+                        .lineSpacing((isUnread ? Typography.v3CardTitleUnread : Typography.v3CardTitle).lineSpacingFor(lineHeight: 1.45, size: 17))
+                        .lineLimit(2)
+                        .modifier(HeroGeometryModifier(id: "title-\(article.id)", namespace: heroNamespace))
+                }
 
                 // Insight pull quote
                 if let summary = article.displaySummary, !summary.isEmpty {
@@ -64,8 +74,19 @@ struct ArticleCardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             // Right: thumbnail (if available)
-            if let coverURL = article.coverImageURL,
-               let url = URL(string: coverURL) {
+            if let localPath = article.localImagePath,
+               article.sourceType == .screenshot,
+               let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) {
+                let imageURL = containerURL.appendingPathComponent(localPath)
+                if let uiImage = UIImage(contentsOfFile: imageURL.path) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 72, height: 72)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            } else if let coverURL = article.coverImageURL,
+                      let url = URL(string: coverURL) {
                 LazyImage(url: url) { state in
                     if let image = state.image {
                         image
@@ -130,15 +151,21 @@ struct ArticleCardView: View {
     // MARK: - Helpers
 
     private var effectiveSourceName: String? {
-        if article.sourceType == .manual {
+        switch article.sourceType {
+        case .manual:
             return article.wordCount < 200
                 ? String(localized: "source.thought", defaultValue: "My Thought")
                 : String(localized: "source.pasted", defaultValue: "Pasted Content")
+        case .screenshot:
+            return String(localized: "Screenshot", defaultValue: "截图")
+        case .voice:
+            return String(localized: "Voice Note", defaultValue: "语音笔记")
+        default:
+            if let siteName = article.siteName, !siteName.isEmpty {
+                return siteName
+            }
+            return nil
         }
-        if let siteName = article.siteName, !siteName.isEmpty {
-            return siteName
-        }
-        return nil
     }
 
     private var accessibilityDescription: String {
