@@ -26,10 +26,13 @@ enum SourceType: String, Codable {
     case newsletter
     case youtube
     case manual
+    case screenshot
+    case voice
 
     var supportsClientExtraction: Bool {
         switch self {
-        case .youtube, .manual: return false
+        case .youtube, .manual, .screenshot, .voice:
+            return false
         default: return true
         }
     }
@@ -97,6 +100,7 @@ final class Article {
     var serverID: String?
     var extractionSourceRaw: String = ExtractionSource.none.rawValue
     var clientExtractedAt: Date?
+    var localImagePath: String?  // App Group relative path for screenshot images
 
     var status: ArticleStatus {
         get { ArticleStatus(rawValue: statusRaw) ?? .pending }
@@ -270,6 +274,8 @@ extension SourceType {
         case .newsletter: "envelope.fill"
         case .web: "globe"
         case .manual: "square.and.pencil"
+        case .screenshot: "camera.viewfinder"
+        case .voice: "mic.fill"
         }
     }
 
@@ -283,6 +289,8 @@ extension SourceType {
         case .newsletter: "Newsletter"
         case .web: "Web"
         case .manual: String(localized: "source.manual", defaultValue: "Manual")
+        case .screenshot: String(localized: "Screenshot", defaultValue: "截图")
+        case .voice: String(localized: "Voice Note", defaultValue: "语音笔记")
         }
     }
 }
