@@ -14,6 +14,8 @@ struct FolioApp: App {
     @State private var syncService: SyncService?
     @State private var subscriptionManager = SubscriptionManager()
     @State private var navigationPath = NavigationPath()
+    @Namespace private var heroNamespace
+    @State private var selectedArticle: Article?
 
     init() {
         do {
@@ -46,9 +48,30 @@ struct FolioApp: App {
         WindowGroup {
             Group {
                 if hasCompletedOnboarding {
-                    NavigationStack(path: $navigationPath) {
-                        HomeView()
+                    ZStack {
+                        NavigationStack(path: $navigationPath) {
+                            HomeView()
+                        }
+                        .opacity(selectedArticle == nil ? 1 : 0)
+                        .animation(Motion.exit, value: selectedArticle == nil)
+
+                        if let article = selectedArticle {
+                            ReaderView(article: article, onDismiss: {
+                                withAnimation(Motion.settle) {
+                                    selectedArticle = nil
+                                }
+                            })
+                            .transition(.identity)
+                            .zIndex(1)
+                        }
                     }
+                    .environment(\.heroNamespace, heroNamespace)
+                    .environment(\.selectArticle, SelectArticleAction { article in
+                        withAnimation(Motion.settle) {
+                            selectedArticle = article
+                        }
+                    })
+                    .sensoryFeedback(.impact(weight: .light), trigger: selectedArticle != nil)
                 } else {
                     OnboardingView {
                         hasCompletedOnboarding = true

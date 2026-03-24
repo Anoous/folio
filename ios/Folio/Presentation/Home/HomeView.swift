@@ -27,6 +27,7 @@ struct HomeView: View {
     @State private var refreshTrigger = false
     @State private var recentSearchesVersion = 0
     @State private var showVoiceRecording = false
+    @Environment(\.selectArticle) private var selectArticle
     @AppStorage("dismissed_milestones") private var dismissedMilestonesRaw = ""
 
     // MARK: - Milestone Helpers
@@ -103,11 +104,6 @@ struct HomeView: View {
             }
         }
         .navigationBarHidden(true)
-            .navigationDestination(for: UUID.self) { articleID in
-                if let article = viewModel?.articles.first(where: { $0.id == articleID }) {
-                    ReaderView(article: article)
-                }
-            }
             .navigationDestination(for: HomeDestination.self) { destination in
                 switch destination {
                 case .settings:
@@ -469,9 +465,9 @@ struct HomeView: View {
                                     && article.readProgress == 0 && article.status == .ready
 
                                 if isFirstUnreadToday {
-                                    NavigationLink(value: article.id) {
-                                        HeroArticleCardView(article: article)
-                                    }
+                                    HeroArticleCardView(article: article)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { selectArticle(article) }
                                     .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
                                     .listRowSeparator(.hidden)
                                     .onAppear {

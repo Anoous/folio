@@ -11,14 +11,16 @@ enum ArticleRowAction {
 }
 
 struct HomeArticleRow: View {
+    @Environment(\.selectArticle) private var selectArticle
+
     let article: Article
     let isLast: Bool
     let onAction: (ArticleRowAction) -> Void
 
     var body: some View {
-        NavigationLink(value: article.id) {
-            ArticleCardView(article: article)
-        }
+        ArticleCardView(article: article)
+            .contentShape(Rectangle())
+            .onTapGesture { selectArticle(article) }
         .onAppear {
             if isLast { onAction(.loadMore) }
         }

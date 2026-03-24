@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct HomeSearchResultsView: View {
+    @Environment(\.selectArticle) private var selectArticle
+
     let searchViewModel: SearchViewModel
     @Binding var searchText: String
     var categoryFilter: String = ""
@@ -112,7 +114,7 @@ struct HomeSearchResultsView: View {
         List {
             Section {
                 if let article = existingArticle {
-                    NavigationLink(value: article.id) {
+                    Button { selectArticle(article) } label: {
                         HStack(spacing: Spacing.sm) {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.title3)
@@ -129,6 +131,7 @@ struct HomeSearchResultsView: View {
                         }
                         .padding(.vertical, Spacing.xs)
                     }
+                    .buttonStyle(.plain)
                 } else if let url = detectedURL {
                     Button {
                         onSaveURL?(url.absoluteString)
@@ -183,12 +186,13 @@ struct HomeSearchResultsView: View {
     private var resultsSection: some View {
         Section {
             ForEach(filteredResults) { item in
-                NavigationLink(value: item.article.id) {
+                Button { selectArticle(item.article) } label: {
                     SearchResultRow(
                         item: item,
                         searchQuery: searchViewModel.searchText
                     )
                 }
+                .buttonStyle(.plain)
                 .listRowInsets(EdgeInsets())
             }
         } header: {
