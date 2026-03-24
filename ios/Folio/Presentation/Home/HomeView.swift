@@ -26,6 +26,7 @@ struct HomeView: View {
     @State private var deleteConfirmTrigger = false
     @State private var refreshTrigger = false
     @State private var recentSearchesVersion = 0
+    @State private var showVoiceRecording = false
     @AppStorage("dismissed_milestones") private var dismissedMilestonesRaw = ""
 
     // MARK: - Milestone Helpers
@@ -87,6 +88,20 @@ struct HomeView: View {
 
             mainContent
         }
+        .safeAreaInset(edge: .bottom) {
+            if !isSearchActive {
+                CaptureBarView(
+                    onMicTap: { showVoiceRecording = true },
+                    onTextTap: {
+                        noteSheetText = ""
+                        showNoteSheet = true
+                    },
+                    onPhotoSelected: { image in
+                        saveScreenshot(image)
+                    }
+                )
+            }
+        }
         .navigationBarHidden(true)
             .navigationDestination(for: UUID.self) { articleID in
                 if let article = viewModel?.articles.first(where: { $0.id == articleID }) {
@@ -121,6 +136,12 @@ struct HomeView: View {
                     saveManualContent(content)
                     searchText = ""
                 }
+            }
+            .sheet(isPresented: $showVoiceRecording) {
+                VoiceRecordingView { transcribedText in
+                    saveVoiceNote(transcribedText)
+                }
+                .presentationDetents([.medium])
             }
             .sensoryFeedback(.success, trigger: saveSucceeded)
             .sensoryFeedback(.error, trigger: saveFailed)
@@ -680,6 +701,128 @@ struct HomeView: View {
             }
         } catch {
             showToast(String(localized: "home.manualSaveError", defaultValue: "Failed to save"), icon: "xmark.circle.fill")
+            saveFailed.toggle()
+        }
+    }
+
+    private func saveScreenshot(_ image: UIImage) {
+        let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
+        guard SharedDataManager.canSave(isPro: isPro) else {
+            showToast(String(localized: "home.quotaExceeded", defaultValue: "Monthly quota exceeded"), icon: "exclamationmark.triangle.fill")
+            saveFailed.toggle()
+            return
+        }
+
+        // Compress for storage (max 1920px)
+        let storageImage = Self.resizedImage(image, maxDimension: 1920)
+        guard let storageData = storageImage.jpegData(compressionQuality: 0.8) else {
+            showToast(String(localized: "home.screenshotError", defaultValue: "Failed to process image"), icon: "xmark.circle.fill")
+            saveFailed.toggle()
+            return
+        }
+
+        // Save image to App Group container Images/ directory
+        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) else {
+            showToast(String(localized: "home.screenshotError", defaultValue: "Failed to process image"), icon: "xmark.circle.fill")
+            saveFailed.toggle()
+            return
+        }
+        let imagesDir = containerURL.appendingPathComponent("Images", isDirectory: true)
+        try? FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
+        let filename = UUID().uuidString + ".jpg"
+        let fileURL = imagesDir.appendingPathComponent(filename)
+        do {
+            try storageData.write(to: fileURL)
+        } catch {
+            showToast(String(localized: "home.screenshotError", defaultValue: "Failed to process image"), icon: "xmark.circle.fill")
+            saveFailed.toggle()
+            return
+        }
+
+        let relativePath = "Images/\(filename)"
+
+        // Create article immediately, then run OCR in background
+        let article = Article(url: nil, sourceType: .screenshot)
+        article.localImagePath = relativePath
+        article.status = .clientReady
+        modelContext.insert(article)
+        do {
+            try modelContext.save()
+        } catch {
+            showToast(String(localized: "home.screenshotError", defaultValue: "Failed to process image"), icon: "xmark.circle.fill")
+            saveFailed.toggle()
+            return
+        }
+        SharedDataManager.incrementQuota()
+        viewModel?.fetchArticles()
+        showToast(String(localized: "home.screenshotSaved", defaultValue: "Screenshot saved"), icon: "checkmark.circle.fill")
+        saveSucceeded.toggle()
+
+        // Run OCR in background
+        let ocrImage = Self.resizedImage(image, maxDimension: 1280)
+        let articleID = article.id
+        Task {
+            let extractor = ImageOCRExtractor()
+            if let text = try? await extractor.extract(from: ocrImage), !text.isEmpty {
+                await MainActor.run {
+                    // Re-fetch the article from context by ID
+                    let descriptor = FetchDescriptor<Article>(predicate: #Predicate { $0.id == articleID })
+                    guard let article = try? modelContext.fetch(descriptor).first else { return }
+                    article.markdownContent = text
+                    article.title = String(text.prefix(40)).components(separatedBy: .newlines).first ?? String(text.prefix(40))
+                    article.wordCount = Article.countWords(text)
+                    article.updatedAt = .now
+                    try? modelContext.save()
+                    viewModel?.fetchArticles()
+                }
+            }
+            await syncService?.incrementalSync()
+        }
+    }
+
+    private static func resizedImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let size = image.size
+        guard max(size.width, size.height) > maxDimension else { return image }
+        let scale = maxDimension / max(size.width, size.height)
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+
+    private func saveVoiceNote(_ transcribedText: String) {
+        let trimmed = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
+        guard SharedDataManager.canSave(isPro: isPro) else {
+            showToast(String(localized: "home.quotaExceeded", defaultValue: "Monthly quota exceeded"), icon: "exclamationmark.triangle.fill")
+            saveFailed.toggle()
+            return
+        }
+
+        let article = Article(url: nil, sourceType: .voice)
+        article.markdownContent = trimmed
+        // Title = first sentence, truncated to 40 chars
+        let firstSentence = trimmed.components(separatedBy: CharacterSet(charactersIn: ".!?\u{3002}\u{FF01}\u{FF1F}")).first ?? trimmed
+        let titleCandidate = String(firstSentence.prefix(40))
+        article.title = titleCandidate.count < firstSentence.count ? titleCandidate + "..." : titleCandidate
+        article.status = .clientReady
+        article.wordCount = Article.countWords(trimmed)
+        modelContext.insert(article)
+        do {
+            try modelContext.save()
+            SharedDataManager.incrementQuota()
+            viewModel?.fetchArticles()
+            showToast(String(localized: "home.voiceSaved", defaultValue: "Voice note saved"), icon: "checkmark.circle.fill")
+            saveSucceeded.toggle()
+
+            Task {
+                await syncService?.incrementalSync()
+            }
+        } catch {
+            showToast(String(localized: "home.voiceSaveError", defaultValue: "Failed to save"), icon: "xmark.circle.fill")
             saveFailed.toggle()
         }
     }
