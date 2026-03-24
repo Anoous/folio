@@ -22,6 +22,8 @@ const (
 	SourceNewsletter SourceType = "newsletter"
 	SourceYoutube    SourceType = "youtube"
 	SourceManual     SourceType = "manual"
+	SourceScreenshot SourceType = "screenshot"
+	SourceVoice      SourceType = "voice"
 )
 
 type Article struct {

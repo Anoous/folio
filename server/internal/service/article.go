@@ -55,10 +55,11 @@ type SubmitURLResponse struct {
 }
 
 type SubmitManualContentRequest struct {
-	Content  string   `json:"content"`
-	Title    *string  `json:"title,omitempty"`
-	TagIDs   []string `json:"tag_ids,omitempty"`
-	ClientID *string  `json:"client_id,omitempty"`
+	Content    string   `json:"content"`
+	Title      *string  `json:"title,omitempty"`
+	TagIDs     []string `json:"tag_ids,omitempty"`
+	ClientID   *string  `json:"client_id,omitempty"`
+	SourceType string   `json:"source_type,omitempty"`
 }
 
 func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req SubmitURLRequest) (*SubmitURLResponse, error) {
@@ -149,11 +150,17 @@ func (s *ArticleService) SubmitManualContent(ctx context.Context, userID string,
 	// Compute word count
 	wordCount := repository.CountWords(req.Content)
 
+	// Resolve source type (default to manual if not provided)
+	sourceType := domain.SourceType(req.SourceType)
+	if sourceType == "" {
+		sourceType = domain.SourceManual
+	}
+
 	// Create article
 	article, err := s.articleRepo.Create(ctx, repository.CreateArticleParams{
 		UserID:          userID,
 		URL:             nil,
-		SourceType:      domain.SourceManual,
+		SourceType:      sourceType,
 		Title:           req.Title,
 		MarkdownContent: &req.Content,
 		WordCount:       &wordCount,
@@ -177,7 +184,7 @@ func (s *ArticleService) SubmitManualContent(ctx context.Context, userID string,
 		ArticleID:  article.ID,
 		UserID:     userID,
 		URL:        nil,
-		SourceType: string(domain.SourceManual),
+		SourceType: string(sourceType),
 	})
 	if err != nil {
 		_ = s.quotaService.DecrementQuota(ctx, userID)
@@ -189,7 +196,7 @@ func (s *ArticleService) SubmitManualContent(ctx context.Context, userID string,
 	if req.Title != nil {
 		title = *req.Title
 	}
-	aiTask := worker.NewAIProcessTask(article.ID, task.ID, userID, title, req.Content, string(domain.SourceManual), "")
+	aiTask := worker.NewAIProcessTask(article.ID, task.ID, userID, title, req.Content, string(sourceType), "")
 	if _, err := s.asynqClient.EnqueueContext(ctx, aiTask); err != nil {
 		_ = s.quotaService.DecrementQuota(ctx, userID)
 		return nil, fmt.Errorf("enqueue ai process: %w", err)

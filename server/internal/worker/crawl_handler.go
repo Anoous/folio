@@ -104,13 +104,46 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	start := time.Now()
 	slog.Info("crawl task started", "article_id", p.ArticleID, "task_id", p.TaskID, "url", p.URL)
 
+	// Load article once for pre-crawl checks
+	preCheckArticle, preCheckErr := h.articleRepo.GetByID(ctx, p.ArticleID)
+
 	// Skip re-crawl if article has highlights (user content takes priority)
-	if art, err := h.articleRepo.GetByID(ctx, p.ArticleID); err == nil && art != nil && art.HighlightCount > 0 {
+	if preCheckErr == nil && preCheckArticle != nil && preCheckArticle.HighlightCount > 0 {
 		slog.Info("crawl skipped: article has highlights",
 			"article_id", p.ArticleID,
-			"highlight_count", art.HighlightCount,
+			"highlight_count", preCheckArticle.HighlightCount,
 		)
 		return nil
+	}
+
+	// Skip crawl for screenshot/voice — they have content, just need AI
+	if preCheckErr == nil && preCheckArticle != nil &&
+		(preCheckArticle.SourceType == domain.SourceScreenshot || preCheckArticle.SourceType == domain.SourceVoice) {
+		if preCheckArticle.MarkdownContent != nil && *preCheckArticle.MarkdownContent != "" {
+			slog.Info("crawl skipped: screenshot/voice article has content, routing to AI",
+				"article_id", p.ArticleID,
+				"source_type", preCheckArticle.SourceType,
+			)
+			if err := h.taskRepo.SetCrawlFinished(ctx, p.TaskID); err != nil {
+				return fmt.Errorf("screenshot/voice: set crawl finished: %w", err)
+			}
+			title := derefOrEmpty(preCheckArticle.Title)
+			aiTask := NewAIProcessTask(
+				p.ArticleID, p.TaskID, p.UserID,
+				title, *preCheckArticle.MarkdownContent,
+				string(preCheckArticle.SourceType), derefOrEmpty(preCheckArticle.Author),
+			)
+			if _, enqErr := h.asynqClient.EnqueueContext(ctx, aiTask); enqErr != nil {
+				return fmt.Errorf("enqueue ai task (screenshot/voice): %w", enqErr)
+			}
+			return nil
+		}
+		// No content — mark as ready (e.g. image-only screenshot with no extracted text)
+		slog.Info("crawl skipped: screenshot/voice article has no content, marking ready",
+			"article_id", p.ArticleID,
+			"source_type", preCheckArticle.SourceType,
+		)
+		return h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusReady)
 	}
 
 	// Mark crawl started

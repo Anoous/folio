@@ -94,9 +94,10 @@ func (h *ArticleHandler) HandleSubmitURL(w http.ResponseWriter, r *http.Request)
 }
 
 type submitManualRequest struct {
-	Content string   `json:"content"`
-	Title   *string  `json:"title,omitempty"`
-	TagIDs  []string `json:"tag_ids,omitempty"`
+	Content    string   `json:"content"`
+	Title      *string  `json:"title,omitempty"`
+	TagIDs     []string `json:"tag_ids,omitempty"`
+	SourceType string   `json:"source_type,omitempty"`
 }
 
 func (h *ArticleHandler) HandleSubmitManual(w http.ResponseWriter, r *http.Request) {
@@ -123,10 +124,16 @@ func (h *ArticleHandler) HandleSubmitManual(w http.ResponseWriter, r *http.Reque
 		req.Content = truncated
 	}
 
+	sourceType := req.SourceType
+	if sourceType == "" {
+		sourceType = string(domain.SourceManual)
+	}
+
 	resp, err := h.articleService.SubmitManualContent(r.Context(), userID, service.SubmitManualContentRequest{
-		Content: req.Content,
-		Title:   req.Title,
-		TagIDs:  req.TagIDs,
+		Content:    req.Content,
+		Title:      req.Title,
+		TagIDs:     req.TagIDs,
+		SourceType: sourceType,
 	})
 	if err != nil {
 		handleServiceError(w, r, err)
