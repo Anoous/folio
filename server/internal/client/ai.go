@@ -11,6 +11,16 @@ import (
 	"time"
 )
 
+// SanitizeField removes injection markers from a single field.
+// Shared across packages that build LLM prompts.
+func SanitizeField(s string) string {
+	s = strings.ReplaceAll(s, "```", "")
+	s = strings.ReplaceAll(s, "system:", "")
+	s = strings.ReplaceAll(s, "assistant:", "")
+	s = strings.ReplaceAll(s, "user:", "")
+	return s
+}
+
 // RAGResult is the parsed output from the RAG LLM call.
 type RAGResult struct {
 	Answer              string   `json:"answer"`
@@ -26,6 +36,8 @@ type Analyzer interface {
 	ExpandQuery(ctx context.Context, question string) ([]string, error)
 	RerankArticles(ctx context.Context, question string, candidates []RerankCandidate) ([]RerankResult, error)
 	SelectRelatedArticles(ctx context.Context, sourceTitle, sourceSummary string, candidates []RerankCandidate) ([]RelatedResult, error)
+	// IsRealAI reports whether this analyzer calls a real LLM (vs a mock).
+	IsRealAI() bool
 }
 
 // AnalyzeRequest is the input for AI article analysis.
@@ -113,6 +125,8 @@ func NewDeepSeekAnalyzer(apiKey, baseURL string) *DeepSeekAnalyzer {
 	}
 }
 
+func (d *DeepSeekAnalyzer) IsRealAI() bool { return true }
+
 // --- OpenAI-compatible request/response types ---
 
 type chatRequest struct {
@@ -162,49 +176,14 @@ func (d *DeepSeekAnalyzer) Analyze(ctx context.Context, req AnalyzeRequest) (*An
 		ResponseFormat: &respFormat{Type: "json_object"},
 	}
 
-	body, err := json.Marshal(chatReq)
+	respBody, err := d.doRequest(ctx, chatReq)
 	if err != nil {
-		return nil, fmt.Errorf("marshal chat request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", d.baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+d.apiKey)
-
-	resp, err := d.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("deepseek request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("deepseek api error: status %d, body: %s", resp.StatusCode, string(respBody))
-	}
-
-	var chatResp chatResponse
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return nil, fmt.Errorf("decode chat response: %w", err)
-	}
-
-	if chatResp.Error != nil {
-		return nil, fmt.Errorf("deepseek api error: %s", chatResp.Error.Message)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return nil, fmt.Errorf("deepseek returned no choices")
+		return nil, fmt.Errorf("analyze: %w", err)
 	}
 
 	var result AnalyzeResponse
-	if err := json.Unmarshal([]byte(chatResp.Choices[0].Message.Content), &result); err != nil {
-		return nil, fmt.Errorf("decode analysis json: %w (raw: %s)", err, chatResp.Choices[0].Message.Content)
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decode analysis json: %w (raw: %s)", err, string(respBody))
 	}
 
 	validateResponse(&result)
@@ -252,22 +231,13 @@ func buildSystemPrompt() string {
 }`, catLines.String())
 }
 
-// sanitizeField removes injection markers from a single field.
-func sanitizeField(s string) string {
-	s = strings.ReplaceAll(s, "```", "")
-	s = strings.ReplaceAll(s, "system:", "")
-	s = strings.ReplaceAll(s, "assistant:", "")
-	s = strings.ReplaceAll(s, "user:", "")
-	return s
-}
-
 // buildUserPrompt constructs the user prompt, sanitizing inputs and truncating
 // content to 12000 runes.
 func buildUserPrompt(title, content, source, author string) string {
-	title = sanitizeField(title)
-	content = sanitizeField(content)
-	source = sanitizeField(source)
-	author = sanitizeField(author)
+	title = SanitizeField(title)
+	content = SanitizeField(content)
+	source = SanitizeField(source)
+	author = SanitizeField(author)
 
 	const maxContentRunes = 12000
 	runes := []rune(content)
@@ -357,7 +327,7 @@ func (d *DeepSeekAnalyzer) GenerateEchoCards(ctx context.Context, title string, 
 		fmt.Fprintf(&pointsBuilder, "- %s\n", kp)
 	}
 
-	userPrompt := fmt.Sprintf("文章标题：%s\n来源：%s\n要点：\n%s", sanitizeField(title), sanitizeField(source), pointsBuilder.String())
+	userPrompt := fmt.Sprintf("文章标题：%s\n来源：%s\n要点：\n%s", SanitizeField(title), SanitizeField(source), pointsBuilder.String())
 
 	chatReq := chatRequest{
 		Model: "deepseek-chat",
@@ -370,47 +340,12 @@ func (d *DeepSeekAnalyzer) GenerateEchoCards(ctx context.Context, title string, 
 		ResponseFormat: &respFormat{Type: "json_object"},
 	}
 
-	body, err := json.Marshal(chatReq)
+	respBody, err := d.doRequest(ctx, chatReq)
 	if err != nil {
-		return nil, fmt.Errorf("marshal echo chat request: %w", err)
+		return nil, fmt.Errorf("generate echo cards: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", d.baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create echo request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+d.apiKey)
-
-	resp, err := d.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("echo deepseek request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read echo response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("echo deepseek api error: status %d, body: %s", resp.StatusCode, string(respBody))
-	}
-
-	var chatResp chatResponse
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return nil, fmt.Errorf("decode echo chat response: %w", err)
-	}
-
-	if chatResp.Error != nil {
-		return nil, fmt.Errorf("echo deepseek api error: %s", chatResp.Error.Message)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return nil, fmt.Errorf("echo deepseek returned no choices")
-	}
-
-	content := chatResp.Choices[0].Message.Content
+	content := string(respBody)
 
 	// Try parsing as array directly
 	var pairs []EchoQAPair
@@ -459,55 +394,18 @@ func (d *DeepSeekAnalyzer) GenerateRAGAnswer(ctx context.Context, systemPrompt, 
 		ResponseFormat: &respFormat{Type: "json_object"},
 	}
 
-	body, err := json.Marshal(chatReq)
-	if err != nil {
-		return nil, fmt.Errorf("marshal rag chat request: %w", err)
-	}
-
 	// Use a 30-second timeout for RAG calls.
 	ragCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	httpReq, err := http.NewRequestWithContext(ragCtx, "POST", d.baseURL+"/chat/completions", bytes.NewReader(body))
+	respBody, err := d.doRequest(ragCtx, chatReq)
 	if err != nil {
-		return nil, fmt.Errorf("create rag request: %w", err)
+		return nil, fmt.Errorf("rag: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+d.apiKey)
-
-	resp, err := d.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("rag deepseek request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read rag response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("rag deepseek api error: status %d, body: %s", resp.StatusCode, string(respBody))
-	}
-
-	var chatResp chatResponse
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return nil, fmt.Errorf("decode rag chat response: %w", err)
-	}
-
-	if chatResp.Error != nil {
-		return nil, fmt.Errorf("rag deepseek api error: %s", chatResp.Error.Message)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return nil, fmt.Errorf("rag deepseek returned no choices")
-	}
-
-	content := chatResp.Choices[0].Message.Content
 
 	var result RAGResult
-	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		return nil, fmt.Errorf("decode rag json: %w (raw: %s)", err, content)
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decode rag json: %w (raw: %s)", err, string(respBody))
 	}
 
 	// Ensure slices are non-nil.
@@ -578,7 +476,7 @@ func (d *DeepSeekAnalyzer) ExpandQuery(ctx context.Context, question string) ([]
 
 输出格式：["关键词1", "keyword2", ...]`
 
-	userPrompt := fmt.Sprintf("用户问题：%s", sanitizeField(question))
+	userPrompt := fmt.Sprintf("用户问题：%s", SanitizeField(question))
 
 	chatReq := chatRequest{
 		Model: "deepseek-chat",
@@ -619,7 +517,7 @@ func (d *DeepSeekAnalyzer) ExpandQuery(ctx context.Context, question string) ([]
 // RerankArticles asks the LLM to judge relevance of candidates to a question.
 func (d *DeepSeekAnalyzer) RerankArticles(ctx context.Context, question string, candidates []RerankCandidate) ([]RerankResult, error) {
 	var b strings.Builder
-	fmt.Fprintf(&b, "用户问题：%s\n\n以下是候选文章列表。判断每篇与用户问题的相关程度，返回最相关的 Top 10。\n\n候选文章：\n", sanitizeField(question))
+	fmt.Fprintf(&b, "用户问题：%s\n\n以下是候选文章列表。判断每篇与用户问题的相关程度，返回最相关的 Top 10。\n\n候选文章：\n", SanitizeField(question))
 	for _, c := range candidates {
 		kp := ""
 		if len(c.KeyPoints) > 0 {
@@ -669,7 +567,7 @@ func (d *DeepSeekAnalyzer) RerankArticles(ctx context.Context, question string, 
 // SelectRelatedArticles asks the LLM to pick the most related articles to a source article.
 func (d *DeepSeekAnalyzer) SelectRelatedArticles(ctx context.Context, sourceTitle, sourceSummary string, candidates []RerankCandidate) ([]RelatedResult, error) {
 	var b strings.Builder
-	fmt.Fprintf(&b, "本文：《%s》\n摘要：%s\n\n候选文章：\n", sanitizeField(sourceTitle), sanitizeField(sourceSummary))
+	fmt.Fprintf(&b, "本文：《%s》\n摘要：%s\n\n候选文章：\n", SanitizeField(sourceTitle), SanitizeField(sourceSummary))
 	for _, c := range candidates {
 		fmt.Fprintf(&b, "[%d] 《%s》: %s\n", c.Index, c.Title, c.Summary)
 	}

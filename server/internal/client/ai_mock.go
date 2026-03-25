@@ -12,6 +12,8 @@ import (
 // Port of the Python mock at scripts/mock_ai_service.py.
 type MockAnalyzer struct{}
 
+func (m *MockAnalyzer) IsRealAI() bool { return false }
+
 // compile regex patterns once at package level
 var (
 	reEnglishWord  = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+#.]{1,}`)

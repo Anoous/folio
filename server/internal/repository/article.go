@@ -297,6 +297,14 @@ func CountWords(text string) int {
 	return count
 }
 
+// escapeILIKE escapes ILIKE wildcard characters in a keyword.
+func escapeILIKE(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
 // truncateUTF8 truncates s to at most maxLen runes.
 func truncateUTF8(s string, maxLen int) string {
 	runes := []rune(s)
@@ -428,7 +436,7 @@ func (r *ArticleRepo) BroadRecallArticles(ctx context.Context, userID string, ke
 	for i, kw := range keywords {
 		lc := strings.ToLower(strings.TrimSpace(kw))
 		cleaned[i] = lc
-		escaped[i] = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(lc)
+		escaped[i] = escapeILIKE(lc)
 	}
 
 	// Set low trigram threshold for broad recall

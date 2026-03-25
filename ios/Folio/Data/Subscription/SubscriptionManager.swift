@@ -11,8 +11,8 @@ class SubscriptionManager {
     var errorMessage: String?
 
     private let productIDs = [
-        "com.folio.app.pro.yearly",
-        "com.folio.app.pro.monthly"
+        AppConstants.proYearlyProductID,
+        AppConstants.proMonthlyProductID
     ]
 
     var yearlyProduct: Product? { products.first { $0.id.contains("yearly") } }

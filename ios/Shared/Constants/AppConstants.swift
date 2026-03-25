@@ -20,7 +20,17 @@ enum AppConstants {
     /// Search history key (UserDefaults.standard)
     static let searchHistoryKey = "folio_search_history"
 
+    /// Key for tracking if the user has been prompted for push notifications.
+    static let hasRequestedNotificationsKey = "has_requested_notifications"
+
+    /// Key for storing dismissed milestone IDs (comma-separated).
+    static let dismissedMilestonesKey = "dismissed_milestones"
+
     // MARK: - Subscription
+
+    /// StoreKit product identifiers.
+    static let proYearlyProductID = "com.folio.app.pro.yearly"
+    static let proMonthlyProductID = "com.folio.app.pro.monthly"
 
     /// Free tier subscription identifier (matches server domain.SubscriptionFree).
     static let subscriptionFree = "free"

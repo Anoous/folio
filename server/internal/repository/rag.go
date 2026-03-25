@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"folio-server/internal/client"
 	"folio-server/internal/domain"
 )
 
@@ -96,7 +95,7 @@ func (r *RAGRepo) BroadRecallSummaries(ctx context.Context, userID string, keywo
 	for i, kw := range keywords {
 		lc := strings.ToLower(strings.TrimSpace(kw))
 		cleaned[i] = lc
-		escaped[i] = client.EscapeILIKE(lc)
+		escaped[i] = escapeILIKE(lc)
 	}
 
 	// Set low trigram threshold for broad recall (transaction-scoped)

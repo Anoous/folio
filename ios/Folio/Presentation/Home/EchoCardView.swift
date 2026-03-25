@@ -47,7 +47,7 @@ struct EchoCardView: View {
     @State private var rememberedPressed = false
     @State private var forgotPressed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("has_requested_notifications") private var hasRequestedNotifications = false
+    @AppStorage(AppConstants.hasRequestedNotificationsKey) private var hasRequestedNotifications = false
 
     var body: some View {
         Group {

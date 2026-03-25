@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"folio-server/internal/api/middleware"
 	"folio-server/internal/repository"
 )
 
@@ -17,13 +18,15 @@ func NewRelationHandler(relationRepo *repository.RelationRepo) *RelationHandler 
 }
 
 func (h *RelationHandler) HandleGetRelated(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+
 	articleID := chi.URLParam(r, "id")
 	if articleID == "" {
 		writeError(w, http.StatusBadRequest, "article id required")
 		return
 	}
 
-	related, err := h.relationRepo.ListBySource(r.Context(), articleID)
+	related, err := h.relationRepo.ListBySource(r.Context(), userID, articleID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to get related articles")
 		return

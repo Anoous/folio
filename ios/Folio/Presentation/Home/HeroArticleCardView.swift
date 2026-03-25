@@ -40,7 +40,7 @@ struct HeroArticleCardView: View {
 
             // 3. Metadata row
             HStack(spacing: 6) {
-                if let sourceName = effectiveSourceName {
+                if let sourceName = article.effectiveSourceName {
                     Text(sourceName)
                     dotSeparator
                 }
@@ -54,24 +54,6 @@ struct HeroArticleCardView: View {
             .foregroundStyle(Color.folio.textTertiary)
         }
         .padding(.bottom, 24)
-    }
-
-    private var effectiveSourceName: String? {
-        switch article.sourceType {
-        case .manual:
-            return article.wordCount < 200
-                ? String(localized: "source.thought", defaultValue: "My Thought")
-                : String(localized: "source.pasted", defaultValue: "Pasted Content")
-        case .screenshot:
-            return String(localized: "Screenshot", defaultValue: "截图")
-        case .voice:
-            return String(localized: "Voice Note", defaultValue: "语音笔记")
-        default:
-            if let siteName = article.siteName, !siteName.isEmpty {
-                return siteName
-            }
-            return nil
-        }
     }
 
     private var dotSeparator: some View {

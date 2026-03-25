@@ -180,6 +180,36 @@ final class Article {
         return String(localized: "article.untitled", defaultValue: "Untitled")
     }
 
+    /// Source name for display in cards: uses siteName for web sources,
+    /// localized labels for manual/screenshot/voice.
+    var effectiveSourceName: String? {
+        switch sourceType {
+        case .manual:
+            return wordCount < 200
+                ? String(localized: "source.thought", defaultValue: "My Thought")
+                : String(localized: "source.pasted", defaultValue: "Pasted Content")
+        case .screenshot:
+            return String(localized: "Screenshot", defaultValue: "截图")
+        case .voice:
+            return String(localized: "Voice Note", defaultValue: "语音笔记")
+        default:
+            if let siteName, !siteName.isEmpty {
+                return siteName
+            }
+            return nil
+        }
+    }
+
+    /// Removes the local image file (if any) from the App Group container.
+    func cleanupLocalImage() {
+        guard let localPath = localImagePath,
+              let containerURL = FileManager.default.containerURL(
+                  forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier
+              ) else { return }
+        let imagePath = containerURL.appendingPathComponent(localPath)
+        try? FileManager.default.removeItem(at: imagePath)
+    }
+
     init(
         url: String?,
         title: String? = nil,

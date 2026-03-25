@@ -72,7 +72,7 @@ func (s *RAGService) Query(ctx context.Context, userID, question, conversationID
 	}
 
 	// 5. Sanitize question.
-	question = sanitizeQuestion(question)
+	question = strings.TrimSpace(client.SanitizeField(question))
 
 	// 6. Build prompts.
 	systemPrompt := buildRAGSystemPrompt()
@@ -298,15 +298,6 @@ func extractAnswerFromContent(content string) string {
 		return parsed.Answer
 	}
 	return content
-}
-
-// sanitizeQuestion removes injection markers from the user question.
-func sanitizeQuestion(q string) string {
-	q = strings.ReplaceAll(q, "```", "")
-	q = strings.ReplaceAll(q, "system:", "")
-	q = strings.ReplaceAll(q, "user:", "")
-	q = strings.ReplaceAll(q, "assistant:", "")
-	return strings.TrimSpace(q)
 }
 
 // mapCitedSources converts 1-based cited indices to actual RAGSource entries.

@@ -60,15 +60,17 @@ func (r *RelationRepo) SaveBatch(ctx context.Context, sourceID string, relations
 }
 
 // ListBySource returns related articles for a source article, ordered by score DESC.
-func (r *RelationRepo) ListBySource(ctx context.Context, sourceID string) ([]RelatedArticleRow, error) {
+// Scoped to userID so users can only see relations for their own articles.
+func (r *RelationRepo) ListBySource(ctx context.Context, userID, sourceID string) ([]RelatedArticleRow, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT a.id, a.title, a.summary, a.site_name, a.cover_image_url, ar.relevance_reason
 		FROM article_relations ar
 		JOIN articles a ON a.id = ar.related_article_id
 		WHERE ar.source_article_id = $1
+			AND a.user_id = $2
 			AND a.deleted_at IS NULL
 		ORDER BY ar.score DESC`,
-		sourceID)
+		sourceID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list relations: %w", err)
 	}

@@ -29,7 +29,7 @@ struct HomeView: View {
     @State private var showVoiceRecording = false
     @State private var saveService: ContentSaveService?
     @Environment(\.selectArticle) private var selectArticle
-    @AppStorage("dismissed_milestones") private var dismissedMilestonesRaw = ""
+    @AppStorage(AppConstants.dismissedMilestonesKey) private var dismissedMilestonesRaw = ""
 
     // MARK: - Milestone Helpers
 

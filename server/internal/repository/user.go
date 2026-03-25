@@ -23,7 +23,8 @@ func NewUserRepo(pool *pgxpool.Pool) *UserRepo {
 const userColumns = `id, apple_id, email, nickname, avatar_url,
 	subscription, subscription_expires_at, original_transaction_id,
 	monthly_quota, current_month_count, quota_reset_at, preferred_language,
-	created_at, updated_at, sync_epoch`
+	created_at, updated_at, sync_epoch,
+	echo_count_this_week, echo_week_reset_at`
 
 // scanUser scans a row into a domain.User using the canonical column order.
 func scanUser(row pgx.Row) (*domain.User, error) {
@@ -33,6 +34,7 @@ func scanUser(row pgx.Row) (*domain.User, error) {
 		&u.Subscription, &u.SubscriptionExpiresAt, &u.OriginalTransactionID,
 		&u.MonthlyQuota, &u.CurrentMonthCount, &u.QuotaResetAt, &u.PreferredLanguage,
 		&u.CreatedAt, &u.UpdatedAt, &u.SyncEpoch,
+		&u.EchoCountThisWeek, &u.EchoWeekResetAt,
 	)
 	return &u, err
 }

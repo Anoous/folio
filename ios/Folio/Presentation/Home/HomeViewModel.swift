@@ -246,14 +246,7 @@ final class HomeViewModel {
     func deleteArticle(_ article: Article) {
         let serverID = article.serverID
 
-        // Clean up local image if present
-        if let localPath = article.localImagePath,
-           let containerURL = FileManager.default.containerURL(
-               forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier
-           ) {
-            let imagePath = containerURL.appendingPathComponent(localPath)
-            try? FileManager.default.removeItem(at: imagePath)
-        }
+        article.cleanupLocalImage()
 
         // Record deletion intent for server sync (before deleting the article)
         if let serverID {

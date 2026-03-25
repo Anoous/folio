@@ -106,7 +106,7 @@ func (s *StatsService) GetMonthlyStats(ctx context.Context, userID string, year,
 
 	// 5. trend_insight: compare this month vs last month (AI only)
 	var trendInsight *string
-	if _, ok := s.aiClient.(*client.MockAnalyzer); !ok {
+	if s.aiClient.IsRealAI() {
 		// Only call AI when a real analyzer is wired (i.e. DeepSeek key is present).
 		prevYear, prevMonth := year, month-1
 		if prevMonth == 0 {
