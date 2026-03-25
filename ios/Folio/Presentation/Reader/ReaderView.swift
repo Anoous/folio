@@ -507,6 +507,11 @@ struct ReaderView: View {
 
     // MARK: - Menu Sheet
 
+    private func dismissMenuThen(_ action: @escaping () -> Void) {
+        showMoreMenu = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: action)
+    }
+
     private var readerMenuSheet: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
@@ -516,28 +521,19 @@ struct ReaderView: View {
                         ? String(localized: "reader.unfavorite", defaultValue: "取消收藏")
                         : String(localized: "reader.favorite", defaultValue: "收藏")
                 ) {
-                    showMoreMenu = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        viewModel?.toggleFavorite()
-                    }
+                    dismissMenuThen { viewModel?.toggleFavorite() }
                 }
 
                 menuSeparator
 
                 menuRow(icon: "doc.on.doc", label: String(localized: "reader.copyMarkdown", defaultValue: "复制 Markdown")) {
-                    showMoreMenu = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        viewModel?.copyMarkdown()
-                    }
+                    dismissMenuThen { viewModel?.copyMarkdown() }
                 }
 
                 menuSeparator
 
                 menuRow(icon: "textformat.size", label: String(localized: "reader.readingPrefs", defaultValue: "阅读偏好")) {
-                    showMoreMenu = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        showsReadingPreferences = true
-                    }
+                    dismissMenuThen { showsReadingPreferences = true }
                 }
 
                 menuSeparator
@@ -548,30 +544,21 @@ struct ReaderView: View {
                         ? String(localized: "reader.unarchive", defaultValue: "取消归档")
                         : String(localized: "reader.archive", defaultValue: "归档")
                 ) {
-                    showMoreMenu = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        viewModel?.archiveArticle()
-                    }
+                    dismissMenuThen { viewModel?.archiveArticle() }
                 }
 
                 if article.url != nil {
                     menuSeparator
 
                     menuRow(icon: "globe", label: String(localized: "reader.openInBrowser", defaultValue: "查看原文")) {
-                        showMoreMenu = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            openOriginal()
-                        }
+                        dismissMenuThen { openOriginal() }
                     }
                 }
 
                 menuSeparator
 
                 menuRow(icon: "trash", label: String(localized: "reader.delete", defaultValue: "删除"), isDestructive: true) {
-                    showMoreMenu = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        showsDeleteConfirmation = true
-                    }
+                    dismissMenuThen { showsDeleteConfirmation = true }
                 }
             }
             .padding(.horizontal, Spacing.screenPadding)
