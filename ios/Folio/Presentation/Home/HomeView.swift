@@ -277,13 +277,11 @@ struct HomeView: View {
 
     // MARK: - Search Suggestions
 
-    private static let recentSearchesKey = "recent_searches"
-
     private var recentSearches: [String] {
         // recentSearchesVersion forces SwiftUI to re-evaluate when list changes
         _ = recentSearchesVersion
         return Array(
-            (UserDefaults.standard.stringArray(forKey: Self.recentSearchesKey) ?? []).prefix(5)
+            (UserDefaults.standard.stringArray(forKey: AppConstants.searchHistoryKey) ?? []).prefix(5)
         )
     }
 
@@ -298,11 +296,11 @@ struct HomeView: View {
     private func saveRecentSearch(_ query: String) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        var recent = UserDefaults.standard.stringArray(forKey: Self.recentSearchesKey) ?? []
+        var recent = UserDefaults.standard.stringArray(forKey: AppConstants.searchHistoryKey) ?? []
         recent.removeAll { $0 == trimmed }
         recent.insert(trimmed, at: 0)
         if recent.count > 10 { recent = Array(recent.prefix(10)) }
-        UserDefaults.standard.set(recent, forKey: Self.recentSearchesKey)
+        UserDefaults.standard.set(recent, forKey: AppConstants.searchHistoryKey)
         recentSearchesVersion += 1
     }
 

@@ -391,7 +391,6 @@ final class SyncService {
     }
 
     /// Delete local synced articles whose serverID is not in the server's full article set.
-    /// Delete local synced articles whose serverID is not in the server's full article set.
     private func reconcileLocalArticles(serverIDs: Set<String>) {
         let syncedRaw = SyncState.synced.rawValue
         let descriptor = FetchDescriptor<Article>(
