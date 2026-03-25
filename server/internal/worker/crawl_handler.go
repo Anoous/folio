@@ -21,54 +21,25 @@ type scraper interface {
 	Scrape(ctx context.Context, url string) (*client.ScrapeResponse, error)
 }
 
-// crawlArticleRepo abstracts the article repository methods used by CrawlHandler.
-type crawlArticleRepo interface {
-	GetByID(ctx context.Context, id string) (*domain.Article, error)
-	UpdateCrawlResult(ctx context.Context, id string, cr repository.CrawlResult) error
-	UpdateAIResult(ctx context.Context, id string, ai repository.AIResult) error
-	UpdateStatus(ctx context.Context, id string, status domain.ArticleStatus) error
-	SetError(ctx context.Context, id string, errMsg string) error
-}
-
-// crawlTaskRepo abstracts the task repository methods used by CrawlHandler.
-type crawlTaskRepo interface {
-	SetCrawlStarted(ctx context.Context, id string) error
-	SetCrawlFinished(ctx context.Context, id string) error
-	SetAIFinished(ctx context.Context, id string) error
-	SetFailed(ctx context.Context, id string, errMsg string) error
-}
-
-// crawlEnqueuer abstracts the asynq client for enqueueing tasks.
-type crawlEnqueuer interface {
-	EnqueueContext(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
-}
-
-// crawlContentCacheRepo abstracts the content cache repository for CrawlHandler.
-type crawlContentCacheRepo interface {
-	GetByURL(ctx context.Context, url string) (*domain.ContentCache, error)
-}
-
-// crawlTagRepo abstracts the tag repository methods used by CrawlHandler for cache-hit tag creation.
-type crawlTagRepo interface {
-	Create(ctx context.Context, userID, name string, isAIGenerated bool) (*domain.Tag, error)
-	AttachToArticle(ctx context.Context, articleID, tagID string) error
-}
-
-// crawlCategoryRepo abstracts the category repository methods used by CrawlHandler.
-type crawlCategoryRepo interface {
-	FindOrCreate(ctx context.Context, slug, nameZH, nameEN string) (*domain.Category, error)
-}
-
 type CrawlHandler struct {
 	readerClient scraper
 	jinaClient   scraper
-	articleRepo  crawlArticleRepo
-	taskRepo     crawlTaskRepo
-	asynqClient  crawlEnqueuer
+	articleRepo  interface {
+		ArticleGetter
+		ArticleCrawlUpdater
+		ArticleAIUpdater
+		ArticleStatusUpdater
+	}
+	taskRepo interface {
+		TaskCrawlTracker
+		TaskAIFinisher
+		TaskFailer
+	}
+	asynqClient  Enqueuer
 	enableImage  bool
-	cacheRepo    crawlContentCacheRepo
-	tagRepo      crawlTagRepo
-	categoryRepo crawlCategoryRepo
+	cacheRepo    ContentCacheReader
+	tagRepo      TagCreator
+	categoryRepo CategoryFinder
 }
 
 func NewCrawlHandler(

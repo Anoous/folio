@@ -14,10 +14,6 @@ import (
 	"folio-server/internal/repository"
 )
 
-type relateArticleRepo interface {
-	GetByID(ctx context.Context, id string) (*domain.Article, error)
-}
-
 type relateRAGRepo interface {
 	BroadRecallSummaries(ctx context.Context, userID string, keywords []string, limit int, excludeID string) ([]domain.RAGSource, error)
 }
@@ -31,14 +27,14 @@ type relateRelationRepo interface {
 }
 
 type RelateHandler struct {
-	articleRepo  relateArticleRepo
+	articleRepo  ArticleGetter
 	ragRepo      relateRAGRepo
 	aiClient     relateSelector
 	relationRepo relateRelationRepo
 }
 
 func NewRelateHandler(
-	articleRepo relateArticleRepo,
+	articleRepo ArticleGetter,
 	ragRepo relateRAGRepo,
 	aiClient relateSelector,
 	relationRepo relateRelationRepo,

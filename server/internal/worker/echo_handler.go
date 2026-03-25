@@ -13,11 +13,6 @@ import (
 	"folio-server/internal/domain"
 )
 
-// echoArticleRepo abstracts the article repository methods used by EchoHandler.
-type echoArticleRepo interface {
-	GetByID(ctx context.Context, id string) (*domain.Article, error)
-}
-
 // echoCardRepo abstracts the echo repository methods used by EchoHandler.
 type echoCardRepo interface {
 	CountCardsByArticle(ctx context.Context, articleID string) (int, error)
@@ -37,7 +32,7 @@ type echoHighlightRepo interface {
 // EchoHandler processes echo:generate tasks.
 type EchoHandler struct {
 	aiClient      echoCardGenerator
-	articleRepo   echoArticleRepo
+	articleRepo   ArticleGetter
 	echoRepo      echoCardRepo
 	highlightRepo echoHighlightRepo
 }
@@ -45,7 +40,7 @@ type EchoHandler struct {
 // NewEchoHandler creates an EchoHandler.
 func NewEchoHandler(
 	aiClient echoCardGenerator,
-	articleRepo echoArticleRepo,
+	articleRepo ArticleGetter,
 	echoRepo echoCardRepo,
 	highlightRepo echoHighlightRepo,
 ) *EchoHandler {

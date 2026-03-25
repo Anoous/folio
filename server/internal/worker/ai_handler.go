@@ -19,46 +19,23 @@ type analyzer interface {
 	Analyze(ctx context.Context, req client.AnalyzeRequest) (*client.AnalyzeResponse, error)
 }
 
-// aiArticleRepo abstracts the article repository methods used by AIHandler.
-type aiArticleRepo interface {
-	GetByID(ctx context.Context, id string) (*domain.Article, error)
-	UpdateAIResult(ctx context.Context, id string, ai repository.AIResult) error
-	UpdateTitle(ctx context.Context, articleID string, title string) error
-	UpdateStatus(ctx context.Context, id string, status domain.ArticleStatus) error
-	SetError(ctx context.Context, id string, errMsg string) error
-}
-
-// aiTaskRepo abstracts the task repository methods used by AIHandler.
-type aiTaskRepo interface {
-	SetAIStarted(ctx context.Context, id string) error
-	SetAIFinished(ctx context.Context, id string) error
-	SetFailed(ctx context.Context, id string, errMsg string) error
-}
-
-// aiTagRepo abstracts the tag repository methods used by AIHandler.
-type aiTagRepo interface {
-	Create(ctx context.Context, userID, name string, isAIGenerated bool) (*domain.Tag, error)
-	AttachToArticle(ctx context.Context, articleID, tagID string) error
-}
-
-// aiContentCacheRepo abstracts the content cache repository for AIHandler.
-type aiContentCacheRepo interface {
-	Upsert(ctx context.Context, cache *domain.ContentCache) error
-}
-
-// aiEnqueuer abstracts the asynq client for enqueueing tasks from AIHandler.
-type aiEnqueuer interface {
-	EnqueueContext(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
-}
-
 type AIHandler struct {
-	aiClient     analyzer
-	articleRepo  aiArticleRepo
-	taskRepo     aiTaskRepo
-	categoryRepo *repository.CategoryRepo
-	tagRepo      aiTagRepo
-	cacheRepo    aiContentCacheRepo
-	asynqClient  aiEnqueuer
+	aiClient    analyzer
+	articleRepo interface {
+		ArticleGetter
+		ArticleAIUpdater
+		ArticleTitleUpdater
+		ArticleStatusUpdater
+	}
+	taskRepo interface {
+		TaskAIStarter
+		TaskAIFinisher
+		TaskFailer
+	}
+	categoryRepo CategoryFinder
+	tagRepo      TagCreator
+	cacheRepo    ContentCacheWriter
+	asynqClient  Enqueuer
 }
 
 func NewAIHandler(

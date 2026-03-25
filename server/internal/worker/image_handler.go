@@ -12,9 +12,15 @@ import (
 	"folio-server/internal/repository"
 )
 
+// imageArticleRepo combines ArticleGetter with the image-specific update method.
+type imageArticleRepo interface {
+	ArticleGetter
+	UpdateMarkdownContent(ctx context.Context, id string, markdown string) error
+}
+
 type ImageHandler struct {
 	r2Client    *client.R2Client
-	articleRepo *repository.ArticleRepo
+	articleRepo imageArticleRepo
 }
 
 func NewImageHandler(r2Client *client.R2Client, articleRepo *repository.ArticleRepo) *ImageHandler {
