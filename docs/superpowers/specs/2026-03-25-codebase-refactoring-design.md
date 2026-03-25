@@ -351,9 +351,13 @@ type TaskCrawlTracker interface {
     SetCrawlFinished(ctx context.Context, id string) error
 }
 
-// TaskAITracker tracks AI task lifecycle.
-type TaskAITracker interface {
+// TaskAIStarter marks AI processing as started.
+type TaskAIStarter interface {
     SetAIStarted(ctx context.Context, id string) error
+}
+
+// TaskAIFinisher marks AI processing as finished.
+type TaskAIFinisher interface {
     SetAIFinished(ctx context.Context, id string) error
 }
 
@@ -403,7 +407,7 @@ type CrawlHandler struct {
     articleRepo  interface {           // 组合：Get + Crawl + AI + Status
         ArticleGetter; ArticleCrawlUpdater; ArticleAIUpdater; ArticleStatusUpdater
     }
-    taskRepo     interface { TaskCrawlTracker; TaskAITracker; TaskFailer }
+    taskRepo     interface { TaskCrawlTracker; TaskAIFinisher; TaskFailer }
     asynqClient  Enqueuer
     enableImage  bool
     cacheRepo    ContentCacheReader
@@ -419,7 +423,7 @@ type AIHandler struct {
     articleRepo  interface {
         ArticleGetter; ArticleAIUpdater; ArticleTitleUpdater; ArticleStatusUpdater
     }
-    taskRepo     interface { TaskAITracker; TaskFailer }
+    taskRepo     interface { TaskAIStarter; TaskAIFinisher; TaskFailer }
     categoryRepo CategoryFinder        // 从具体类型 *repository.CategoryRepo 改为接口
     tagRepo      TagCreator
     cacheRepo    ContentCacheWriter
