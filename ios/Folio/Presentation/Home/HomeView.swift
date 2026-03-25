@@ -160,8 +160,26 @@ struct HomeView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        if isSearchActive {
-            searchContent
+        if isSearchActive, let vm = viewModel {
+            HomeSearchView(
+                searchText: $searchText,
+                viewModel: vm,
+                searchViewModel: searchViewModel,
+                recentSearches: recentSearches,
+                onDismiss: { isSearchActive = false },
+                onSaveURL: { url in saveURL(url) },
+                onSaveNote: { content in
+                    noteSheetText = content
+                    showNoteSheet = true
+                },
+                onShowNoteSheet: {
+                    noteSheetText = ""
+                    showNoteSheet = true
+                    isSearchActive = false
+                },
+                onSaveRecentSearch: { query in saveRecentSearch(query) },
+                findExistingArticle: { text in findExistingArticle(for: text) }
+            )
         } else if viewModel?.articles.isEmpty ?? true {
             VStack(spacing: 0) {
                 dateHeader
@@ -176,122 +194,12 @@ struct HomeView: View {
 
     // MARK: - Search Content
 
-    private var searchContent: some View {
-        VStack(spacing: 0) {
-            // Search bar
-            HStack(spacing: 12) {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 15))
-                        .foregroundStyle(Color.folio.textTertiary)
-                    TextField("搜索，或提问", text: $searchText)
-                        .font(.system(size: 16))
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .onSubmit {
-                            let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !trimmed.isEmpty { saveRecentSearch(trimmed) }
-                            handleSearchTextChange(searchText)
-                        }
-                        .onChange(of: searchText) { _, newValue in
-                            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if let vm = viewModel, vm.isRAGQuery(trimmed) {
-                                saveRecentSearch(trimmed)
-                                vm.submitRAGQuery(trimmed)
-                                // Clear FTS state when switching to RAG
-                                searchViewModel?.searchText = ""
-                            } else {
-                                viewModel?.clearRAG()
-                                handleSearchTextChange(newValue)
-                            }
-                        }
-                    if !searchText.isEmpty {
-                        Button {
-                            searchText = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 15))
-                                .foregroundStyle(Color.folio.textTertiary)
-                        }
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color.folio.echoBg)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                Button("取消") {
-                    searchText = ""
-                    viewModel?.clearRAG()
-                    isSearchActive = false
-                }
-                .font(.system(size: 16))
-                .foregroundStyle(Color.folio.accent)
-            }
-            .padding(.horizontal, Spacing.screenPadding)
-            .padding(.vertical, 10)
-
-            // Search results — RAG and FTS are mutually exclusive
-            let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                if let vm = viewModel, vm.isRAGQuery(trimmed) {
-                    // RAG mode
-                    if vm.ragIsLoading {
-                        RAGLoadingView()
-                    } else if let error = vm.ragError {
-                        RAGErrorView(errorType: error, onRetry: { vm.submitRAGQuery(trimmed) })
-                    } else if let response = vm.ragResponse {
-                        ScrollView {
-                            RAGAnswerView(
-                                thread: vm.ragThread,
-                                response: response,
-                                onSourceTap: { articleId in
-                                    // TODO: Navigate to reader for this article
-                                },
-                                onFollowup: { question in
-                                    vm.submitFollowup(question)
-                                }
-                            )
-                        }
-                    } else {
-                        Spacer() // RAG not yet triggered
-                    }
-                } else if let svm = searchViewModel {
-                    // FTS mode (existing search results)
-                    HomeSearchResultsView(
-                        searchViewModel: svm,
-                        searchText: $searchText,
-                        detectedURL: URLDetection.extractURL(from: trimmed),
-                        existingArticle: findExistingArticle(for: trimmed),
-                        onSaveURL: { url in saveURL(url) },
-                        onSaveNote: { content in
-                            noteSheetText = content
-                            showNoteSheet = true
-                        }
-                    )
-                }
-            } else {
-                searchSuggestionsContent
-            }
-        }
-    }
-
-    // MARK: - Search Suggestions
-
     private var recentSearches: [String] {
         // recentSearchesVersion forces SwiftUI to re-evaluate when list changes
         _ = recentSearchesVersion
         return Array(
             (UserDefaults.standard.stringArray(forKey: AppConstants.searchHistoryKey) ?? []).prefix(5)
         )
-    }
-
-    private var suggestedQuestions: [String] {
-        [
-            "我存过的文章里关于用户留存有哪些方法？",
-            "哪些文章提到了飞轮效应？",
-            "量子计算最近有什么进展？",
-        ]
     }
 
     private func saveRecentSearch(_ query: String) {
@@ -303,105 +211,6 @@ struct HomeView: View {
         if recent.count > 10 { recent = Array(recent.prefix(10)) }
         UserDefaults.standard.set(recent, forKey: AppConstants.searchHistoryKey)
         recentSearchesVersion += 1
-    }
-
-    private var searchSuggestionsContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                // Recent searches
-                if !recentSearches.isEmpty {
-                    Text("最近")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Color.folio.textTertiary)
-                        .tracking(0.5)
-                        .padding(.horizontal, Spacing.screenPadding)
-                        .padding(.top, 20)
-                        .padding(.bottom, 12)
-
-                    ForEach(recentSearches, id: \.self) { search in
-                        Button {
-                            searchText = search
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "clock.arrow.circlepath")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(Color.folio.textTertiary)
-                                Text(search)
-                                    .font(.system(size: 16))
-                                    .foregroundStyle(Color.folio.textPrimary)
-                                    .lineLimit(1)
-                                Spacer()
-                            }
-                            .padding(.horizontal, Spacing.screenPadding)
-                            .padding(.vertical, 12)
-                        }
-                    }
-
-                    Rectangle()
-                        .fill(Color.folio.separator)
-                        .frame(height: 0.5)
-                        .padding(.horizontal, Spacing.screenPadding)
-                        .padding(.vertical, 16)
-                }
-
-                // Suggested questions
-                Text("试试这样问")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Color.folio.textTertiary)
-                    .tracking(0.5)
-                    .padding(.horizontal, Spacing.screenPadding)
-                    .padding(.top, recentSearches.isEmpty ? 20 : 0)
-                    .padding(.bottom, 16)
-
-                ForEach(suggestedQuestions, id: \.self) { question in
-                    Button {
-                        searchText = question
-                    } label: {
-                        Text("\u{201C}\(question)\u{201D}")
-                            .font(Font.custom("LXGWWenKaiTC-Regular", size: 15).italic())
-                            .foregroundStyle(Color.folio.textSecondary)
-                            .padding(.horizontal, Spacing.screenPadding)
-                            .padding(.vertical, 10)
-                    }
-                }
-
-                // Quick actions
-                HStack(spacing: 12) {
-                    quickActionCard(icon: "link", title: "粘贴链接") {
-                        if let string = UIPasteboard.general.string,
-                           let url = URL(string: string.trimmingCharacters(in: .whitespacesAndNewlines)),
-                           url.scheme?.hasPrefix("http") == true
-                        {
-                            searchText = string.trimmingCharacters(in: .whitespacesAndNewlines)
-                        }
-                    }
-                    quickActionCard(icon: "square.and.pencil", title: "记一条笔记") {
-                        noteSheetText = ""
-                        showNoteSheet = true
-                        isSearchActive = false
-                    }
-                }
-                .padding(.horizontal, Spacing.screenPadding)
-                .padding(.top, 24)
-            }
-        }
-    }
-
-    private func quickActionCard(icon: String, title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                    .foregroundStyle(Color.folio.textTertiary)
-                Text(title)
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.folio.textSecondary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
-            .background(Color.folio.echoBg)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
     }
 
     // MARK: - Date Header
@@ -626,17 +435,6 @@ struct HomeView: View {
             UIPasteboard.general.string = urlString
             showToast(String(localized: "home.article.linkCopied", defaultValue: "Link copied"), icon: "doc.on.doc")
             saveSucceeded.toggle()
-        }
-    }
-
-    // MARK: - Search
-
-    private func handleSearchTextChange(_ newValue: String) {
-        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            viewModel?.fetchArticles()
-        } else {
-            searchViewModel?.searchText = trimmed
         }
     }
 
