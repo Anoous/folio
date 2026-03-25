@@ -12,14 +12,14 @@
 
 消除明确的重复和组织问题，不改任何逻辑。
 
-### 1.1 Go Worker helper 函数去重
+### 1.1 Go Worker helper 函数归位
 
-**现状**：`derefOrEmpty`、`derefOrDefault`、`derefFloat` 在 `crawl_handler.go`、`ai_handler.go`、`echo_handler.go` 三个文件中各自定义了一份。
+**现状**：`derefOrEmpty`、`derefOrDefault`、`derefFloat` 定义在 `crawl_handler.go`（行 365-386）中，但被 `ai_handler.go` 和 `echo_handler.go` 跨文件调用。它们不是重复定义（同 package 共享），但放在 484 行的 crawl handler 底部不利于发现和维护。
 
 **改动**：
 - 新建 `server/internal/worker/helpers.go`
-- 将 `derefOrEmpty`、`derefOrDefault`、`derefFloat` 移入，首字母小写保持 package-private
-- 三个 handler 文件删除各自的副本
+- 将 `derefOrEmpty`、`derefOrDefault`、`derefFloat` 从 `crawl_handler.go` 移入
+- 纯文件重组，无逻辑变化
 
 ### 1.2 SyncService 重复注释
 
@@ -36,7 +36,8 @@
 
 **改动**：
 - `HomeView` 的 `recentSearchesKey` 改为引用 `AppConstants.searchHistoryKey`
-- 确认两处的 UserDefaults 数据一致（如果历史数据在旧 key 下，做一次迁移读取，之后统一用新 key）
+- 旧 key `"recent_searches"` 下的数据直接丢弃（仅最近搜索词，非关键数据），不做迁移
+- 删除 `HomeView` 中的 `recentSearchesKey` 常量定义
 
 ### 1.4 UpgradeComparisonView 拆分
 
@@ -128,51 +129,27 @@ private func dismissMenuThen(_ action: @escaping () -> Void) {
 ### 2.3 DateFormatter 静态缓存
 
 **现状**：以下位置每次调用都创建新的 `DateFormatter()`：
-- `HomeView.swift:545` — `formattedDate()` 中的 `"M月d日，EEEE"` 格式
-- `KnowledgeMapView.swift:267`
-- `RAGAnswerView.swift:326`
-- `SharedDataManager.swift:128`
+- `HomeView.swift:545` — `formattedDate()` 中 `"M月d日，EEEE"` 格式
+- `KnowledgeMapView.swift:267` — `"yyyy 年 M 月"` 格式（注意空格）
+- `RAGAnswerView.swift:326` — `"M月d日收藏"` 格式（含后缀文字）
 - `Date+RelativeFormat.swift:35` — "older" 分支中的绝对日期格式
 
-`Network.swift` 的 `ISO8601Formatters` 是正确的做法（`static let`），但其他文件没有效仿。
+注意：`SharedDataManager.swift:127` 已经正确使用 `private static let quotaFormatter`，不需要改动。
+
+`Network.swift` 的 `ISO8601Formatters` 是正确的做法（`static let`），上述文件没有效仿。
 
 **改动**：
-- 新建 `ios/Folio/Utils/Extensions/DateFormatters.swift`（或扩展现有 `Date+RelativeFormat.swift`）
-- 定义常用格式的静态缓存：
+各调用点就地改为 `private static let` 缓存（与 `SharedDataManager` 同一模式），而非统一到一个全局文件。原因：每个格式字符串都不同（含空格、含后缀文字），强行统一为通用 enum 反而增加耦合。
 
-```swift
-enum CachedDateFormatters {
-    /// "M月d日，EEEE" — 中文日期 + 星期（HomeView 顶部）
-    static let chineseDateWithWeekday: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M月d日，EEEE"
-        return f
-    }()
+具体：
+- `HomeView` 中 `formattedDate()` → 添加 `private static let dateWeekdayFormatter: DateFormatter = { ... }()`
+- `KnowledgeMapView` 中 `currentMonthLabel` → 添加 `private static let monthLabelFormatter: DateFormatter = { ... }()`
+- `RAGAnswerView` 中 `formatSourceDate` → 添加 `private static let sourceDateFormatter: DateFormatter = { ... }()`
+- `Date+RelativeFormat.swift` 中 "older" 分支 → 添加两个 `private static let`（中文/英文格式各一个）
 
-    /// "M月d日" / "yyyy年M月d日" — 中文短日期 / 长日期
-    static let chineseShortDate: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M月d日"
-        return f
-    }()
+每处改动后确认 format string 与原始代码完全一致。
 
-    /// "yyyy年M月" — 月份（KnowledgeMap, Stats）
-    static let chineseYearMonth: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "yyyy年M月"
-        return f
-    }()
-}
-```
-
-各调用点改为引用静态实例。不需要全部统一——只需要确保每个格式只创建一次。
-
-### 2.3b 运行 xcodegen generate
-
-新增 Swift 文件后必须重新生成 Xcode 项目。
+Batch 2 不新增文件，无需运行 xcodegen。
 
 ---
 
@@ -208,19 +185,28 @@ final class ContentSaveService {
         case error(message: String)
     }
 
+    /// URL/笔记/语音 — 同步保存，返回结果。调用者处理 UI 反馈。
     func saveURL(_ urlString: String) -> SaveResult { ... }
     func saveManualContent(_ content: String) -> SaveResult { ... }
-    func saveScreenshot(_ image: UIImage) -> SaveResult { ... }
     func saveVoiceNote(_ transcribedText: String) -> SaveResult { ... }
+
+    /// 截图 — 同步保存图片文件 + 创建 Article，返回结果。
+    /// OCR 在后台异步执行，完成后通过 onOCRComplete 回调通知调用者刷新。
+    func saveScreenshot(_ image: UIImage, onOCRComplete: @escaping () -> Void) -> SaveResult { ... }
 }
 ```
+
+**异步边界说明**：
+- `saveURL`/`saveManualContent`/`saveVoiceNote` 是纯同步的（SwiftData 写入 + 配额检查），返回 `SaveResult` 即可。
+- `saveScreenshot` 的即时保存（写文件 + 创建 Article）也是同步的，但 OCR 是后台 `Task`。OCR 完成后调用 `onOCRComplete` 闭包让 HomeView 执行 `fetchArticles()`。
+- `syncService?.incrementalSync()` 在每个 save 方法内部启动（fire-and-forget `Task`），不影响 `SaveResult` 返回。
 
 HomeView 的每个保存方法变成：
 ```swift
 private func saveURL(_ url: String) {
     let result = saveService.saveURL(url)
     handleSaveResult(result)
-    viewModel?.fetchArticles()
+    if case .success = result { viewModel?.fetchArticles() }
 }
 
 private func handleSaveResult(_ result: ContentSaveService.SaveResult) {
@@ -237,7 +223,7 @@ private func handleSaveResult(_ result: ContentSaveService.SaveResult) {
 }
 ```
 
-截图的 OCR 后台任务和图片压缩逻辑也移入 `ContentSaveService`（包括 `resizedImage` 静态方法）。
+图片压缩（`resizedImage`）和 OCR 调用逻辑移入 `ContentSaveService`。
 
 ### 3.2 HomeSearchView — 搜索 UI 抽离
 
@@ -313,46 +299,89 @@ struct SearchSuggestionsView: View {
 
 同理 `taskRepo`（SetCrawlStarted/Finished, SetAIStarted/Finished, SetFailed）和 `tagRepo`（Create, AttachToArticle）也在多处重复。
 
-### 4.2 改动
+### 4.2 设计原则
 
-新建 `server/internal/worker/interfaces.go`，定义统一接口：
+Go 惯例是 "accept the smallest interface you need"（接口隔离原则）。各 handler 定义窄接口本身没有问题，问题是**完全相同的接口被定义了多次**。
+
+策略：定义**细粒度的共享 building-block 接口**，各 handler 按需组合，而非一个大 fat interface。这样：
+- 消除真正重复的接口定义
+- 不迫使 test mock 实现不需要的方法
+- 保持 Go 的 ISP 惯例
+
+### 4.3 改动
+
+新建 `server/internal/worker/interfaces.go`，定义细粒度 building blocks：
 
 ```go
 package worker
 
-// ArticleRepository defines article operations used by worker handlers.
-type ArticleRepository interface {
+// --- Article repository building blocks ---
+
+// ArticleGetter reads articles.
+type ArticleGetter interface {
     GetByID(ctx context.Context, id string) (*domain.Article, error)
-    UpdateCrawlResult(ctx context.Context, id string, cr repository.CrawlResult) error
-    UpdateAIResult(ctx context.Context, id string, ai repository.AIResult) error
-    UpdateTitle(ctx context.Context, articleID string, title string) error
+}
+
+// ArticleStatusUpdater updates article status and errors.
+type ArticleStatusUpdater interface {
     UpdateStatus(ctx context.Context, id string, status domain.ArticleStatus) error
     SetError(ctx context.Context, id string, errMsg string) error
 }
 
-// TaskRepository defines task operations used by worker handlers.
-type TaskRepository interface {
+// ArticleCrawlUpdater updates crawl results.
+type ArticleCrawlUpdater interface {
+    UpdateCrawlResult(ctx context.Context, id string, cr repository.CrawlResult) error
+}
+
+// ArticleAIUpdater updates AI results.
+type ArticleAIUpdater interface {
+    UpdateAIResult(ctx context.Context, id string, ai repository.AIResult) error
+}
+
+// ArticleTitleUpdater updates article title.
+type ArticleTitleUpdater interface {
+    UpdateTitle(ctx context.Context, articleID string, title string) error
+}
+
+// --- Task repository building blocks ---
+
+// TaskCrawlTracker tracks crawl task lifecycle.
+type TaskCrawlTracker interface {
     SetCrawlStarted(ctx context.Context, id string) error
     SetCrawlFinished(ctx context.Context, id string) error
+}
+
+// TaskAITracker tracks AI task lifecycle.
+type TaskAITracker interface {
     SetAIStarted(ctx context.Context, id string) error
     SetAIFinished(ctx context.Context, id string) error
+}
+
+// TaskFailer marks a task as failed.
+type TaskFailer interface {
     SetFailed(ctx context.Context, id string, errMsg string) error
 }
 
-// TagRepository defines tag operations used by worker handlers.
-type TagRepository interface {
+// --- Other shared interfaces ---
+
+// TagCreator creates tags and attaches them to articles.
+type TagCreator interface {
     Create(ctx context.Context, userID, name string, isAIGenerated bool) (*domain.Tag, error)
     AttachToArticle(ctx context.Context, articleID, tagID string) error
 }
 
-// CategoryRepository defines category operations used by worker handlers.
-type CategoryRepository interface {
+// CategoryFinder finds or creates categories.
+type CategoryFinder interface {
     FindOrCreate(ctx context.Context, slug, nameZH, nameEN string) (*domain.Category, error)
 }
 
-// ContentCacheRepository defines content cache operations.
-type ContentCacheRepository interface {
+// ContentCacheReader reads content cache by URL.
+type ContentCacheReader interface {
     GetByURL(ctx context.Context, url string) (*domain.ContentCache, error)
+}
+
+// ContentCacheWriter writes to content cache.
+type ContentCacheWriter interface {
     Upsert(ctx context.Context, cache *domain.ContentCache) error
 }
 
@@ -362,17 +391,53 @@ type Enqueuer interface {
 }
 ```
 
-各 handler 使用方式：
-- `CrawlHandler` 直接使用 `ArticleRepository`、`TaskRepository`、`TagRepository`、`CategoryRepository`、`ContentCacheRepository`（的 `GetByURL` 子集）、`Enqueuer`
-- `AIHandler` 使用 `ArticleRepository`、`TaskRepository`、`TagRepository`、`ContentCacheRepository`（的 `Upsert` 子集）、`Enqueuer`
-- `EchoHandler` 保留自己的 `echoCardRepo`（不通用）和 `echoHighlightRepo`（不通用），但 `articleRepo` 改为引用统一的 `ArticleRepository`
-- `RelateHandler` 保留 `relateRAGRepo`、`relateSelector`、`relateRelationRepo`（不通用），`articleRepo` 改为 `ArticleRepository`
+### 4.4 各 handler 的 struct 字段类型更新
+
+各 handler 删除自己的私有接口定义，struct 字段改为组合共享接口：
+
+**CrawlHandler**:
+```go
+type CrawlHandler struct {
+    readerClient scraper              // 保留（scraper 是 CrawlHandler 独有的）
+    jinaClient   scraper
+    articleRepo  interface {           // 组合：Get + Crawl + AI + Status
+        ArticleGetter; ArticleCrawlUpdater; ArticleAIUpdater; ArticleStatusUpdater
+    }
+    taskRepo     interface { TaskCrawlTracker; TaskAITracker; TaskFailer }
+    asynqClient  Enqueuer
+    enableImage  bool
+    cacheRepo    ContentCacheReader
+    tagRepo      TagCreator
+    categoryRepo CategoryFinder
+}
+```
+
+**AIHandler**:
+```go
+type AIHandler struct {
+    aiClient     analyzer              // 保留（analyzer 是 AI 独有的）
+    articleRepo  interface {
+        ArticleGetter; ArticleAIUpdater; ArticleTitleUpdater; ArticleStatusUpdater
+    }
+    taskRepo     interface { TaskAITracker; TaskFailer }
+    categoryRepo CategoryFinder        // 从具体类型 *repository.CategoryRepo 改为接口
+    tagRepo      TagCreator
+    cacheRepo    ContentCacheWriter
+    asynqClient  Enqueuer
+}
+```
+
+**EchoHandler**：`articleRepo` 改为 `ArticleGetter`，其余保留独有接口（`echoCardRepo`、`echoHighlightRepo`、`echoCardGenerator`）。
+
+**RelateHandler**：`articleRepo` 改为 `ArticleGetter`，其余保留独有接口（`relateRAGRepo`、`relateSelector`、`relateRelationRepo`）。
+
+**ImageHandler**：`articleRepo` 从具体类型 `*repository.ArticleRepo` 改为所需的最小接口（needs `GetByID` + markdown update method）。
+
+### 4.5 测试 mock 影响
+
+因为使用细粒度接口，现有 test mock 只需满足各 handler 实际需要的方法子集，**不需要添加任何多余的 stub 方法**。例如 `mockAIArticleRepo` 原来实现 `aiArticleRepo`（5 个方法），改后实现 `ArticleGetter + ArticleAIUpdater + ArticleTitleUpdater + ArticleStatusUpdater`（仍然是同样的 5 个方法）。
 
 **注意**：`service/interfaces.go` 不动。service 层的接口是按"最小依赖"原则为 ArticleService 定义的，与 worker 层的粒度不同，各管各的是合理的。
-
-### 4.3 handler struct 字段类型更新
-
-各 handler 的 struct 字段类型从私有接口改为引用 `interfaces.go` 中的公共接口。构造函数签名不变（仍接收具体类型 `*repository.ArticleRepo` 等），只改内部存储类型。
 
 ---
 
@@ -397,7 +462,7 @@ type Enqueuer interface {
 
 **HomeView.swift:248** — `// TODO: Navigate to reader for this article`
 
-**改动**：RAG 源文章点击时，根据 `articleId` 从本地 SwiftData 查找文章，找到则调用 `selectArticle(article)`。找不到的情况（文章可能不在本地）暂时忽略（不 navigate）。
+**改动**：RAG 源文章点击时，`articleId` 是服务端 ID（非本地 UUID），需通过 `serverID` 字段查询 SwiftData。使用 `ArticleRepository.fetchByServerID(articleId)` 查找本地文章，找到则调用 `selectArticle(article)`。找不到的情况（文章可能不在本地）暂不处理。
 
 ---
 
