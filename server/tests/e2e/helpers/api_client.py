@@ -78,6 +78,9 @@ class FolioAPIClient:
         params["q"] = q
         return self.get("/api/v1/articles/search", params=params)
 
+    def get_related(self, article_id: str) -> httpx.Response:
+        return self.get(f"/api/v1/articles/{article_id}/related")
+
     def list_tags(self) -> httpx.Response:
         return self.get("/api/v1/tags")
 

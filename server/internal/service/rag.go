@@ -151,17 +151,26 @@ func (s *RAGService) checkQuota(ctx context.Context, userID string) error {
 }
 
 // applyTokenBudget selects articles that fit within the token budget.
-// If the user has >500 articles or we exceed the token budget, fall back to search.
+// If the user has >500 articles, use smart retrieval (LLM query expansion → broad recall).
+// Otherwise, use the original token budget logic.
 func (s *RAGService) applyTokenBudget(ctx context.Context, userID, question string, articles []domain.RAGSource) []domain.RAGSource {
 	if len(articles) > ragArticleFallbackCap {
-		searched, err := s.ragRepo.SearchArticleSummaries(ctx, userID, question, ragSearchFallbackSize)
+		// Smart retrieval: LLM query expansion → multi-keyword broad recall
+		keywords, err := s.aiClient.ExpandQuery(ctx, question)
 		if err != nil {
-			slog.Warn("search fallback failed, using first articles", "error", err)
-			return articles[:ragSearchFallbackSize]
+			slog.Warn("query expansion failed, falling back to pg_trgm", "error", err)
+			return s.fallbackSearch(ctx, userID, question, articles)
 		}
-		return searched
+		recalled, err := s.ragRepo.BroadRecallSummaries(ctx, userID, keywords, ragSearchFallbackSize, "")
+		if err != nil || len(recalled) == 0 {
+			slog.Warn("broad recall failed or empty, falling back to pg_trgm",
+				"error", err, "recalled", len(recalled))
+			return s.fallbackSearch(ctx, userID, question, articles)
+		}
+		return recalled
 	}
 
+	// < 500 articles: original token budget logic unchanged
 	var selected []domain.RAGSource
 	var estimatedTokens int
 
@@ -169,12 +178,10 @@ func (s *RAGService) applyTokenBudget(ctx context.Context, userID, question stri
 		summary := derefString(a.Summary)
 		summary = truncateRunes(summary, ragMaxSummaryRunes)
 
-		// Rough token estimate: count runes; CJK rune ~ 1.5 tokens, ASCII rune ~ 1 token.
 		title := a.Title
 		tokens := estimateTokens(title) + estimateTokens(summary)
 
 		if estimatedTokens+tokens > ragTokenBudget {
-			// Budget exceeded — fall back to search for more relevant results.
 			searched, err := s.ragRepo.SearchArticleSummaries(ctx, userID, question, ragSearchFallbackSize)
 			if err != nil {
 				slog.Warn("search fallback failed after budget exceeded", "error", err)
@@ -191,6 +198,18 @@ func (s *RAGService) applyTokenBudget(ctx context.Context, userID, question stri
 		return articles
 	}
 	return selected
+}
+
+// fallbackSearch is the degradation path when smart retrieval fails.
+func (s *RAGService) fallbackSearch(ctx context.Context, userID, question string, articles []domain.RAGSource) []domain.RAGSource {
+	searched, err := s.ragRepo.SearchArticleSummaries(ctx, userID, question, ragSearchFallbackSize)
+	if err != nil || len(searched) == 0 {
+		if len(articles) > ragSearchFallbackSize {
+			return articles[:ragSearchFallbackSize]
+		}
+		return articles
+	}
+	return searched
 }
 
 // estimateTokens gives a rough token count for a string.

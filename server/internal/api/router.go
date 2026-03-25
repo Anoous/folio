@@ -27,6 +27,7 @@ type RouterDeps struct {
 	RAGHandler          *handler.RAGHandler
 	StatsHandler        *handler.StatsHandler
 	DeviceHandler       *handler.DeviceHandler
+	RelationHandler     *handler.RelationHandler
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -87,6 +88,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 			// Subscription
 			r.Post("/subscription/verify", deps.SubscriptionHandler.HandleVerify)
+
+			// Related articles
+			r.Get("/articles/{id}/related", deps.RelationHandler.HandleGetRelated)
 
 			// Highlights
 			r.Post("/articles/{id}/highlights", deps.HighlightHandler.HandleCreateHighlight)

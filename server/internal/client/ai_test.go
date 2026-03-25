@@ -112,6 +112,121 @@ func TestValidateResponse_InvalidLanguage(t *testing.T) {
 	}
 }
 
+func TestValidateResponse_SemanticKeywords(t *testing.T) {
+	resp := &AnalyzeResponse{
+		Category:         "tech",
+		CategoryName:     "Technology",
+		Confidence:       0.9,
+		Tags:             []string{"ai"},
+		Summary:          "summary",
+		KeyPoints:        []string{"point1"},
+		Language:         "en",
+		SemanticKeywords: []string{"AI", "Machine Learning"},
+	}
+	validateResponse(resp)
+
+	// SemanticKeywords should be lowercased
+	for _, kw := range resp.SemanticKeywords {
+		if kw != strings.ToLower(kw) {
+			t.Errorf("expected lowercase keyword, got %q", kw)
+		}
+	}
+
+	// Empty SemanticKeywords should get default
+	resp2 := &AnalyzeResponse{
+		Category:     "tech",
+		CategoryName: "Technology",
+		Confidence:   0.9,
+		Tags:         []string{"ai"},
+		Summary:      "summary",
+		KeyPoints:    []string{"point1"},
+		Language:     "en",
+	}
+	validateResponse(resp2)
+	if resp2.SemanticKeywords == nil {
+		t.Error("expected SemanticKeywords to be initialized to empty slice, got nil")
+	}
+}
+
+func TestMockAnalyzer_ExpandQuery(t *testing.T) {
+	m := &MockAnalyzer{}
+	keywords, err := m.ExpandQuery(context.Background(), "经济衰退的应对策略")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(keywords) == 0 {
+		t.Fatal("expected non-empty keywords")
+	}
+	for _, kw := range keywords {
+		if kw != strings.ToLower(kw) {
+			t.Errorf("expected lowercase keyword, got %q", kw)
+		}
+	}
+}
+
+func TestEscapeILIKE(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"hello", "hello"},
+		{"100%", `100\%`},
+		{"under_score", `under\_score`},
+		{`back\slash`, `back\\slash`},
+		{"normal中文", "normal中文"},
+	}
+	for _, tt := range tests {
+		got := EscapeILIKE(tt.input)
+		if got != tt.expected {
+			t.Errorf("EscapeILIKE(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestMockAnalyzer_RerankArticles(t *testing.T) {
+	m := &MockAnalyzer{}
+	candidates := []RerankCandidate{
+		{Index: 1, Title: "Article A", Summary: "About AI"},
+		{Index: 2, Title: "Article B", Summary: "About cooking"},
+		{Index: 3, Title: "Article C", Summary: "About ML"},
+	}
+	results, err := m.RerankArticles(context.Background(), "machine learning", candidates)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("expected non-empty results")
+	}
+	for _, r := range results {
+		if r.Index < 1 || r.Index > len(candidates) {
+			t.Errorf("invalid index %d", r.Index)
+		}
+		if r.Relevance != "high" && r.Relevance != "medium" {
+			t.Errorf("invalid relevance %q", r.Relevance)
+		}
+	}
+}
+
+func TestMockAnalyzer_SelectRelatedArticles(t *testing.T) {
+	m := &MockAnalyzer{}
+	candidates := []RerankCandidate{
+		{Index: 1, Title: "Article A", Summary: "About AI"},
+		{Index: 2, Title: "Article B", Summary: "About cooking"},
+	}
+	results, err := m.SelectRelatedArticles(context.Background(), "Test Article", "About testing", candidates)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, r := range results {
+		if r.Index < 1 || r.Index > len(candidates) {
+			t.Errorf("invalid index %d", r.Index)
+		}
+		if r.Reason == "" {
+			t.Error("expected non-empty reason")
+		}
+	}
+}
+
 func TestMockAnalyzer_CategoryFromURL(t *testing.T) {
 	tests := []struct {
 		source   string

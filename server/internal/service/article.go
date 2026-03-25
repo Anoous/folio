@@ -7,18 +7,30 @@ import (
 
 	"github.com/hibiken/asynq"
 
+	"folio-server/internal/client"
 	"folio-server/internal/domain"
 	"folio-server/internal/repository"
 	"folio-server/internal/worker"
 )
 
+type queryExpander interface {
+	ExpandQuery(ctx context.Context, question string) ([]string, error)
+	RerankArticles(ctx context.Context, question string, candidates []client.RerankCandidate) ([]client.RerankResult, error)
+}
+
+type broadRecaller interface {
+	BroadRecallArticles(ctx context.Context, userID string, keywords []string, limit int) ([]domain.Article, error)
+}
+
 type ArticleService struct {
-	articleRepo  articleCreator
-	taskRepo     taskCreator
-	tagRepo      tagAttacher
-	categoryRepo categoryGetter
-	quotaService quotaChecker
-	asynqClient  taskEnqueuer
+	articleRepo   articleCreator
+	taskRepo      taskCreator
+	tagRepo       tagAttacher
+	categoryRepo  categoryGetter
+	quotaService  quotaChecker
+	asynqClient   taskEnqueuer
+	aiClient      queryExpander
+	broadRecaller broadRecaller
 }
 
 func NewArticleService(
@@ -28,14 +40,17 @@ func NewArticleService(
 	categoryRepo *repository.CategoryRepo,
 	quotaService *QuotaService,
 	asynqClient *asynq.Client,
+	aiClient client.Analyzer,
 ) *ArticleService {
 	return &ArticleService{
-		articleRepo:  articleRepo,
-		taskRepo:     taskRepo,
-		tagRepo:      tagRepo,
-		categoryRepo: categoryRepo,
-		quotaService: quotaService,
-		asynqClient:  asynqClient,
+		articleRepo:   articleRepo,
+		taskRepo:      taskRepo,
+		tagRepo:       tagRepo,
+		categoryRepo:  categoryRepo,
+		quotaService:  quotaService,
+		asynqClient:   asynqClient,
+		aiClient:      aiClient,
+		broadRecaller: articleRepo,
 	}
 }
 
@@ -273,4 +288,75 @@ func (s *ArticleService) Delete(ctx context.Context, userID, articleID string) e
 
 func (s *ArticleService) Search(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error) {
 	return s.articleRepo.Search(ctx, userID, query, page, perPage)
+}
+
+// SemanticSearch does LLM-powered search: expand query → broad recall → LLM rerank.
+func (s *ArticleService) SemanticSearch(ctx context.Context, userID, question string, page, perPage int) (*repository.ListArticlesResult, error) {
+	// 1. Expand query
+	keywords, err := s.aiClient.ExpandQuery(ctx, question)
+	if err != nil {
+		slog.Warn("semantic search: query expansion failed, falling back to keyword", "error", err)
+		return s.Search(ctx, userID, question, page, perPage)
+	}
+
+	// 2. Broad recall
+	candidates, err := s.broadRecaller.BroadRecallArticles(ctx, userID, keywords, 50)
+	if err != nil || len(candidates) == 0 {
+		slog.Warn("semantic search: broad recall failed, falling back to keyword", "error", err)
+		return s.Search(ctx, userID, question, page, perPage)
+	}
+
+	// 3. LLM rerank
+	rerankCandidates := make([]client.RerankCandidate, len(candidates))
+	for i, a := range candidates {
+		summary := ""
+		if a.Summary != nil {
+			summary = *a.Summary
+		}
+		title := ""
+		if a.Title != nil {
+			title = *a.Title
+		}
+		rerankCandidates[i] = client.RerankCandidate{
+			Index:     i + 1,
+			Title:     title,
+			Summary:   summary,
+			KeyPoints: a.KeyPoints,
+		}
+	}
+
+	ranked, err := s.aiClient.RerankArticles(ctx, question, rerankCandidates)
+	if err != nil {
+		slog.Warn("semantic search: rerank failed, returning recall order", "error", err)
+		total := len(candidates)
+		start := (page - 1) * perPage
+		end := start + perPage
+		if start > total {
+			start = total
+		}
+		if end > total {
+			end = total
+		}
+		return &repository.ListArticlesResult{Articles: candidates[start:end], Total: total}, nil
+	}
+
+	// 4. Map ranked indices back
+	reranked := make([]domain.Article, 0, len(ranked))
+	for _, r := range ranked {
+		idx := r.Index - 1
+		if idx >= 0 && idx < len(candidates) {
+			reranked = append(reranked, candidates[idx])
+		}
+	}
+
+	total := len(reranked)
+	start := (page - 1) * perPage
+	end := start + perPage
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+	return &repository.ListArticlesResult{Articles: reranked[start:end], Total: total}, nil
 }

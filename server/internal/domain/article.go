@@ -55,7 +55,8 @@ type Article struct {
 	PublishedAt     *time.Time    `json:"published_at,omitempty"`
 	CreatedAt       time.Time     `json:"created_at"`
 	UpdatedAt       time.Time     `json:"updated_at"`
-	DeletedAt       *time.Time    `json:"deleted_at,omitempty"`
+	DeletedAt        *time.Time    `json:"deleted_at,omitempty"`
+	SemanticKeywords []string      `json:"semantic_keywords,omitempty"`
 
 	// Joined fields (not stored directly)
 	Category *Category `json:"category,omitempty"`

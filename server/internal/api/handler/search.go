@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"folio-server/internal/api/middleware"
+	"folio-server/internal/repository"
 	"folio-server/internal/service"
 )
 
@@ -36,7 +37,18 @@ func (h *SearchHandler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		perPage = maxPerPage
 	}
 
-	result, err := h.articleService.Search(r.Context(), userID, query, page, perPage)
+	mode := r.URL.Query().Get("mode")
+
+	var result *repository.ListArticlesResult
+	var err error
+
+	switch mode {
+	case "semantic":
+		result, err = h.articleService.SemanticSearch(r.Context(), userID, query, page, perPage)
+	default:
+		result, err = h.articleService.Search(r.Context(), userID, query, page, perPage)
+	}
+
 	if err != nil {
 		handleServiceError(w, r, err)
 		return

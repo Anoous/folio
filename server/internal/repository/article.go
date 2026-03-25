@@ -71,7 +71,7 @@ func (r *ArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, 
 		       markdown_content, word_count, language, category_id, summary, key_points,
 		       ai_confidence, status, source_type, fetch_error, retry_count,
 		       is_favorite, is_archived, read_progress, highlight_count, last_read_at, published_at,
-		       created_at, updated_at, deleted_at
+		       created_at, updated_at, deleted_at, semantic_keywords
 		FROM articles WHERE id = $1`, id,
 	).Scan(
 		&a.ID, &a.UserID, &a.URL, &a.Title, &a.Author, &a.SiteName,
@@ -79,7 +79,7 @@ func (r *ArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, 
 		&a.Language, &a.CategoryID, &a.Summary, &keyPointsJSON,
 		&a.AIConfidence, &a.Status, &a.SourceType, &a.FetchError, &a.RetryCount,
 		&a.IsFavorite, &a.IsArchived, &a.ReadProgress, &a.HighlightCount, &a.LastReadAt, &a.PublishedAt,
-		&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
+		&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt, &a.SemanticKeywords,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -94,6 +94,9 @@ func (r *ArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, 
 	}
 	if a.KeyPoints == nil {
 		a.KeyPoints = []string{}
+	}
+	if a.SemanticKeywords == nil {
+		a.SemanticKeywords = []string{}
 	}
 	return &a, nil
 }
@@ -311,11 +314,12 @@ func (r *ArticleRepo) UpdateTitle(ctx context.Context, articleID string, title s
 }
 
 type AIResult struct {
-	CategoryID string
-	Summary    string
-	KeyPoints  []string
-	Confidence float64
-	Language   string
+	CategoryID       string
+	Summary          string
+	KeyPoints        []string
+	Confidence       float64
+	Language         string
+	SemanticKeywords []string
 }
 
 func (r *ArticleRepo) UpdateAIResult(ctx context.Context, id string, ai AIResult) error {
@@ -324,13 +328,18 @@ func (r *ArticleRepo) UpdateAIResult(ctx context.Context, id string, ai AIResult
 		kp = []string{}
 	}
 	keyPointsJSON, _ := json.Marshal(kp)
+	sk := ai.SemanticKeywords
+	if sk == nil {
+		sk = []string{}
+	}
 	_, err := r.pool.Exec(ctx, `
 		UPDATE articles SET
 			category_id = $1,
 			summary = $2, key_points = $3, ai_confidence = $4, language = $5,
+			semantic_keywords = $6,
 			status = 'ready'
-		WHERE id = $6`,
-		ai.CategoryID, ai.Summary, keyPointsJSON, ai.Confidence, ai.Language, id)
+		WHERE id = $7`,
+		ai.CategoryID, ai.Summary, keyPointsJSON, ai.Confidence, ai.Language, sk, id)
 	if err != nil {
 		return fmt.Errorf("update ai result: %w", err)
 	}
@@ -410,6 +419,64 @@ func (r *ArticleRepo) Delete(ctx context.Context, id string, userID string) erro
 		return fmt.Errorf("soft delete article: %w", err)
 	}
 	return nil
+}
+
+// BroadRecallArticles does multi-path keyword recall returning full Article objects for semantic search.
+func (r *ArticleRepo) BroadRecallArticles(ctx context.Context, userID string, keywords []string, limit int) ([]domain.Article, error) {
+	cleaned := make([]string, len(keywords))
+	escaped := make([]string, len(keywords))
+	for i, kw := range keywords {
+		lc := strings.ToLower(strings.TrimSpace(kw))
+		cleaned[i] = lc
+		escaped[i] = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(lc)
+	}
+
+	// Set low trigram threshold for broad recall
+	_, _ = r.pool.Exec(ctx, `SELECT set_config('pg_trgm.similarity_threshold', '0.1', true)`)
+
+	rows, err := r.pool.Query(ctx, `
+		WITH keyword_matches AS (
+			SELECT DISTINCT ON (a.id)
+				a.id, a.user_id, a.url, a.title, a.summary, a.site_name, a.source_type, a.created_at,
+				CASE
+					WHEN a.semantic_keywords && $2::text[] THEN 1.0
+					WHEN EXISTS (SELECT 1 FROM unnest($2::text[]) kw WHERE a.title % kw) THEN 0.6
+					ELSE 0.1
+				END AS score
+			FROM articles a
+			WHERE a.user_id = $1
+				AND a.status = 'ready'
+				AND a.deleted_at IS NULL
+				AND (
+					a.semantic_keywords && $2::text[]
+					OR EXISTS (SELECT 1 FROM unnest($2::text[]) kw WHERE a.title % kw)
+					OR EXISTS (SELECT 1 FROM unnest($3::text[]) esc WHERE a.summary ILIKE '%' || esc || '%')
+					OR EXISTS (SELECT 1 FROM unnest($3::text[]) esc WHERE a.key_points::text ILIKE '%' || esc || '%')
+				)
+			ORDER BY a.id, score DESC
+		)
+		SELECT id, user_id, url, title, summary, site_name, source_type, created_at
+		FROM keyword_matches
+		ORDER BY score DESC
+		LIMIT $4`,
+		userID, cleaned, escaped, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("broad recall articles: %w", err)
+	}
+	defer rows.Close()
+
+	articles := make([]domain.Article, 0)
+	for rows.Next() {
+		var a domain.Article
+		if err := rows.Scan(&a.ID, &a.UserID, &a.URL, &a.Title, &a.Summary,
+			&a.SiteName, &a.SourceType, &a.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan broad recall article: %w", err)
+		}
+		a.KeyPoints = []string{}
+		articles = append(articles, a)
+	}
+	return articles, rows.Err()
 }
 
 func (r *ArticleRepo) Search(ctx context.Context, userID, query string, page, perPage int) (*ListArticlesResult, error) {

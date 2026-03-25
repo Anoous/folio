@@ -11,8 +11,9 @@ const (
 	TypeCrawlArticle = "article:crawl"
 	TypeAIProcess    = "article:ai"
 	TypeImageUpload  = "article:images"
-	TypeEchoGenerate = "echo:generate"
-	TypePushEcho     = "push:echo"
+	TypeEchoGenerate  = "echo:generate"
+	TypePushEcho      = "push:echo"
+	TypeRelateArticle = "article:relate"
 
 	QueueCritical = "critical"
 	QueueDefault  = "default"
@@ -92,6 +93,23 @@ func NewEchoTask(articleID, userID, highlightID string) (*asynq.Task, error) {
 		asynq.MaxRetry(2),
 		asynq.Timeout(30*time.Second),
 	), nil
+}
+
+type RelatePayload struct {
+	ArticleID string `json:"article_id"`
+	UserID    string `json:"user_id"`
+}
+
+func NewRelateTask(articleID, userID string) *asynq.Task {
+	payload, _ := json.Marshal(RelatePayload{
+		ArticleID: articleID,
+		UserID:    userID,
+	})
+	return asynq.NewTask(TypeRelateArticle, payload,
+		asynq.Queue(QueueLow),
+		asynq.MaxRetry(2),
+		asynq.Timeout(60*time.Second),
+	)
 }
 
 func NewImageUploadTask(articleID string, imageURLs []string) *asynq.Task {

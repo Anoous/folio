@@ -129,11 +129,12 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 
 	// Update article with AI results
 	if err := h.articleRepo.UpdateAIResult(ctx, p.ArticleID, repository.AIResult{
-		CategoryID: cat.ID,
-		Summary:    result.Summary,
-		KeyPoints:  result.KeyPoints,
-		Confidence: result.Confidence,
-		Language:   result.Language,
+		CategoryID:       cat.ID,
+		Summary:          result.Summary,
+		KeyPoints:        result.KeyPoints,
+		Confidence:       result.Confidence,
+		Language:         result.Language,
+		SemanticKeywords: result.SemanticKeywords,
 	}); err != nil {
 		slog.Error("ai task failed to persist result",
 			"article_id", p.ArticleID,
@@ -220,6 +221,15 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 				"error", err,
 			)
 		}
+	}
+
+	// Enqueue related article computation (non-blocking)
+	relateTask := NewRelateTask(p.ArticleID, p.UserID)
+	if _, err := h.asynqClient.EnqueueContext(ctx, relateTask); err != nil {
+		slog.Error("[RELATE] failed to enqueue for article",
+			"article_id", p.ArticleID,
+			"error", err,
+		)
 	}
 
 	return nil

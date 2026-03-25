@@ -7,6 +7,7 @@ type RAGSource struct {
 	Title     string
 	SiteName  *string
 	Summary   *string
+	KeyPoints []string
 	CreatedAt time.Time
 	Relevance float64
 }

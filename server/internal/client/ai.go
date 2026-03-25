@@ -23,6 +23,9 @@ type Analyzer interface {
 	Analyze(ctx context.Context, req AnalyzeRequest) (*AnalyzeResponse, error)
 	GenerateEchoCards(ctx context.Context, title string, source string, keyPoints []string) ([]EchoQAPair, error)
 	GenerateRAGAnswer(ctx context.Context, systemPrompt, userPrompt string) (*RAGResult, error)
+	ExpandQuery(ctx context.Context, question string) ([]string, error)
+	RerankArticles(ctx context.Context, question string, candidates []RerankCandidate) ([]RerankResult, error)
+	SelectRelatedArticles(ctx context.Context, sourceTitle, sourceSummary string, candidates []RerankCandidate) ([]RelatedResult, error)
 }
 
 // AnalyzeRequest is the input for AI article analysis.
@@ -35,13 +38,42 @@ type AnalyzeRequest struct {
 
 // AnalyzeResponse is the output from AI article analysis.
 type AnalyzeResponse struct {
-	Category     string   `json:"category"`
-	CategoryName string   `json:"category_name"`
-	Confidence   float64  `json:"confidence"`
-	Tags         []string `json:"tags"`
-	Summary      string   `json:"summary"`
-	KeyPoints    []string `json:"key_points"`
-	Language     string   `json:"language"`
+	Category         string   `json:"category"`
+	CategoryName     string   `json:"category_name"`
+	Confidence       float64  `json:"confidence"`
+	Tags             []string `json:"tags"`
+	Summary          string   `json:"summary"`
+	KeyPoints        []string `json:"key_points"`
+	Language         string   `json:"language"`
+	SemanticKeywords []string `json:"semantic_keywords"`
+}
+
+// RerankCandidate is an article summary passed to LLM for relevance judgment.
+type RerankCandidate struct {
+	Index     int
+	Title     string
+	Summary   string
+	KeyPoints []string
+}
+
+// RerankResult is the LLM's relevance judgment for a candidate.
+type RerankResult struct {
+	Index     int    `json:"index"`
+	Relevance string `json:"relevance"` // "high" or "medium"
+}
+
+// RelatedResult is the LLM's judgment of article relatedness.
+type RelatedResult struct {
+	Index  int    `json:"index"`
+	Reason string `json:"reason"`
+}
+
+// EscapeILIKE escapes ILIKE wildcard characters in a keyword.
+func EscapeILIKE(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
 }
 
 // categoryEntry holds a slug→name pair for the 9 predefined categories.
@@ -200,6 +232,8 @@ func buildSystemPrompt() string {
 
 6. **key_points**：3-5 个支撑核心洞察的要点，每条不超过 15 字，是具体论据而非泛泛概括。
 
+7. **semantic_keywords**：生成 10-15 个语义关键词（全部小写），用于后续检索匹配。包含核心概念的中英文双语表达、同义词、上下位概念。
+
 **重要规则**：
 - 摘要和标签的语言应跟随文章本身的语言（中文文章用中文，英文文章用英文）。
 - category 必须是上述 9 个 slug 之一，不得自创。
@@ -213,7 +247,8 @@ func buildSystemPrompt() string {
   "tags": ["tag1", "tag2", "tag3"],
   "summary": "<摘要>",
   "key_points": ["要点1", "要点2", "要点3"],
-  "language": "zh 或 en"
+  "language": "zh 或 en",
+  "semantic_keywords": ["keyword1", "关键词2", ...]
 }`, catLines.String())
 }
 
@@ -283,6 +318,14 @@ func validateResponse(resp *AnalyzeResponse) {
 	// Validate language
 	if resp.Language != "zh" && resp.Language != "en" {
 		resp.Language = "en"
+	}
+
+	// Lowercase all semantic keywords
+	for i, kw := range resp.SemanticKeywords {
+		resp.SemanticKeywords[i] = strings.ToLower(kw)
+	}
+	if resp.SemanticKeywords == nil {
+		resp.SemanticKeywords = []string{}
 	}
 }
 
@@ -476,6 +519,193 @@ func (d *DeepSeekAnalyzer) GenerateRAGAnswer(ctx context.Context, systemPrompt, 
 	}
 
 	return &result, nil
+}
+
+// doRequest sends a chat request and returns the raw content string from the first choice.
+func (d *DeepSeekAnalyzer) doRequest(ctx context.Context, chatReq chatRequest) ([]byte, error) {
+	body, err := json.Marshal(chatReq)
+	if err != nil {
+		return nil, fmt.Errorf("marshal chat request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", d.baseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+d.apiKey)
+
+	resp, err := d.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("deepseek request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("deepseek api error: status %d, body: %s", resp.StatusCode, string(respBody))
+	}
+
+	var chatResp chatResponse
+	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		return nil, fmt.Errorf("decode chat response: %w", err)
+	}
+	if chatResp.Error != nil {
+		return nil, fmt.Errorf("deepseek api error: %s", chatResp.Error.Message)
+	}
+	if len(chatResp.Choices) == 0 {
+		return nil, fmt.Errorf("deepseek returned no choices")
+	}
+
+	return []byte(chatResp.Choices[0].Message.Content), nil
+}
+
+// ExpandQuery generates 10-15 search keywords for a user question via LLM.
+func (d *DeepSeekAnalyzer) ExpandQuery(ctx context.Context, question string) ([]string, error) {
+	systemPrompt := `给定用户问题，生成 10-15 个搜索关键词，用于在文章库中检索相关内容。
+
+要求：
+1. 包含原始问题中的核心词
+2. 包含同义词和近义表达
+3. 包含中英文双语翻译（如问题是中文，补英文关键词；反之亦然）
+4. 包含上下位概念（如"React"→ 补"前端框架"）
+5. 所有关键词输出为小写（英文小写，中文无影响）
+6. 不要解释，直接输出 JSON 数组
+
+输出格式：["关键词1", "keyword2", ...]`
+
+	userPrompt := fmt.Sprintf("用户问题：%s", sanitizeField(question))
+
+	chatReq := chatRequest{
+		Model: "deepseek-chat",
+		Messages: []chatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+		Temperature:    0,
+		MaxTokens:      200,
+		ResponseFormat: &respFormat{Type: "json_object"},
+	}
+
+	respBody, err := d.doRequest(ctx, chatReq)
+	if err != nil {
+		return nil, fmt.Errorf("expand query: %w", err)
+	}
+
+	var keywords []string
+	if err := json.Unmarshal(respBody, &keywords); err != nil {
+		// Try parsing as {"keywords": [...]} wrapper
+		var wrapper struct {
+			Keywords []string `json:"keywords"`
+		}
+		if err2 := json.Unmarshal(respBody, &wrapper); err2 != nil {
+			return nil, fmt.Errorf("parse expand query response: %w (raw: %s)", err, string(respBody))
+		}
+		keywords = wrapper.Keywords
+	}
+
+	// Ensure lowercase
+	for i, kw := range keywords {
+		keywords[i] = strings.ToLower(strings.TrimSpace(kw))
+	}
+
+	return keywords, nil
+}
+
+// RerankArticles asks the LLM to judge relevance of candidates to a question.
+func (d *DeepSeekAnalyzer) RerankArticles(ctx context.Context, question string, candidates []RerankCandidate) ([]RerankResult, error) {
+	var b strings.Builder
+	fmt.Fprintf(&b, "用户问题：%s\n\n以下是候选文章列表。判断每篇与用户问题的相关程度，返回最相关的 Top 10。\n\n候选文章：\n", sanitizeField(question))
+	for _, c := range candidates {
+		kp := ""
+		if len(c.KeyPoints) > 0 {
+			kp = " | 关键点: " + strings.Join(c.KeyPoints, ", ")
+		}
+		fmt.Fprintf(&b, "[%d] 《%s》: %s%s\n", c.Index, c.Title, c.Summary, kp)
+	}
+
+	systemPrompt := `判断候选文章与用户问题的相关程度，返回最相关的 Top 10。
+
+输出 JSON（不要 markdown 代码块）：
+[{"index": 1, "relevance": "high"}, {"index": 5, "relevance": "medium"}, ...]
+
+规则：
+1. 只返回与问题相关的文章（最多 10 篇）
+2. relevance: "high" = 直接相关, "medium" = 间接相关
+3. 按相关程度从高到低排列
+4. 不相关的不要返回`
+
+	chatReq := chatRequest{
+		Model:          "deepseek-chat",
+		Messages:       []chatMessage{{Role: "system", Content: systemPrompt}, {Role: "user", Content: b.String()}},
+		Temperature:    0,
+		MaxTokens:      512,
+		ResponseFormat: &respFormat{Type: "json_object"},
+	}
+
+	respBody, err := d.doRequest(ctx, chatReq)
+	if err != nil {
+		return nil, fmt.Errorf("rerank articles: %w", err)
+	}
+
+	var results []RerankResult
+	if err := json.Unmarshal(respBody, &results); err != nil {
+		// Try wrapper format
+		var wrapper struct {
+			Results []RerankResult `json:"results"`
+		}
+		if err2 := json.Unmarshal(respBody, &wrapper); err2 != nil {
+			return nil, fmt.Errorf("parse rerank response: %w (raw: %s)", err, string(respBody))
+		}
+		results = wrapper.Results
+	}
+	return results, nil
+}
+
+// SelectRelatedArticles asks the LLM to pick the most related articles to a source article.
+func (d *DeepSeekAnalyzer) SelectRelatedArticles(ctx context.Context, sourceTitle, sourceSummary string, candidates []RerankCandidate) ([]RelatedResult, error) {
+	var b strings.Builder
+	fmt.Fprintf(&b, "本文：《%s》\n摘要：%s\n\n候选文章：\n", sanitizeField(sourceTitle), sanitizeField(sourceSummary))
+	for _, c := range candidates {
+		fmt.Fprintf(&b, "[%d] 《%s》: %s\n", c.Index, c.Title, c.Summary)
+	}
+
+	systemPrompt := `从候选中选出与本文最相关的 5 篇（不超过 5 篇），输出 JSON：
+[{"index": 1, "reason": "一句话说明关联"}, ...]
+
+规则：
+1. 关联可以是主题相关、观点互补、同一领域不同角度等
+2. 优先选择跨领域的有趣关联，而非简单的主题重复
+3. 没有相关的就少选，不要凑数`
+
+	chatReq := chatRequest{
+		Model:          "deepseek-chat",
+		Messages:       []chatMessage{{Role: "system", Content: systemPrompt}, {Role: "user", Content: b.String()}},
+		Temperature:    0,
+		MaxTokens:      512,
+		ResponseFormat: &respFormat{Type: "json_object"},
+	}
+
+	respBody, err := d.doRequest(ctx, chatReq)
+	if err != nil {
+		return nil, fmt.Errorf("select related articles: %w", err)
+	}
+
+	var results []RelatedResult
+	if err := json.Unmarshal(respBody, &results); err != nil {
+		var wrapper struct {
+			Results []RelatedResult `json:"results"`
+		}
+		if err2 := json.Unmarshal(respBody, &wrapper); err2 != nil {
+			return nil, fmt.Errorf("parse related response: %w (raw: %s)", err, string(respBody))
+		}
+		results = wrapper.Results
+	}
+	return results, nil
 }
 
 // echoFallbackCards builds 1-2 template-based echo cards from key points.

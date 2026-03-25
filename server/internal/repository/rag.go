@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"folio-server/internal/client"
 	"folio-server/internal/domain"
 )
 
@@ -85,6 +87,72 @@ func (r *RAGRepo) SearchArticleSummaries(ctx context.Context, userID, query stri
 		return nil, fmt.Errorf("iterate search results: %w", err)
 	}
 	return sources, nil
+}
+
+// BroadRecallSummaries does multi-path keyword recall for RAG and related articles.
+func (r *RAGRepo) BroadRecallSummaries(ctx context.Context, userID string, keywords []string, limit int, excludeID string) ([]domain.RAGSource, error) {
+	cleaned := make([]string, len(keywords))
+	escaped := make([]string, len(keywords))
+	for i, kw := range keywords {
+		lc := strings.ToLower(strings.TrimSpace(kw))
+		cleaned[i] = lc
+		escaped[i] = client.EscapeILIKE(lc)
+	}
+
+	// Set low trigram threshold for broad recall (transaction-scoped)
+	_, _ = r.db.Exec(ctx, `SELECT set_config('pg_trgm.similarity_threshold', '0.1', true)`)
+
+	var excludeUUID interface{}
+	if excludeID != "" {
+		excludeUUID = excludeID
+	}
+
+	rows, err := r.db.Query(ctx, `
+		WITH keyword_matches AS (
+			SELECT DISTINCT ON (a.id)
+				a.id, a.title, a.summary, a.key_points, a.site_name, a.created_at,
+				CASE
+					WHEN a.semantic_keywords && $2::text[] THEN 1.0
+					WHEN EXISTS (SELECT 1 FROM unnest($2::text[]) kw WHERE a.title % kw) THEN 0.6
+					ELSE 0.1
+				END AS score
+			FROM articles a
+			WHERE a.user_id = $1
+				AND a.status = 'ready'
+				AND a.deleted_at IS NULL
+				AND ($5::uuid IS NULL OR a.id != $5)
+				AND (
+					a.semantic_keywords && $2::text[]
+					OR EXISTS (SELECT 1 FROM unnest($2::text[]) kw WHERE a.title % kw)
+					OR EXISTS (SELECT 1 FROM unnest($3::text[]) esc WHERE a.summary ILIKE '%' || esc || '%')
+					OR EXISTS (SELECT 1 FROM unnest($3::text[]) esc WHERE a.key_points::text ILIKE '%' || esc || '%')
+				)
+			ORDER BY a.id, score DESC
+		)
+		SELECT id, title, summary, key_points, site_name, created_at
+		FROM keyword_matches
+		ORDER BY score DESC
+		LIMIT $4`,
+		userID, cleaned, escaped, limit, excludeUUID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("broad recall summaries: %w", err)
+	}
+	defer rows.Close()
+
+	sources := make([]domain.RAGSource, 0)
+	for rows.Next() {
+		var s domain.RAGSource
+		var kpJSON []byte
+		if err := rows.Scan(&s.ArticleID, &s.Title, &s.Summary, &kpJSON, &s.SiteName, &s.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan broad recall: %w", err)
+		}
+		if len(kpJSON) > 0 {
+			json.Unmarshal(kpJSON, &s.KeyPoints)
+		}
+		sources = append(sources, s)
+	}
+	return sources, rows.Err()
 }
 
 // CreateConversation inserts a new RAG conversation, returning id, created_at, updated_at.

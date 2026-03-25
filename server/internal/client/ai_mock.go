@@ -110,7 +110,8 @@ func (m *MockAnalyzer) Analyze(_ context.Context, req AnalyzeRequest) (*AnalyzeR
 			fmt.Sprintf("作者：%s", orDefault(req.Author, "unknown")),
 			"Mock 模式，未调用 AI",
 		},
-		Language: detectLanguage(title),
+		Language:         detectLanguage(title),
+		SemanticKeywords: []string{strings.ToLower(slug), "article", "content"},
 	}, nil
 }
 
@@ -277,6 +278,45 @@ func (m *MockAnalyzer) GenerateRAGAnswer(_ context.Context, _, _ string) (*RAGRe
 		CitedIndices:        []int{1},
 		FollowupSuggestions: []string{"还有什么相关的？"},
 	}, nil
+}
+
+// ExpandQuery returns mock search keywords extracted from the question.
+func (m *MockAnalyzer) ExpandQuery(_ context.Context, question string) ([]string, error) {
+	keywords := []string{}
+	for _, match := range reChineseChunk.FindAllString(question, 5) {
+		keywords = append(keywords, match)
+	}
+	for _, match := range reEnglishWord.FindAllString(question, 5) {
+		keywords = append(keywords, strings.ToLower(match))
+	}
+	if len(keywords) == 0 {
+		keywords = []string{"mock", "keyword"}
+	}
+	return keywords, nil
+}
+
+// RerankArticles returns the first 5 candidates as "high" relevance.
+func (m *MockAnalyzer) RerankArticles(_ context.Context, _ string, candidates []RerankCandidate) ([]RerankResult, error) {
+	results := make([]RerankResult, 0, len(candidates))
+	for i, c := range candidates {
+		if i >= 5 {
+			break
+		}
+		results = append(results, RerankResult{Index: c.Index, Relevance: "high"})
+	}
+	return results, nil
+}
+
+// SelectRelatedArticles returns the first 3 candidates as related.
+func (m *MockAnalyzer) SelectRelatedArticles(_ context.Context, _, _ string, candidates []RerankCandidate) ([]RelatedResult, error) {
+	results := make([]RelatedResult, 0, len(candidates))
+	for i, c := range candidates {
+		if i >= 3 {
+			break
+		}
+		results = append(results, RelatedResult{Index: c.Index, Reason: "mock: related topic"})
+	}
+	return results, nil
 }
 
 // isASCII reports whether s contains only ASCII characters.

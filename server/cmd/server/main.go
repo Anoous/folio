@@ -93,7 +93,7 @@ func main() {
 	tagService := service.NewTagService(tagRepo)
 	articleService := service.NewArticleService(
 		articleRepo, taskRepo, tagRepo, categoryRepo,
-		quotaService, asynqClient,
+		quotaService, asynqClient, aiAnalyzer,
 	)
 	subscriptionService := service.NewSubscriptionService(appleClient, userRepo, cfg.AppleBundleID)
 
@@ -138,6 +138,10 @@ func main() {
 	ragService := service.NewRAGService(ragRepo, userRepo, aiAnalyzer)
 	ragAPIHandler := handler.NewRAGHandler(ragService)
 
+	// Relations
+	relationRepo := repository.NewRelationRepo(pool)
+	relationHandler := handler.NewRelationHandler(relationRepo)
+
 	// Stats
 	statsService := service.NewStatsService(pool, aiAnalyzer, userRepo)
 	statsHandler := handler.NewStatsHandler(statsService, userRepo)
@@ -157,6 +161,7 @@ func main() {
 		RAGHandler:          ragAPIHandler,
 		StatsHandler:        statsHandler,
 		DeviceHandler:       deviceHandler,
+		RelationHandler:     relationHandler,
 	})
 
 	// Worker server
@@ -165,13 +170,14 @@ func main() {
 	aiHandler := worker.NewAIHandler(aiAnalyzer, articleRepo, taskRepo, categoryRepo, tagRepo, contentCacheRepo, asynqClient)
 	echoHandler := worker.NewEchoHandler(aiAnalyzer, articleRepo, echoRepo, highlightRepo)
 	pushHandler := worker.NewPushHandler(deviceRepo, apnsClient, cfg.AppleBundleID)
+	relateHandler := worker.NewRelateHandler(articleRepo, ragRepo, aiAnalyzer, relationRepo)
 
 	var workerServer *worker.WorkerServer
 	if r2Client != nil {
 		imageHandler := worker.NewImageHandler(r2Client, articleRepo)
-		workerServer = worker.NewWorkerServer(cfg.RedisAddr, crawlHandler, aiHandler, imageHandler, echoHandler, pushHandler)
+		workerServer = worker.NewWorkerServer(cfg.RedisAddr, crawlHandler, aiHandler, imageHandler, echoHandler, pushHandler, relateHandler)
 	} else {
-		workerServer = worker.NewWorkerServer(cfg.RedisAddr, crawlHandler, aiHandler, nil, echoHandler, pushHandler)
+		workerServer = worker.NewWorkerServer(cfg.RedisAddr, crawlHandler, aiHandler, nil, echoHandler, pushHandler, relateHandler)
 	}
 
 	// HTTP server

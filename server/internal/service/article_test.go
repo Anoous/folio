@@ -72,6 +72,14 @@ func (m *mockArticleRepo) ExistsByUserAndURL(ctx context.Context, userID, url st
 	return false, nil
 }
 
+func (m *mockArticleRepo) ExistsByUserAndClientID(ctx context.Context, userID, clientID string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockArticleRepo) BroadRecallArticles(ctx context.Context, userID string, keywords []string, limit int) ([]domain.Article, error) {
+	return nil, nil
+}
+
 type mockTaskRepo struct {
 	createFn    func(ctx context.Context, p repository.CreateTaskParams) (*domain.CrawlTask, error)
 	lastCreateP *repository.CreateTaskParams
@@ -155,12 +163,13 @@ func newTestArticleService(
 	enqueuer *mockEnqueuer,
 ) *ArticleService {
 	return &ArticleService{
-		articleRepo:  articleRepo,
-		taskRepo:     taskRepo,
-		tagRepo:      tagRepo,
-		categoryRepo: categoryRepo,
-		quotaService: quota,
-		asynqClient:  enqueuer,
+		articleRepo:   articleRepo,
+		taskRepo:      taskRepo,
+		tagRepo:       tagRepo,
+		categoryRepo:  categoryRepo,
+		quotaService:  quota,
+		asynqClient:   enqueuer,
+		broadRecaller: articleRepo,
 	}
 }
 
