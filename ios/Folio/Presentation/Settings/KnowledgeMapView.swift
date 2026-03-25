@@ -263,11 +263,15 @@ struct KnowledgeMapView: View {
 
     // MARK: - Helpers
 
+    private static let monthLabelFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "yyyy 年 M 月"
+        return f
+    }()
+
     private var currentMonthLabel: String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy 年 M 月"
-        return formatter.string(from: Date())
+        Self.monthLabelFormatter.string(from: Date())
     }
 }
 

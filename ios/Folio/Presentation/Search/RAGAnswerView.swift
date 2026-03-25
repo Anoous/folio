@@ -322,11 +322,15 @@ struct RAGAnswerView: View {
         onFollowup(trimmed)
     }
 
+    private static let sourceDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "M\u{6708}d\u{65E5}\u{6536}\u{85CF}"
+        return f
+    }()
+
     private func formatSourceDate(_ date: Date) -> String {
-        let fmt = DateFormatter()
-        fmt.locale = Locale(identifier: "zh_CN")
-        fmt.dateFormat = "M\u{6708}d\u{65E5}\u{6536}\u{85CF}"
-        return fmt.string(from: date)
+        Self.sourceDateFormatter.string(from: date)
     }
 }
 

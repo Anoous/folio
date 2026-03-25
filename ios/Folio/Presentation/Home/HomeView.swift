@@ -539,11 +539,15 @@ struct HomeView: View {
 
     // MARK: - Date Formatting
 
+    private static let dateWeekdayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "M月d日，EEEE"
+        return f
+    }()
+
     private func formattedDate() -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日，EEEE"
-        return formatter.string(from: .now)
+        Self.dateWeekdayFormatter.string(from: .now)
     }
 
     // MARK: - Status Banners

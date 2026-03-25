@@ -1,6 +1,35 @@
 import Foundation
 
 extension Date {
+    // Cached formatters for relative date display (app supports en + zh-Hans only)
+    private static let zhShortDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "M月d日"
+        return f
+    }()
+
+    private static let zhFullDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "yyyy年M月d日"
+        return f
+    }()
+
+    private static let enShortDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.dateFormat = "MMM d"
+        return f
+    }()
+
+    private static let enFullDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.dateFormat = "MMM d, yyyy"
+        return f
+    }()
+
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
@@ -32,14 +61,15 @@ extension Date {
         }
 
         // Older — show absolute date
-        let formatter = DateFormatter()
         let isChinese = locale.language.languageCode?.identifier == "zh"
-        if calendar.component(.year, from: self) == calendar.component(.year, from: now) {
-            formatter.dateFormat = isChinese ? "M月d日" : "MMM d"
-        } else {
-            formatter.dateFormat = isChinese ? "yyyy年M月d日" : "MMM d, yyyy"
+        let sameYear = calendar.component(.year, from: self) == calendar.component(.year, from: now)
+        let formatter: DateFormatter
+        switch (isChinese, sameYear) {
+        case (true, true):   formatter = Self.zhShortDate
+        case (true, false):  formatter = Self.zhFullDate
+        case (false, true):  formatter = Self.enShortDate
+        case (false, false): formatter = Self.enFullDate
         }
-        formatter.locale = locale
         return formatter.string(from: self)
     }
 }
