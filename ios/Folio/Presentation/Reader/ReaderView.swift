@@ -99,6 +99,24 @@ struct ReaderView: View {
                 .accessibilityLabel(String(localized: "button.more", defaultValue: "More options"))
             }
         }
+        .overlay(alignment: .topLeading) {
+            // Inline back button for when ReaderView is outside NavigationStack (hero transition)
+            if onDismiss != nil {
+                Button {
+                    onDismiss?()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("页集")
+                            .font(.system(size: 16))
+                    }
+                    .foregroundStyle(Color.folio.accent)
+                    .padding(.horizontal, Spacing.screenPadding)
+                    .padding(.top, 12)
+                }
+            }
+        }
         .sheet(isPresented: $showMoreMenu) {
             readerMenuSheet
                 .presentationDetents([.medium])

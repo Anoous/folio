@@ -50,6 +50,8 @@ struct MilestoneCardView: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.folio.textTertiary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
             }
 

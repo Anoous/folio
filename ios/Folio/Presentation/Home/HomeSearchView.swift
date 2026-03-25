@@ -95,6 +95,7 @@ struct HomeSearchView: View {
                                 }
                             )
                         }
+                        .scrollDismissesKeyboard(.interactively)
                     } else {
                         Spacer() // RAG not yet triggered
                     }

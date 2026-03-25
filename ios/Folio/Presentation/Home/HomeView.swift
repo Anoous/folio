@@ -37,13 +37,23 @@ struct HomeView: View {
         Set(dismissedMilestonesRaw.split(separator: ",").compactMap { Int($0) })
     }
 
+    private var isUserPro: Bool {
+        authViewModel?.currentUser?.isPro == true
+    }
+
     private var activeMilestone: Milestone? {
         let count = viewModel?.articles.count ?? 0
         guard count > 0 else { return nil }
         let shown = dismissedMilestones
-        // Show highest unshown milestone whose threshold has been reached
+        // Show highest unshown milestone whose threshold has been reached.
+        // A milestone is only relevant within a small window after its threshold;
+        // beyond that it feels stale (e.g. showing "5 articles!" when user has 30).
+        let staleMargin = 3
         for m in Milestone.allCases.reversed() {
-            if count >= m.rawValue && !shown.contains(m.rawValue) {
+            // Skip upgrade-oriented milestones for Pro users
+            if m.showUpgrade && isUserPro { continue }
+            let threshold = m.rawValue
+            if count >= threshold && count <= threshold + staleMargin && !shown.contains(threshold) {
                 return m
             }
         }
@@ -130,7 +140,11 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showNoteSheet) {
                 ManualNoteSheet(text: noteSheetText) { content in
-                    saveManualContent(content)
+                    if let url = URLDetection.extractURL(from: content) {
+                        saveURL(url.absoluteString)
+                    } else {
+                        saveManualContent(content)
+                    }
                     searchText = ""
                 }
             }

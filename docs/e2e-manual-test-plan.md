@@ -1,23 +1,67 @@
-# Folio 端到端手动测试计划
+# Folio v3 端到端测试计划
 
-## 测试环境与工具
+> **版本**: v3.0（2026-03-25 更新）
+> **范围**: 全功能回归 + v3 新增功能验证
+> **策略**: 风险驱动 — 按「用户影响 × 实现复杂度」排序，高风险链路优先
 
-### 启动环境
+---
+
+## 测试哲学
+
+本计划不是功能清单的机械罗列，而是从两个视角交叉验证：
+
+- **用户视角**：一个真实用户会怎么用？什么场景下会骂人？
+- **系统视角**：数据在前后端之间经过了几次转换？每次转换都可能丢失或出错
+
+每个用例都回答三个问题：
+1. **Happy path 能不能走通**？
+2. **出错时用户看到什么**？（不是白屏、不是卡死、有明确提示）
+3. **边界条件下数据是否一致**？（前端显示 = 后端存储 = 数据库记录）
+
+---
+
+## 风险矩阵
+
+| 模块 | 用户影响 | 实现复杂度 | 测试优先级 | 说明 |
+|------|---------|-----------|-----------|------|
+| Screenshot 捕获 | 🔴 高 | 🔴 高 | **P0** | 全新输入路径，Vision OCR + Share Extension + 新 source type |
+| Voice 捕获 | 🔴 高 | 🔴 高 | **P0** | 音频录制 + 实时转录 + 静默检测，硬件依赖多 |
+| RAG 搜索 | 🔴 高 | 🔴 高 | **P0** | 全栈新链路，LLM 调用 + 引用来源 + 降级策略 |
+| HomeView 重构回归 | 🔴 高 | 🟡 中 | **P1** | 核心页面拆分，功能不变但内部结构大改 |
+| Hero 过渡动画 | 🟡 中 | 🟡 中 | **P1** | matchedGeometryEffect 在边界条件下易闪烁 |
+| 阅读偏好实时更新 | 🟡 中 | 🟡 中 | **P1** | Swift ↔ JS bridge 双向通信 |
+| 图片清理 | 🟢 低 | 🟢 低 | **P2** | 后台清理，失败不影响用户操作 |
+| 数据导出 | 🟢 低 | 🟢 低 | **P2** | 低频功能，但数据完整性很重要 |
+| Substack/Mailchimp 识别 | 🟢 低 | 🟢 低 | **P2** | 来源标签展示，不影响核心流程 |
+
+---
+
+## 测试环境
+
+### 启动后端
 ```bash
-cd server && ./scripts/dev-start.sh   # Go API :8080 + Reader :3000 + Mock AI :8000 + PG + Redis
+cd server && ./scripts/dev-start.sh   # Go API :8080 + Reader + PG + Redis（全容器）
 ```
 
-### Claude Code 测试工具链
+### 构建并安装 iOS（模拟器）
+```bash
+xcodebuild build -project ios/Folio.xcodeproj -scheme Folio \
+  -destination 'platform=iOS Simulator,id=7910EBEA-1F8E-47B3-9AF4-7A30F48407C9' -quiet
+xcrun simctl terminate booted com.folio.app
+xcrun simctl install booted /Users/mac/Library/Developer/Xcode/DerivedData/Folio-doibwjteeqeddrcbskywtleokllf/Build/Products/Debug-iphonesimulator/Folio.app
+xcrun simctl launch booted com.folio.app
+```
+
+### 测试工具链
 
 | 能力 | 命令 |
 |------|------|
-| 看 iOS 屏幕 | `xcrun simctl io booted screenshot` → Read 图片 |
+| 看 iOS 屏幕 | `xcrun simctl io booted screenshot /tmp/test.png` → Read 图片 |
 | 操作 iOS | Appium + XCUITest driver (`http://localhost:4723`) |
 | iOS 日志 | `xcrun simctl spawn booted log stream --level debug --predicate 'subsystem == "com.folio.app"'` |
-| Go 后端日志 | `grep -aE 'level=' /tmp/folio-dev.log` |
-| 数据库查询 | `docker exec $(docker ps --filter "publish=5432" -q) psql -U folio -d folio -c "SQL"` |
-| Redis 查看 | `docker exec $(docker ps --filter "publish=6380" -q) redis-cli` |
-| 编译安装 iOS | `xcodebuild build` → `xcrun simctl install` → `xcrun simctl terminate/launch` |
+| Go 后端日志 | `cd server && docker compose -f docker-compose.local.yml logs -f app` |
+| 数据库查询 | `cd server && docker compose -f docker-compose.local.yml exec postgres psql -U folio -d folio -c "SQL"` |
+| Redis 查看 | `cd server && docker compose -f docker-compose.local.yml exec redis redis-cli` |
 
 ### Appium 连接模板
 ```python
@@ -27,7 +71,7 @@ from appium.options.ios import XCUITestOptions
 options = XCUITestOptions()
 options.platform_name = "iOS"
 options.device_name = "iPhone 17 Pro"
-options.udid = "<booted simulator udid>"
+options.udid = "7910EBEA-1F8E-47B3-9AF4-7A30F48407C9"
 options.bundle_id = "com.folio.app"
 options.no_reset = True
 options.set_capability("appium:automationName", "XCUITest")
@@ -36,225 +80,477 @@ options.set_capability("appium:usePreinstalledApp", True)
 driver = webdriver.Remote("http://localhost:4723", options=options)
 ```
 
+### 测试账号
+- Email: `realanoous@gmail.com`
+- 验证码获取: `docker compose -f docker-compose.local.yml logs app | grep 'EMAIL.*realanoous'`
+- 快捷方式: DEBUG 构建下可用 "Dev Login" 按钮
+
 ---
 
-## 测试用例
+## 第一部分：核心功能回归（T1–T10）
+
+> 这些是 v3 之前已有的功能。每次发版必须回归，确保重构没有破坏基础体验。
 
 ### T1: 认证流程
 
-#### T1.1 Dev Login
+#### T1.1 Dev Login（冒烟入口）
+- **前置**: 未登录状态（首次安装或已退出）
 - **操作**: 冷启动 app → 点击 "Dev Login"
-- **预期**: 跳转首页，显示 "Dev User"
-- **验证**: iOS 日志 `[auth] dev login succeeded`，Go 日志 `dev login succeeded`
+- **预期**: 跳转首页，显示用户信息
+- **验证**: 后端日志 `dev login succeeded`
 - **截图**: 登录前 + 登录后
 
-#### T1.2 Token 持久化
-- **操作**: 登录后杀掉 app → 重启 app
+#### T1.2 邮箱验证码登录
+- **操作**: 输入 `realanoous@gmail.com` → 发送验证码 → 从日志获取验证码 → 输入
+- **预期**: 登录成功，进入首页
+- **验证**: 后端日志包含验证码，前端显示用户邮箱
+
+#### T1.3 Token 持久化
+- **操作**: 登录后杀掉 app → 重新启动
 - **预期**: 自动恢复登录态，不显示登录页
-- **验证**: iOS 日志 `[auth] existing auth validated`
 
-#### T1.3 Sign Out
-- **操作**: 设置页 → Sign Out
-- **预期**: 回到未登录态
-- **验证**: iOS 日志 `[auth] user signed out`
+#### T1.4 Sign Out → 重新登录
+- **操作**: 设置页 → Sign Out → 确认回到登录页 → 重新 Dev Login
+- **预期**: 完整循环无异常
 
-#### T1.4 Token 过期刷新
-- **操作**: 修改 access token TTL 为极短时间，等过期后操作
-- **预期**: 自动 refresh，操作不中断
-- **验证**: iOS 日志 `401 unauthorized, attempting refresh` → `token refresh succeeded`
+#### T1.5 Token 过期自动刷新
+- **操作**: 等 access token 过期后执行任意操作
+- **预期**: 自动 refresh，操作不中断，用户无感知
 
 ---
 
-### T2: 文章提交（从 app 内）
+### T2: 文章提交（App 内）
 
-#### T2.1 正常提交
-- **操作**: 首页 "+" → 输入 URL（如 `https://go.dev/blog/using-go-modules`）→ 提交
+#### T2.1 正常 URL 提交
+- **操作**: 首页 "+" → 输入 `https://go.dev/blog/using-go-modules` → 提交
 - **预期**: 文章出现在列表，状态 pending → processing → ready
-- **验证**:
-  - iOS 日志: `[data] article saved` → `[network] processing N pending` → `[sync] article submitted` → `[sync] task done`
-  - Go 日志: `article submitted` → `crawl task completed` → `ai task completed`
-  - 截图: 提交后卡片状态变化
+- **全链路验证**:
+  - 后端: `article submitted` → `crawl task completed` → `ai task completed`
+  - 数据库: `SELECT status, category_id, summary FROM articles WHERE url LIKE '%go-modules%'`
+  - App: 下拉刷新后看到分类、标签、摘要
 
-#### T2.2 重复 URL 提交
+#### T2.2 重复 URL
 - **操作**: 再次提交同一 URL
-- **预期**: 提示 "已收藏" 或 duplicate
-- **验证**: Go 日志 `duplicate URL rejected`
+- **预期**: 明确提示"已收藏"，不创建重复记录
 
-#### T2.3 配额超限
-- **操作**: 将用户 monthly_quota 设为 1，已用 1 次后再提交
-- **预期**: 提示 quota exceeded
-- **验证**: Go 日志 `quota exceeded`，iOS 日志 `[sync] quota exceeded`
+#### T2.3 无效输入
+- **操作**: 提交空字符串 / 纯文本 / 不完整 URL
+- **预期**: 前端拦截，不发请求到后端
+
+#### T2.4 配额耗尽
+- **前置**: 数据库设 `monthly_quota = 1`，已用 1 次
+- **操作**: 提交新 URL
+- **预期**: 提示配额不足，引导升级
 
 ---
 
 ### T3: Share Extension
 
-#### T3.1 从 Safari 分享
-- **操作**: 模拟器打开 Safari → 访问网页 → 分享 → 选 Folio
+#### T3.1 Safari 分享网页
+- **操作**: 打开 Safari → 访问博客 → 分享 → 选 Folio
 - **预期**: Share Sheet 显示保存成功，回到 app 看到新文章
-- **验证**: iOS 日志 `[data] share: article saved` → `[data] extraction started`
 
 #### T3.2 分享重复 URL
 - **操作**: 分享已收藏过的 URL
-- **预期**: Share Sheet 显示 "已收藏"
-- **验证**: iOS 日志 `[data] share: duplicate URL`
+- **预期**: 提示"已收藏"
 
-#### T3.3 分享后客户端提取
-- **操作**: 分享一个标准博客 URL
-- **预期**: Share Sheet 显示 extracting → extracted
-- **验证**: iOS 日志 `[data] extraction started` → `extraction: HTML fetched` → `extraction completed`
+#### T3.3 客户端内容提取
+- **操作**: 分享一个标准博客
+- **预期**: Share Sheet 显示提取进度，完成后有客户端提取的内容
 
 ---
 
-### T4: 文章处理流水线（后端）
+### T4: 后端处理流水线
 
-#### T4.1 Reader 抓取 → AI 分析 → 完成
-- **操作**: 提交一篇新文章，等待处理完成
-- **验证**:
-  - Go 日志完整链路: `article submitted` → `crawl task completed` → `ai task completed`
-  - 数据库: `SELECT status, category_id, summary FROM articles WHERE url = '...'`
-  - App 拉到最新数据: 有分类、标签、摘要
+#### T4.1 完整链路：Reader → AI → 完成
+- **操作**: 提交新文章，等待 ready
+- **验证**: 后端日志完整链路，数据库中有 category、tags、summary
 
-#### T4.2 Reader 失败降级到客户端内容
-- **操作**: 提交一个 Reader 无法抓取的 URL（如内网地址），但客户端已提取内容
-- **验证**: Go 日志 `using client-provided content, skipping Reader`
+#### T4.2 Reader 失败降级
+- **操作**: 提交一个 Reader 无法抓取的页面（客户端已提取内容）
+- **预期**: 后端使用客户端内容继续 AI 分析
+- **验证**: 日志 `using client-provided content`
 
-#### T4.3 缓存命中
-- **操作**: 用户 A 提交过的 URL，用户 B 再提交
-- **验证**: Go 日志 `crawl task completed via cache hit`
+#### T4.3 AI 分析质量抽检
+- **操作**: 检查 3-5 篇已处理文章的 AI 输出
+- **验证**: 分类是否合理、标签是否相关、摘要是否通顺、语言是否匹配原文
 
 ---
 
 ### T5: 首页列表
 
-#### T5.1 文章列表展示
-- **操作**: 首页查看文章列表
-- **验证截图**:
-  - 标题是否有意义（不是 "微博正文 - 微博" 这种）
-  - 摘要是否干净（不含 markdown 语法、原始链接）
-  - 时间显示正确
-  - 标签显示正确
-  - 分类筛选 chip 可点击
+#### T5.1 列表展示质量
+- **验证截图**: 标题有意义、摘要干净（无 markdown 残留）、时间正确、标签显示
 
 #### T5.2 分类筛选
-- **操作**: 点击分类 chip（技术 / 其他 / All）
-- **预期**: 列表过滤正确
-- **截图**: 每个分类的列表
+- **操作**: 逐个点击分类 chip
+- **预期**: 列表只显示对应分类，"All" 恢复全部
 
 #### T5.3 下拉刷新
-- **操作**: 下拉触发刷新
-- **预期**: 从服务端拉取最新数据
-- **验证**: iOS 日志 `[sync] starting full sync`
+- **操作**: 下拉触发
+- **预期**: 刷新动画 → 数据更新
 
-#### T5.4 文章状态展示
-- **操作**: 观察不同状态的文章卡片
-- **截图**: pending / processing / clientReady / ready / failed 各状态的卡片样式
+#### T5.4 各状态卡片样式
+- **截图**: pending / processing / clientReady / ready / failed 各状态的视觉区分
 
-#### T5.5 失败重试
-- **操作**: 对 failed 文章点击 "Retry"
-- **预期**: 状态变回 pending → processing
-- **验证**: iOS 日志 `[sync] retryArticle`
+#### T5.5 失败文章重试
+- **操作**: 点击 failed 文章的重试按钮
+- **预期**: 状态重新流转
 
 ---
 
-### T6: 阅读页
+### T6: 阅读页（WKWebView）
 
-#### T6.1 正常阅读
-- **操作**: 点击一篇 ready 文章进入阅读页
-- **验证截图**:
-  - 标题排版
-  - AI 摘要区域
-  - 正文 markdown 渲染（标题层级、粗体、链接、代码块、引用、列表、图片、表格）
-  - 阅读进度百分比
+#### T6.1 Markdown 渲染质量
+- **操作**: 打开一篇富格式文章
+- **验证截图**: 标题、摘要、正文排版（h1-h3、粗体、链接、代码块、引用、列表、图片、表格）
 
-#### T6.2 滚动阅读进度
-- **操作**: 滚动到页面底部
-- **预期**: 底部进度条从 0% → 100%
+#### T6.2 阅读进度
+- **操作**: 从顶部滚动到底部
+- **预期**: 进度条 0% → 100%，退出后再进入恢复上次位置
 
-#### T6.3 不同内容源渲染质量
-- **操作**: 分别查看以下来源的文章
-  - 标准英文博客
-  - 微博
-  - 微信公众号（如果有）
-  - Twitter/X
-- **截图**: 每种来源的阅读页效果
-- **关注**: 标题质量、内容完整度、图片显示、排版噪音
+#### T6.3 多来源渲染对比
+- **截图**: 英文博客 / Twitter / 微博 / 微信公众号 — 关注内容完整度和排版噪音
 
-#### T6.4 阅读偏好设置
-- **操作**: 更多菜单 → Reading Preferences → 调整字号/行距/字体/主题
-- **截图**: 调整前后对比
+#### T6.4 阅读偏好
+- **操作**: 调整字号、行距、字体、主题
+- **预期**: **实时**生效（不需要退出重进），JS bridge 即时更新 WebView
 
-#### T6.5 收藏/归档/删除
-- **操作**: 在阅读页通过更多菜单执行收藏、归档、删除
-- **预期**: 操作成功，Toast 提示，返回列表后状态更新
+#### T6.5 收藏 / 归档 / 删除
+- **操作**: 通过工具栏执行操作
+- **预期**: Toast 提示，返回列表后状态一致
 
-#### T6.6 无内容状态
-- **操作**: 点击一篇 processing 中的文章
-- **预期**: 显示 "AI is still analyzing" 提示
-- **截图**: 无内容状态页面
+#### T6.6 无内容 / 处理中状态
+- **操作**: 点击 processing 中的文章
+- **预期**: 显示"正在分析"提示，不是白屏
 
-#### T6.7 Open Original
-- **操作**: 底部工具栏点 "Original" 或更多菜单 "Open Original"
-- **预期**: WebView 打开原始页面
+#### T6.7 打开原文
+- **操作**: 点击"Original"
+- **预期**: 内置浏览器打开原始页面
 
 ---
 
 ### T7: 搜索
 
-#### T7.1 关键词搜索
-- **操作**: 首页搜索框输入关键词
-- **预期**: 实时显示匹配结果（200ms 防抖）
-- **验证**: 结果数量、高亮标题、摘要片段
+#### T7.1 关键词搜索（FTS）
+- **操作**: 输入已有文章的关键词
+- **预期**: 实时匹配（200ms 防抖），标题高亮
 
 #### T7.2 中文搜索
 - **操作**: 搜索中文关键词
-- **预期**: 正确匹配中文内容
+- **预期**: 正确匹配，分词合理
 
-#### T7.3 空结果
-- **操作**: 搜索一个不存在的词
-- **预期**: 显示空状态
-- **截图**: 空搜索结果页
+#### T7.3 搜索空结果
+- **操作**: 搜索不存在的词
+- **预期**: 空状态页面（不是无响应）
 
 #### T7.4 搜索历史
-- **操作**: 搜索后清空输入框 → 查看历史记录
-- **预期**: 显示最近搜索词
-
-#### T7.5 索引重建
-- **验证**: iOS 日志 `[data] search index rebuilt: N articles`
+- **操作**: 搜索几个词 → 清空输入框
+- **预期**: 显示最近搜索记录，可点击复用
 
 ---
 
-### T8: 离线与网络恢复
+### T8: 离线与同步
 
 #### T8.1 离线保存
-- **操作**: 断网 → 分享一个 URL
-- **预期**: 本地保存成功，状态 pending
-- **验证**: iOS 日志 `[data] article saved`，无网络错误
+- **前置**: 断开网络
+- **操作**: 在 app 内提交 URL
+- **预期**: 本地保存成功（pending），无崩溃或错误弹窗
 
-#### T8.2 网络恢复自动同步
+#### T8.2 恢复联网自动同步
 - **操作**: 恢复网络
-- **预期**: 自动提交 pending 文章
-- **验证**: iOS 日志 `[network] network status changed: available` → `processing N pending article(s)`
+- **预期**: 自动提交待处理文章，无需手动操作
 
 ---
 
 ### T9: 设置页
 
-#### T9.1 用户信息显示
-- **操作**: 点击设置齿轮
-- **截图**: 用户名、邮箱、订阅等级、配额进度
+#### T9.1 用户信息 + 配额
+- **截图**: 邮箱、订阅等级、配额进度条
+- **验证**: 配额数字与数据库一致
 
-#### T9.2 配额显示
-- **验证**: Articles saved X / Y 与数据库一致
+#### T9.2 数据导出 🆕
+- **操作**: 设置 → 导出数据
+- **预期**: 生成文件，包含所有文章数据
+- **验证**: 导出内容完整（文章数 = 数据库文章数），格式可读
 
 ---
 
 ### T10: Onboarding
 
 #### T10.1 首次启动引导
-- **操作**: 清除 app 数据 → 冷启动
-- **预期**: 显示 4 页引导 + 权限页
-- **截图**: 每一页引导页
+- **前置**: 清除 app 数据
+- **操作**: 冷启动
+- **预期**: 4 页引导 → 权限请求 → 登录页
+- **截图**: 每一页
+
+---
+
+## 第二部分：v3 新功能（T11–T18）
+
+> 最近三天新增的功能，按风险矩阵优先级排列。
+
+### T11: Screenshot 捕获全链路 🔴 P0
+
+**为什么 P0**：全新输入管线（拍照 → OCR → 文章），涉及 Vision 框架、新 source type、后端 manual 端点，任何一环断裂用户就收不到内容。
+
+#### T11.1 CaptureBar 拍照 → 文章创建
+- **前置**: 已登录，在首页
+- **操作**: 点击 CaptureBar 的拍照按钮 → 拍摄/选择一张含文字的图片 → 确认
+- **预期**:
+  - 图片经过 OCR 提取出文字
+  - 首页出现新文章，source type 为 screenshot
+  - 文章卡片有视觉区分（区别于普通 URL 文章）
+- **验证**: 数据库 `SELECT source_type, content FROM articles ORDER BY created_at DESC LIMIT 1`
+
+#### T11.2 Share Extension 分享图片
+- **操作**: 从相册分享一张图片到 Folio
+- **预期**: Share Sheet 完成，app 中出现 screenshot 类型文章
+- **关注**: Share Extension 120MB 内存限制下 OCR 是否能完成
+
+#### T11.3 Screenshot 文章阅读页
+- **操作**: 点击 screenshot 文章进入 Reader
+- **预期**: 显示原图 + OCR 提取的文字内容（非普通 markdown 排版）
+- **截图**: 与普通文章的 Reader 对比
+
+#### T11.4 边界：无文字图片
+- **操作**: 分享一张纯风景照（无文字）
+- **预期**: 文章创建成功，但 OCR 内容为空或极少 — 不崩溃，有合理的空状态展示
+
+#### T11.5 边界：超大图片
+- **操作**: 分享一张 > 10MB 的高分辨率图片
+- **预期**: 图片被压缩后处理，不 OOM，不卡死
+
+#### T11.6 后端同步
+- **操作**: screenshot 文章创建后等待同步
+- **验证**: 后端 `source_type = 'screenshot'`，走 manual content 路径（不触发 Reader 抓取）
+
+---
+
+### T12: Voice 捕获全链路 🔴 P0
+
+**为什么 P0**：涉及麦克风权限、音频录制、实时转录、静默检测，硬件依赖多，在模拟器上行为可能与真机不同。
+
+#### T12.1 CaptureBar 录音 → 文章创建
+- **前置**: 已授予麦克风权限
+- **操作**: 点击 CaptureBar 麦克风按钮 → 说一段话（10-15 秒）→ 停止
+- **预期**:
+  - 录音过程中显示实时波形
+  - 停止后转录为文字
+  - 首页出现 voice 类型文章，卡片有视觉区分
+- **截图**: 录音中波形 + 转录结果 + 文章卡片
+
+#### T12.2 静默检测自动停止
+- **操作**: 开始录音 → 保持沉默
+- **预期**: 检测到持续静默后自动停止录音（不会无限录制）
+
+#### T12.3 Voice 文章阅读页
+- **操作**: 点击 voice 文章进入 Reader
+- **预期**: 显示转录文字（非普通 markdown 排版，有语音文章特有的展示方式）
+
+#### T12.4 边界：极短录音（< 2 秒）
+- **操作**: 快速点击开始 → 立即停止
+- **预期**: 提示录音太短，不创建空文章
+
+#### T12.5 边界：长时间录音（> 3 分钟）
+- **操作**: 持续录音超过 3 分钟
+- **预期**: 要么自动停止并转录，要么有明确的时间限制提示
+
+#### T12.6 边界：麦克风权限未授予
+- **操作**: 在系统设置中关闭 Folio 麦克风权限 → 点击录音
+- **预期**: 弹出权限引导，不崩溃
+
+#### T12.7 模拟器限制说明
+- **注意**: 模拟器无真实麦克风，需评估哪些用例只能在真机上验证
+- 真机测试清单: T12.1 波形显示、T12.2 静默检测
+
+---
+
+### T13: RAG 智能搜索 🔴 P0
+
+**为什么 P0**：全栈新链路（iOS → Go API → LLM → 引用匹配 → 结果渲染），用户搜索是核心路径，RAG 结果质量直接影响产品价值。
+
+#### T13.1 RAG 搜索基本流程
+- **前置**: 库中有 5+ 篇已处理文章
+- **操作**: 搜索一个跨多篇文章的话题（如"Go 模块管理"）
+- **预期**:
+  - FTS 结果在上方（传统关键词匹配）
+  - RAG 回答在下方（AI 综合多篇文章的回答）
+  - RAG 回答标注引用来源文章
+- **截图**: 搜索结果页完整布局
+
+#### T13.2 RAG 引用来源点击
+- **操作**: 点击 RAG 回答中的引用来源
+- **预期**: 跳转到对应文章的阅读页
+
+#### T13.3 FTS / RAG 切换
+- **操作**: 搜索时观察 FTS 和 RAG 的触发逻辑
+- **预期**: 短关键词走 FTS，自然语言问句触发 RAG（或两者同时展示）
+
+#### T13.4 RAG 内联对话
+- **操作**: 在 RAG 回答下方继续提问（追问）
+- **预期**: 对话上下文连续，新回答引用更多文章
+
+#### T13.5 边界：文章库为空
+- **操作**: 新用户（无文章）触发 RAG 搜索
+- **预期**: 优雅降级 — 提示"收藏更多文章以获得 AI 回答"，不报错
+
+#### T13.6 边界：LLM 超时或不可用
+- **前置**: Mock AI 模式（无 DEEPSEEK_API_KEY）
+- **操作**: 触发 RAG 搜索
+- **预期**: 至少 FTS 结果正常返回，RAG 部分显示降级提示
+
+#### T13.7 Milestone 升级引导
+- **操作**: 使用 RAG 搜索达到一定次数
+- **预期**: 出现升级提示（如果用户是 free 等级）
+- **验证**: Milestone 导航跳转到升级页面
+
+---
+
+### T14: 首页 + 搜索重构回归 🟡 P1
+
+**为什么 P1**：HomeView 拆分为 HomeSearchView + SearchSuggestionsView + ContentSaveService，核心页面结构大改，虽然功能不变，但内部数据流变了。
+
+#### T14.1 首页基本功能完整性
+- **操作**: 正常浏览首页 — 滚动列表、查看卡片、点击进入文章
+- **预期**: 与重构前行为一致，无 UI 异常
+
+#### T14.2 搜索功能完整回归
+- **操作**: 激活搜索 → 输入关键词 → 查看结果 → 点击结果 → 返回 → 清除搜索
+- **预期**: 整个搜索流程流畅，防抖正常，结果准确
+
+#### T14.3 搜索建议
+- **操作**: 在搜索框输入部分文字
+- **预期**: 搜索建议实时出现，与之前行为一致
+
+#### T14.4 文章保存流程
+- **操作**: 通过各种方式保存文章（"+" 按钮、Share Extension）
+- **预期**: ContentSaveService 正确处理，首页实时更新
+
+#### T14.5 Echo 卡片穿插
+- **操作**: 首页列表中观察 Echo 卡片
+- **预期**: Echo 卡片正确穿插在文章流中，交互状态机正常（4 步）
+
+#### T14.6 Screenshot / Voice 卡片视觉区分 🆕
+- **操作**: 首页同时有普通文章、screenshot 文章、voice 文章
+- **截图**: 三种类型的卡片外观对比
+- **预期**: 视觉上可区分（图标/标签/缩略图不同）
+
+---
+
+### T15: Hero 过渡动画 🟡 P1
+
+**为什么 P1**：matchedGeometryEffect 在 SwiftUI 中以"偶尔闪烁"闻名，需要专门验证边界场景。
+
+#### T15.1 正常过渡
+- **操作**: 点击文章卡片 → 进入 Reader
+- **预期**: 卡片平滑展开为阅读页（而非生硬的 push 转场）
+- **截图**: 过渡过程中截图（可能需要录屏辅助）
+
+#### T15.2 快速连续点击
+- **操作**: 快速点击一篇文章 → 立即返回 → 立即点击另一篇
+- **预期**: 不崩溃、不卡在中间状态、不出现 UI 残影
+
+#### T15.3 返回过渡
+- **操作**: 从 Reader 返回首页
+- **预期**: 页面收缩回卡片位置，动画流畅
+
+#### T15.4 不同文章类型的过渡
+- **操作**: 分别点击普通文章、screenshot 文章、voice 文章
+- **预期**: 三种类型都有流畅的过渡效果
+
+#### T15.5 长列表中的过渡
+- **操作**: 滚动到列表底部 → 点击文章 → 返回
+- **预期**: 返回后列表位置保持不变，不跳到顶部
+
+---
+
+### T16: 阅读偏好实时更新 🟡 P1
+
+**为什么 P1**：Swift ↔ JavaScript bridge 是典型的"开发时正常、边界条件翻车"的功能。
+
+#### T16.1 字号实时切换
+- **操作**: 在 Reader 中打开偏好 → 拖动字号滑块
+- **预期**: WebView 中文字**实时**变大/变小（不需要退出重进）
+
+#### T16.2 行距实时切换
+- **操作**: 切换行距选项
+- **预期**: 段落间距实时变化
+
+#### T16.3 字体实时切换
+- **操作**: 切换字体（衬线 / 无衬线 / 等宽）
+- **预期**: 正文字体实时变化，中英文都正确应用
+
+#### T16.4 主题实时切换
+- **操作**: 切换主题（亮色 / 暗色 / 自动）
+- **预期**: 背景色和文字颜色实时切换，不闪烁
+
+#### T16.5 偏好持久化
+- **操作**: 设置偏好 → 退出 Reader → 打开另一篇文章
+- **预期**: 新文章自动应用上次的偏好设置
+
+#### T16.6 偏好 + 系统深色模式交互
+- **操作**: 手动设置亮色主题 → 系统切换到深色模式
+- **预期**: 用户手动设置优先？还是跟随系统？行为应该明确且一致
+
+---
+
+### T17: 图片清理 🟢 P2
+
+#### T17.1 删除文章时清理关联图片
+- **前置**: 有一篇带图片的 screenshot 文章
+- **操作**: 删除该文章
+- **验证**: 本地图片文件被清理（检查文件系统或存储大小变化）
+
+#### T17.2 启动时孤儿图片清扫
+- **前置**: 手动在图片目录放置一个无关联的图片文件
+- **操作**: 重启 app
+- **验证**: 孤儿图片被清理
+
+---
+
+### T18: 来源类型识别 🟢 P2
+
+#### T18.1 Substack 文章识别
+- **操作**: 提交一个 Substack newsletter URL
+- **预期**: source type 正确识别为 substack，卡片上可能有对应图标
+
+#### T18.2 Mailchimp 邮件识别
+- **操作**: 提交一个 Mailchimp campaign URL
+- **预期**: source type 正确识别为 mailchimp
+
+---
+
+## 第三部分：交叉场景（T19）
+
+> 单功能测试通过不代表组合使用没问题。以下是最危险的交叉场景。
+
+### T19: 跨功能交互
+
+#### T19.1 Screenshot 文章 → RAG 搜索
+- **操作**: 先捕获几张截图文章 → 搜索截图中的文字内容
+- **预期**: FTS 能匹配到 OCR 提取的文字，RAG 能引用 screenshot 文章
+
+#### T19.2 Voice 文章 → RAG 搜索
+- **操作**: 录制几条语音文章 → 搜索转录内容
+- **预期**: 转录文字可被 FTS 和 RAG 检索到
+
+#### T19.3 快速连续捕获
+- **操作**: 拍照 → 立即录音 → 立即粘贴 URL → 快速创建 3 篇不同类型文章
+- **预期**: 三篇都正确创建，source type 各自正确，不互相干扰
+
+#### T19.4 搜索中途切换操作
+- **操作**: 正在搜索（RAG 加载中）→ 取消搜索 → 点击 CaptureBar 拍照
+- **预期**: RAG 请求被取消，不影响拍照流程
+
+#### T19.5 离线捕获 → 联网同步
+- **操作**: 断网 → 拍照创建 screenshot 文章 → 恢复网络
+- **预期**: 文章本地保存成功 → 联网后自动同步到后端 → 后端走 manual content 路径
+
+#### T19.6 大量文章下的性能
+- **前置**: 库中 100+ 篇文章
+- **操作**: 首页滚动、搜索、分类筛选
+- **预期**: 列表滚动 60fps，搜索响应 < 500ms，分类切换无卡顿
 
 ---
 
@@ -262,24 +558,43 @@ driver = webdriver.Remote("http://localhost:4723", options=options)
 
 每个用例按以下流程执行：
 
-1. **准备**: 确保环境就绪（后端运行、app 已安装最新版）
-2. **操作**: 通过 Appium 执行点击/滑动/输入
-3. **截图**: 操作前后各截一张
-4. **日志**: 同时抓取 iOS 和 Go 日志
-5. **数据库**: 必要时查询验证数据状态
-6. **记录**: 将结果（截图 + 日志 + 发现的问题）写入测试报告
+1. **准备**: 确认后端运行 + app 最新版已安装
+2. **操作**: Appium 执行交互（或手动操作 + simctl 截图）
+3. **截图**: 操作前后各一张，关键状态变化截图
+4. **日志**: iOS 日志 + 后端 Docker 日志同步采集
+5. **数据库**: 关键数据点的 SQL 验证
+6. **记录**: 结果写入测试报告
+
+### 执行顺序建议
+
+```
+第 1 轮（冒烟）: T1.1 → T2.1 → T5.1 → T6.1 → T7.1
+                 确保登录、提交、列表、阅读、搜索基本可用
+
+第 2 轮（P0 新功能）: T11 → T12 → T13
+                      Screenshot → Voice → RAG 三条新链路
+
+第 3 轮（P1 回归）: T14 → T15 → T16
+                    重构回归 → 动画 → 阅读偏好
+
+第 4 轮（完整回归）: T1-T10 剩余用例
+
+第 5 轮（交叉 + 边界）: T19 → T17 → T18
+```
 
 ## 输出物
 
-测试完成后生成：
-
 1. **测试报告** (`docs/e2e-test-report.md`)
-   - 每个用例的通过/失败状态
-   - 截图证据
-   - 关键日志摘录
+   - 每个用例: PASS / FAIL / BLOCKED / SKIP
+   - 截图证据（关键步骤）
+   - 失败用例的复现步骤和日志摘录
 
-2. **问题清单** (`docs/issues-and-improvements.md`)
-   - Bug 列表（含复现步骤）
-   - UI/UX 优化建议（含截图对比）
-   - 内容质量问题（各来源的抓取效果）
-   - 性能观察
+2. **问题清单** (`docs/issues-found.md`)
+   - 按严重程度: 🔴 Blocker / 🟠 Major / 🟡 Minor / 🟢 Cosmetic
+   - 每个问题: 复现步骤 + 截图 + 日志 + 建议修复方案
+
+3. **性能基线** (`docs/performance-baseline.md`)
+   - 首页列表滚动帧率
+   - 搜索响应时间
+   - 文章打开时间
+   - 后端处理管线耗时
