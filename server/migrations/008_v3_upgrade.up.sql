@@ -41,8 +41,7 @@ CREATE TABLE echo_cards (
 );
 
 CREATE INDEX idx_echo_cards_user_review
-    ON echo_cards (user_id, next_review_at)
-    WHERE next_review_at <= NOW();
+    ON echo_cards (user_id, next_review_at);
 
 CREATE INDEX idx_echo_cards_article
     ON echo_cards (article_id);
