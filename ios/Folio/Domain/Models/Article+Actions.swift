@@ -18,36 +18,34 @@ extension Article {
         ModelContext.safeSave(context)
     }
 
-    /// Toggle favorite with optimistic update and server sync.
+    /// Generic optimistic toggle + server sync pattern.
     @MainActor
-    func toggleFavoriteWithSync(
+    private func toggleBoolWithSync(
+        toggle: () -> Void,
+        makeRequest: @escaping () -> UpdateArticleRequest,
+        toastOn: (String, String),
+        toastOff: (String, String),
+        getValue: () -> Bool,
         context: ModelContext,
         apiClient: APIClient,
         isAuthenticated: Bool,
         showToast: @escaping (String, String?) -> Void
     ) {
-        isFavorite.toggle()
+        toggle()
         markPendingUpdateIfNeeded()
         ModelContext.safeSave(context)
 
-        showToast(
-            isFavorite
-                ? String(localized: "home.article.favorited", defaultValue: "Added to favorites")
-                : String(localized: "home.article.unfavorited", defaultValue: "Removed from favorites"),
-            isFavorite ? "heart.fill" : "heart"
-        )
+        let value = getValue()
+        let toast = value ? toastOn : toastOff
+        showToast(toast.0, toast.1)
 
         guard isAuthenticated, let serverID else { return }
         Task {
             do {
-                try await apiClient.updateArticle(
-                    id: serverID,
-                    request: UpdateArticleRequest(isFavorite: isFavorite)
-                )
+                try await apiClient.updateArticle(id: serverID, request: makeRequest())
                 syncState = .synced
                 ModelContext.safeSave(context)
             } catch {
-                // Keep the user's intended value; mark for retry on next sync
                 syncState = .pendingUpdate
                 ModelContext.safeSave(context)
                 showToast(
@@ -58,6 +56,33 @@ extension Article {
         }
     }
 
+    /// Toggle favorite with optimistic update and server sync.
+    @MainActor
+    func toggleFavoriteWithSync(
+        context: ModelContext,
+        apiClient: APIClient,
+        isAuthenticated: Bool,
+        showToast: @escaping (String, String?) -> Void
+    ) {
+        toggleBoolWithSync(
+            toggle: { isFavorite.toggle() },
+            makeRequest: { [self] in UpdateArticleRequest(isFavorite: isFavorite) },
+            toastOn: (
+                String(localized: "home.article.favorited", defaultValue: "Added to favorites"),
+                "heart.fill"
+            ),
+            toastOff: (
+                String(localized: "home.article.unfavorited", defaultValue: "Removed from favorites"),
+                "heart"
+            ),
+            getValue: { isFavorite },
+            context: context,
+            apiClient: apiClient,
+            isAuthenticated: isAuthenticated,
+            showToast: showToast
+        )
+    }
+
     /// Toggle archive with optimistic update and server sync.
     @MainActor
     func toggleArchiveWithSync(
@@ -66,35 +91,22 @@ extension Article {
         isAuthenticated: Bool,
         showToast: @escaping (String, String?) -> Void
     ) {
-        isArchived.toggle()
-        markPendingUpdateIfNeeded()
-        ModelContext.safeSave(context)
-
-        showToast(
-            isArchived
-                ? String(localized: "home.article.archived", defaultValue: "Archived")
-                : String(localized: "home.article.unarchived", defaultValue: "Unarchived"),
-            isArchived ? "archivebox.fill" : "archivebox"
+        toggleBoolWithSync(
+            toggle: { isArchived.toggle() },
+            makeRequest: { [self] in UpdateArticleRequest(isArchived: isArchived) },
+            toastOn: (
+                String(localized: "home.article.archived", defaultValue: "Archived"),
+                "archivebox.fill"
+            ),
+            toastOff: (
+                String(localized: "home.article.unarchived", defaultValue: "Unarchived"),
+                "archivebox"
+            ),
+            getValue: { isArchived },
+            context: context,
+            apiClient: apiClient,
+            isAuthenticated: isAuthenticated,
+            showToast: showToast
         )
-
-        guard isAuthenticated, let serverID else { return }
-        Task {
-            do {
-                try await apiClient.updateArticle(
-                    id: serverID,
-                    request: UpdateArticleRequest(isArchived: isArchived)
-                )
-                syncState = .synced
-                ModelContext.safeSave(context)
-            } catch {
-                // Keep the user's intended value; mark for retry on next sync
-                syncState = .pendingUpdate
-                ModelContext.safeSave(context)
-                showToast(
-                    String(localized: "home.article.syncFailed", defaultValue: "Sync failed, will retry"),
-                    "exclamationmark.icloud"
-                )
-            }
-        }
     }
 }
