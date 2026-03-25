@@ -27,6 +27,7 @@ struct HomeView: View {
     @State private var refreshTrigger = false
     @State private var recentSearchesVersion = 0
     @State private var showVoiceRecording = false
+    @State private var saveService: ContentSaveService?
     @Environment(\.selectArticle) private var selectArticle
     @AppStorage("dismissed_milestones") private var dismissedMilestonesRaw = ""
 
@@ -651,176 +652,46 @@ struct HomeView: View {
     // MARK: - Actions
 
     private func saveURL(_ urlString: String) {
-        let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
-        guard SharedDataManager.canSave(isPro: isPro) else {
-            showToast(String(localized: "home.quotaExceeded", defaultValue: "Monthly quota exceeded"), icon: "exclamationmark.triangle.fill")
-            saveFailed.toggle()
-            return
-        }
-
-        let manager = SharedDataManager(context: modelContext)
-        do {
-            _ = try manager.saveArticleFromText(urlString)
-            SharedDataManager.incrementQuota()
-            viewModel?.fetchArticles()
-            showToast(String(localized: "home.addURL.saved", defaultValue: "Link saved"), icon: "checkmark.circle.fill")
-            saveSucceeded.toggle()
-
-            Task {
-                await syncService?.incrementalSync()
-            }
-        } catch SharedDataError.duplicateURL {
-            showToast(String(localized: "home.addURL.duplicate", defaultValue: "Link already exists"), icon: "exclamationmark.triangle.fill")
-            saveFailed.toggle()
-        } catch {
-            showToast(String(localized: "home.addURL.error", defaultValue: "Failed to save"), icon: "xmark.circle.fill")
-            saveFailed.toggle()
-        }
+        guard let result = saveService?.saveURL(urlString) else { return }
+        handleSaveResult(result)
+        if case .success = result { viewModel?.fetchArticles() }
     }
 
     private func saveManualContent(_ content: String) {
-        let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
-        guard SharedDataManager.canSave(isPro: isPro) else {
-            showToast(String(localized: "home.quotaExceeded", defaultValue: "Monthly quota exceeded"), icon: "exclamationmark.triangle.fill")
-            saveFailed.toggle()
-            return
-        }
-
-        let manager = SharedDataManager(context: modelContext)
-        do {
-            _ = try manager.saveManualContent(content: content)
-            SharedDataManager.incrementQuota()
-            viewModel?.fetchArticles()
-            showToast(String(localized: "home.manualSaved", defaultValue: "Saved"), icon: "checkmark.circle.fill")
-            saveSucceeded.toggle()
-
-            Task {
-                await syncService?.incrementalSync()
-            }
-        } catch {
-            showToast(String(localized: "home.manualSaveError", defaultValue: "Failed to save"), icon: "xmark.circle.fill")
-            saveFailed.toggle()
-        }
+        guard let result = saveService?.saveManualContent(content) else { return }
+        handleSaveResult(result)
+        if case .success = result { viewModel?.fetchArticles() }
     }
 
     private func saveScreenshot(_ image: UIImage) {
-        let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
-        guard SharedDataManager.canSave(isPro: isPro) else {
-            showToast(String(localized: "home.quotaExceeded", defaultValue: "Monthly quota exceeded"), icon: "exclamationmark.triangle.fill")
-            saveFailed.toggle()
-            return
-        }
-
-        // Compress for storage (max 1920px)
-        let storageImage = Self.resizedImage(image, maxDimension: 1920)
-        guard let storageData = storageImage.jpegData(compressionQuality: 0.8) else {
-            showToast(String(localized: "home.screenshotError", defaultValue: "Failed to process image"), icon: "xmark.circle.fill")
-            saveFailed.toggle()
-            return
-        }
-
-        // Save image to App Group container Images/ directory
-        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) else {
-            showToast(String(localized: "home.screenshotError", defaultValue: "Failed to process image"), icon: "xmark.circle.fill")
-            saveFailed.toggle()
-            return
-        }
-        let imagesDir = containerURL.appendingPathComponent("Images", isDirectory: true)
-        try? FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
-        let filename = UUID().uuidString + ".jpg"
-        let fileURL = imagesDir.appendingPathComponent(filename)
-        do {
-            try storageData.write(to: fileURL)
-        } catch {
-            showToast(String(localized: "home.screenshotError", defaultValue: "Failed to process image"), icon: "xmark.circle.fill")
-            saveFailed.toggle()
-            return
-        }
-
-        let relativePath = "Images/\(filename)"
-
-        // Create article immediately, then run OCR in background
-        let article = Article(url: nil, sourceType: .screenshot)
-        article.localImagePath = relativePath
-        article.status = .clientReady
-        modelContext.insert(article)
-        do {
-            try modelContext.save()
-        } catch {
-            showToast(String(localized: "home.screenshotError", defaultValue: "Failed to process image"), icon: "xmark.circle.fill")
-            saveFailed.toggle()
-            return
-        }
-        SharedDataManager.incrementQuota()
-        viewModel?.fetchArticles()
-        showToast(String(localized: "home.screenshotSaved", defaultValue: "Screenshot saved"), icon: "checkmark.circle.fill")
-        saveSucceeded.toggle()
-
-        // Run OCR in background
-        let ocrImage = Self.resizedImage(image, maxDimension: 1280)
-        let articleID = article.id
-        Task {
-            let extractor = ImageOCRExtractor()
-            if let text = try? await extractor.extract(from: ocrImage), !text.isEmpty {
-                await MainActor.run {
-                    // Re-fetch the article from context by ID
-                    let descriptor = FetchDescriptor<Article>(predicate: #Predicate { $0.id == articleID })
-                    guard let article = try? modelContext.fetch(descriptor).first else { return }
-                    article.markdownContent = text
-                    article.title = String(text.prefix(40)).components(separatedBy: .newlines).first ?? String(text.prefix(40))
-                    article.wordCount = Article.countWords(text)
-                    article.updatedAt = .now
-                    try? modelContext.save()
-                    viewModel?.fetchArticles()
-                }
-            }
-            await syncService?.incrementalSync()
-        }
-    }
-
-    private static func resizedImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
-        let size = image.size
-        guard max(size.width, size.height) > maxDimension else { return image }
-        let scale = maxDimension / max(size.width, size.height)
-        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
-        return renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: newSize))
-        }
+        guard let result = saveService?.saveScreenshot(image, onOCRComplete: {
+            viewModel?.fetchArticles()
+        }) else { return }
+        handleSaveResult(result)
+        if case .success = result { viewModel?.fetchArticles() }
     }
 
     private func saveVoiceNote(_ transcribedText: String) {
-        let trimmed = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard let result = saveService?.saveVoiceNote(transcribedText) else { return }
+        // Empty text returns .error with empty message — just silently return
+        if case .error(let msg) = result, msg.isEmpty { return }
+        handleSaveResult(result)
+        if case .success = result { viewModel?.fetchArticles() }
+    }
 
-        let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
-        guard SharedDataManager.canSave(isPro: isPro) else {
+    private func handleSaveResult(_ result: ContentSaveService.SaveResult) {
+        switch result {
+        case .success(let message, let icon):
+            showToast(message, icon: icon)
+            saveSucceeded.toggle()
+        case .duplicate:
+            showToast(String(localized: "home.addURL.duplicate", defaultValue: "Link already exists"), icon: "exclamationmark.triangle.fill")
+            saveFailed.toggle()
+        case .quotaExceeded:
             showToast(String(localized: "home.quotaExceeded", defaultValue: "Monthly quota exceeded"), icon: "exclamationmark.triangle.fill")
             saveFailed.toggle()
-            return
-        }
-
-        let article = Article(url: nil, sourceType: .voice)
-        article.markdownContent = trimmed
-        // Title = first sentence, truncated to 40 chars
-        let firstSentence = trimmed.components(separatedBy: CharacterSet(charactersIn: ".!?\u{3002}\u{FF01}\u{FF1F}")).first ?? trimmed
-        let titleCandidate = String(firstSentence.prefix(40))
-        article.title = titleCandidate.count < firstSentence.count ? titleCandidate + "..." : titleCandidate
-        article.status = .clientReady
-        article.wordCount = Article.countWords(trimmed)
-        modelContext.insert(article)
-        do {
-            try modelContext.save()
-            SharedDataManager.incrementQuota()
-            viewModel?.fetchArticles()
-            showToast(String(localized: "home.voiceSaved", defaultValue: "Voice note saved"), icon: "checkmark.circle.fill")
-            saveSucceeded.toggle()
-
-            Task {
-                await syncService?.incrementalSync()
-            }
-        } catch {
-            showToast(String(localized: "home.voiceSaveError", defaultValue: "Failed to save"), icon: "xmark.circle.fill")
+        case .error(let message):
+            showToast(message, icon: "xmark.circle.fill")
             saveFailed.toggle()
         }
     }
@@ -841,6 +712,9 @@ struct HomeView: View {
             )
             viewModel?.fetchArticles()
             Task { await viewModel?.fetchEchoCards() }
+        }
+        if saveService == nil {
+            saveService = ContentSaveService(context: modelContext, syncService: syncService)
         }
         if searchViewModel == nil {
             guard let manager = try? FTS5SearchManager(inMemory: false) else { return }

@@ -118,6 +118,7 @@
 		B0908583A0243F406F08FCB8 /* UpgradeComparisonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBD0A8576DA72D6026A1065A /* UpgradeComparisonView.swift */; };
 		B112BA8DF6FB0A8A341075BD /* ContentExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44D02ABED92A120F2F0EAE84 /* ContentExtractorTests.swift */; };
 		B21C3B1391C44DA3DAD5C600 /* DataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5BBCF93626F7CCCD8B69BA5 /* DataManager.swift */; };
+		B24B78A94FF42577BEDFF3A4 /* ContentSaveService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 399C86A13A4663D3ED7BD63B /* ContentSaveService.swift */; };
 		B298BE141564E450A16CB5FD /* MockDataFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 349AB0BC3C6766D21B01FF09 /* MockDataFactory.swift */; };
 		B2CF52674E5288D085E6A9D8 /* HomeSearchResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 587E5568604CD87046B09908 /* HomeSearchResultsView.swift */; };
 		B4E63C24CECE548130D2C323 /* RAGAnswerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AC9CE83D6FA2FB86BB20ABD /* RAGAnswerView.swift */; };
@@ -247,6 +248,7 @@
 		37A8DD2A2736DB0444C229C4 /* HTMLToMarkdownConverterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLToMarkdownConverterTests.swift; sourceTree = "<group>"; };
 		38AAAA316228DB20DF81F5D8 /* SyncProgressBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncProgressBar.swift; sourceTree = "<group>"; };
 		38BD7364DD0B9E44FD4227DE /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
+		399C86A13A4663D3ED7BD63B /* ContentSaveService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSaveService.swift; sourceTree = "<group>"; };
 		3B06AAD8993752CE10A6758F /* OfflineQueueManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineQueueManagerTests.swift; sourceTree = "<group>"; };
 		3DAF903DE4A88322BFC3BF05 /* TypographyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypographyTests.swift; sourceTree = "<group>"; };
 		3FD52F9166CCEFFF5C189276 /* ImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageView.swift; sourceTree = "<group>"; };
@@ -782,6 +784,7 @@
 		D1E092A326505E60C6C97AE9 /* Data */ = {
 			isa = PBXGroup;
 			children = (
+				399C86A13A4663D3ED7BD63B /* ContentSaveService.swift */,
 				1E01F9ABE829C80A6C51BCFB /* KeyChain */,
 				D397D2E89A50D443D7523DE2 /* Network */,
 				72CC41699B9374EA39675C44 /* Repository */,
@@ -1122,6 +1125,7 @@
 				05B83BAD8637E96BD57DF0DC /* CodeBlockView.swift in Sources */,
 				70943084036581B7D2366FAD /* Color+Folio.swift in Sources */,
 				912D68A2A8298432A8777F2E /* ContentExtractor.swift in Sources */,
+				B24B78A94FF42577BEDFF3A4 /* ContentSaveService.swift in Sources */,
 				EA40DF240CFD542AF3D3EEC8 /* CornerRadius.swift in Sources */,
 				E9ED33DEEF39FFDD463B853F /* DTOMapping.swift in Sources */,
 				E4A35B6BC54591B02708D023 /* DataManager.swift in Sources */,
