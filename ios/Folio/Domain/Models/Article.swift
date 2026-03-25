@@ -53,6 +53,8 @@ enum SourceType: String, Codable {
             return .zhihu
         } else if host.contains("youtube.com") || host.contains("youtu.be") {
             return .youtube
+        } else if host.contains("substack.com") || host.contains("mailchi.mp") {
+            return .newsletter
         } else {
             return .web
         }
