@@ -255,6 +255,80 @@ xcrun devicectl device process launch --device 00008130-000A61483EC0001C com.7WS
 
 详见 `docs/local-deploy.md`。
 
+## 广州服务器部署（Staging）
+
+**服务器**：`43.138.233.19`（ubuntu，SSH 端口 38721），通过 SSH MCP 工具管理（server name: `guangzhou`）。
+
+**部署目录**：`/opt/folio/`，使用 `docker-compose.staging.yml`。
+
+**域名**：`https://api.echolore.ai` → Cloudflare Tunnel → `localhost:8080`
+
+**重要：必须本地构建、本地打包后上传部署，不在服务器上构建**（服务器仅 1GB 内存，构建会超时/OOM）。
+
+**部署步骤**：
+
+```bash
+# 1. 本地构建 reader 库（如有更新）
+cd /Users/mac/github/reader && npm run build
+
+# 2. 打包 reader 本地依赖
+cd server/reader-service && /opt/homebrew/bin/npm pack /Users/mac/github/reader --pack-destination .
+
+# 3. 本地交叉编译 Go 二进制
+cd server && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o folio-server-linux ./cmd/server
+
+# 4. 本地构建 Docker 镜像（linux/amd64）
+# App 镜像（使用精简 Dockerfile，只 COPY 预编译二进制）
+mkdir -p build-tmp && cp folio-server-linux build-tmp/
+cat > build-tmp/Dockerfile << 'EOF'
+FROM alpine:3.19
+RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 1000 appuser
+COPY folio-server-linux /folio-server
+RUN chmod +x /folio-server
+USER appuser
+EXPOSE 8080
+CMD ["/folio-server"]
+EOF
+docker build --platform linux/amd64 -t folio-app:staging build-tmp/
+
+# Reader 镜像
+docker build --platform linux/amd64 -t folio-reader:staging -f reader-service/Dockerfile reader-service/
+
+# 5. 导出镜像
+docker save folio-app:staging | gzip > /tmp/folio-app-staging.tar.gz
+docker save folio-reader:staging | gzip > /tmp/folio-reader-staging.tar.gz
+
+# 6. 上传到服务器（通过 SSH MCP ssh_upload 工具）
+# 上传镜像 tar.gz 到 /tmp/
+
+# 7. 服务器上加载镜像并重启
+# sudo docker load < /tmp/folio-app-staging.tar.gz
+# sudo docker load < /tmp/folio-reader-staging.tar.gz
+# cd /opt/folio && sudo docker compose -f docker-compose.staging.yml up -d
+```
+
+**同步代码与迁移**（rsync，需要时同步 Go 源码和迁移文件）：
+```bash
+rsync -avz --delete -e "ssh -p 38721" \
+  --exclude='.env' --exclude='docker-compose.staging.yml' --exclude='._*' \
+  server/{cmd,internal,go.mod,go.sum,Dockerfile,migrations} \
+  ubuntu@43.138.233.19:/opt/folio/
+```
+
+**运行新迁移**（数据库已运行时，手动执行增量迁移）：
+```bash
+sudo docker exec folio-postgres-1 psql -U folio -d folio -f /path/to/migration.sql
+# 或使用合并迁移：migrations/upgrade_008_012.sql
+```
+
+**Docker 需要 sudo**，所有 docker 命令前加 `sudo`。
+
+**注意事项**：
+- `.env` 文件在服务器上手动管理，rsync 排除
+- `docker-compose.staging.yml` 在服务器上手动管理，rsync 排除
+- 服务器内存紧张（1GB），APP_MODE=all（API+Worker 合一），GOMAXPROCS=1，GOMEMLIMIT=64MiB
+- 清理旧镜像：`sudo docker image prune -f`
+
 ## 测试
 
 **iOS 单元测试**（35 个文件，位于 `ios/FolioTests/`）：

@@ -346,6 +346,8 @@ final class HomeViewModel {
     func isRAGQuery(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > 10 else { return false }
+        // URLs contain "?" for query params — never treat a URL as a RAG question
+        if URLDetection.isURLOnly(trimmed) { return false }
         let indicators = ["？", "?", "什么", "哪些", "如何", "为什么", "怎么", "怎样", "是否", "有没有", "能不能", "多少"]
         return indicators.contains { trimmed.contains($0) }
     }
