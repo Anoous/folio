@@ -37,6 +37,8 @@ struct MilestoneCardView: View {
     let articleCount: Int
     let onDismiss: () -> Void
 
+    @State private var showUpgrade = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -65,7 +67,7 @@ struct MilestoneCardView: View {
 
             if milestone.showUpgrade {
                 Button {
-                    // TODO: Navigate to upgrade
+                    showUpgrade = true
                 } label: {
                     Text("升级 Pro")
                         .font(.system(size: 14, weight: .medium))
@@ -82,5 +84,8 @@ struct MilestoneCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .padding(.horizontal, Spacing.screenPadding)
         .padding(.vertical, 8)
+        .sheet(isPresented: $showUpgrade) {
+            UpgradeComparisonView()
+        }
     }
 }

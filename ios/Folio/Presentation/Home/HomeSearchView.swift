@@ -12,6 +12,9 @@ struct HomeSearchView: View {
     var onSaveRecentSearch: (String) -> Void
     var findExistingArticle: (String) -> Article?
 
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.selectArticle) private var selectArticle
+
     var body: some View {
         VStack(spacing: 0) {
             // Search bar
@@ -82,7 +85,10 @@ struct HomeSearchView: View {
                                 thread: viewModel.ragThread,
                                 response: response,
                                 onSourceTap: { articleId in
-                                    // TODO: Navigate to reader for this article
+                                    let repo = ArticleRepository(context: modelContext)
+                                    if let article = try? repo.fetchByServerID(articleId) {
+                                        selectArticle(article)
+                                    }
                                 },
                                 onFollowup: { question in
                                     viewModel.submitFollowup(question)
