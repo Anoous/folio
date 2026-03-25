@@ -22,6 +22,11 @@ services:
       - ./migrations/005_fix_precision.up.sql:/docker-entrypoint-initdb.d/006_fix_precision.sql
       - ./migrations/006_manual_content.up.sql:/docker-entrypoint-initdb.d/007_manual_content.sql
       - ./migrations/007_client_id.up.sql:/docker-entrypoint-initdb.d/008_client_id.sql
+      - ./migrations/008_v3_upgrade.up.sql:/docker-entrypoint-initdb.d/009_v3_upgrade.sql
+      - ./migrations/009_highlights.up.sql:/docker-entrypoint-initdb.d/010_highlights.sql
+      - ./migrations/010_subscription_txn.up.sql:/docker-entrypoint-initdb.d/011_subscription_txn.sql
+      - ./migrations/011_devices.up.sql:/docker-entrypoint-initdb.d/012_devices.sql
+      - ./migrations/012_smart_retrieval.up.sql:/docker-entrypoint-initdb.d/013_smart_retrieval.sql
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
