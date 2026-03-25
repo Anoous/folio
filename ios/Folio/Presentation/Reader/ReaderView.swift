@@ -117,6 +117,20 @@ struct ReaderView: View {
                 }
             }
         }
+        .overlay(alignment: .topTrailing) {
+            // Inline more menu button for hero transition mode
+            if onDismiss != nil {
+                Button {
+                    showMoreMenu = true
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Color.folio.textPrimary)
+                        .padding(.horizontal, Spacing.screenPadding)
+                        .padding(.top, 12)
+                }
+            }
+        }
         .sheet(isPresented: $showMoreMenu) {
             readerMenuSheet
                 .presentationDetents([.medium])
