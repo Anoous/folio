@@ -431,6 +431,30 @@ final class APIClientTests: XCTestCase {
         }
     }
 
+    // MARK: - Void Responses (204 No Content)
+
+    func testDeleteHighlight_204NoContent_succeeds() async throws {
+        try keychainManager.saveTokens(access: "token", refresh: "r")
+        MockURLProtocol.requestHandler = { _ in
+            (Data(), self.makeResponse(statusCode: 204))
+        }
+
+        // Should not throw — 204 is a valid void response
+        try await client.deleteHighlight(id: "h1")
+    }
+
+    func testDeleteArticle_200WithBody_succeeds() async throws {
+        try keychainManager.saveTokens(access: "token", refresh: "r")
+        let json = """
+        {"status": "deleted"}
+        """.data(using: .utf8)!
+        MockURLProtocol.requestHandler = { _ in
+            (json, self.makeResponse(statusCode: 200))
+        }
+
+        try await client.deleteArticle(id: "a1")
+    }
+
     // MARK: - Encoding
 
     func testSnakeCaseEncoding() async throws {

@@ -91,6 +91,42 @@ final class ReaderViewModelProgressTests: XCTestCase {
     }
 
     @MainActor
+    func testPersistProgressIfNeeded_flushesSubThresholdProgress() throws {
+        let article = Article(url: "https://example.com", title: "Flush")
+        article.serverID = "server-1"
+        article.syncState = .synced
+        context.insert(article)
+        try context.save()
+
+        let vm = ReaderViewModel(article: article, context: context)
+        // Update with small delta (0.005) — below the 1% persist threshold
+        // This sets readingProgress but does NOT call safeSave
+        vm.updateReadingProgress(0.005)
+        XCTAssertEqual(vm.readingProgress, 0.005, accuracy: 0.001)
+        // syncState should still be synced (not persisted yet)
+        XCTAssertEqual(article.syncState, .synced)
+
+        // persistProgressIfNeeded should flush it
+        vm.persistProgressIfNeeded()
+        XCTAssertEqual(article.syncState, .pendingUpdate)
+    }
+
+    @MainActor
+    func testPersistProgressIfNeeded_noopWhenAlreadyPersisted() throws {
+        let article = Article(url: "https://example.com", title: "Noop")
+        context.insert(article)
+        try context.save()
+
+        let vm = ReaderViewModel(article: article, context: context)
+        // Update above threshold — will be persisted immediately
+        vm.updateReadingProgress(0.5)
+        // Now call persist — should be a no-op since lastPersistedProgress == readingProgress
+        vm.persistProgressIfNeeded()
+        // No crash, no side effects
+        XCTAssertEqual(article.readProgress, 0.5, accuracy: 0.01)
+    }
+
+    @MainActor
     func testUpdateProgress_marksSyncedArticlePendingUpdate() throws {
         let article = Article(url: "https://example.com", title: "Sync me")
         article.serverID = "server-1"

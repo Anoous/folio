@@ -69,7 +69,7 @@ final class ReaderViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testDeleteArticle() throws {
+    func testDeleteArticle_removesFromContext() throws {
         let article = Article(url: "https://example.com/delete", title: "Delete me")
         context.insert(article)
         try context.save()
@@ -81,6 +81,45 @@ final class ReaderViewModelTests: XCTestCase {
         let descriptor = FetchDescriptor<Article>(predicate: #Predicate { $0.id == id })
         let found = try context.fetch(descriptor)
         XCTAssertTrue(found.isEmpty)
+    }
+
+    @MainActor
+    func testDeleteArticle_withServerID_createsPendingDeletion() throws {
+        let article = Article(url: "https://example.com/synced", title: "Synced")
+        article.serverID = "server-42"
+        article.syncState = .synced
+        context.insert(article)
+        try context.save()
+
+        let vm = ReaderViewModel(article: article, context: context)
+        vm.deleteArticle()
+
+        // PendingDeletion should be created for server sync
+        let pendingDescriptor = FetchDescriptor<PendingDeletion>()
+        let pending = try context.fetch(pendingDescriptor)
+        XCTAssertEqual(pending.count, 1)
+        XCTAssertEqual(pending.first?.serverID, "server-42")
+
+        // DeletionRecord should be created for anti-resurrection
+        let recordDescriptor = FetchDescriptor<DeletionRecord>()
+        let records = try context.fetch(recordDescriptor)
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.serverID, "server-42")
+    }
+
+    @MainActor
+    func testDeleteArticle_noServerID_noPendingDeletion() throws {
+        let article = Article(url: "https://example.com/local", title: "Local only")
+        // No serverID — never synced
+        context.insert(article)
+        try context.save()
+
+        let vm = ReaderViewModel(article: article, context: context)
+        vm.deleteArticle()
+
+        let pendingDescriptor = FetchDescriptor<PendingDeletion>()
+        let pending = try context.fetch(pendingDescriptor)
+        XCTAssertTrue(pending.isEmpty)
     }
 
     @MainActor
