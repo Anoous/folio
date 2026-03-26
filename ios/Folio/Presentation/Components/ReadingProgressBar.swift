@@ -9,7 +9,7 @@ struct ReadingProgressBar: View {
             Rectangle()
                 .fill(Color.folio.accent)
                 .frame(width: geometry.size.width * min(max(progress, 0), 1.0))
-                .animation(.linear(duration: 0.1), value: progress)
+                .animation(Motion.ink, value: progress)
         }
         .frame(height: 2)
         .padding(.horizontal, Spacing.screenPadding)

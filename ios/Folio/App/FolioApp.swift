@@ -53,6 +53,7 @@ struct FolioApp: App {
                             HomeView()
                         }
                         .opacity(selectedArticle == nil ? 1 : 0)
+                        .scaleEffect(selectedArticle == nil ? 1 : 0.96)
                         .animation(Motion.exit, value: selectedArticle == nil)
 
                         if let article = selectedArticle {
@@ -61,7 +62,7 @@ struct FolioApp: App {
                                     selectedArticle = nil
                                 }
                             })
-                            .transition(.identity)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
                             .zIndex(1)
                         }
                     }

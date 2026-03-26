@@ -60,7 +60,7 @@ struct ImageViewerOverlay: View {
                     y: offset.height + dragOffset.height)
             .gesture(combinedGesture)
             .onTapGesture(count: 2) {
-                withAnimation(.easeInOut(duration: 0.3)) {
+                withAnimation(Motion.settle) {
                     if scale > minScale {
                         scale = minScale
                         offset = .zero
@@ -120,7 +120,7 @@ struct ImageViewerOverlay: View {
             .onEnded { _ in
                 lastScale = scale
                 if scale <= minScale {
-                    withAnimation(.easeOut(duration: 0.2)) {
+                    withAnimation(Motion.quick) {
                         offset = .zero
                         lastOffset = .zero
                     }
@@ -147,7 +147,7 @@ struct ImageViewerOverlay: View {
                     if abs(dragOffset.height) > dismissThreshold {
                         dismiss()
                     } else {
-                        withAnimation(.easeOut(duration: 0.2)) {
+                        withAnimation(Motion.quick) {
                             dragOffset = .zero
                         }
                     }

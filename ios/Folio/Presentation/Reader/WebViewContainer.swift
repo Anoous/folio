@@ -32,7 +32,7 @@ struct WebViewContainer: View {
                         Rectangle()
                             .fill(Color.folio.accent)
                             .frame(width: geometry.size.width * progress, height: 2)
-                            .animation(.linear(duration: 0.2), value: progress)
+                            .animation(Motion.ink, value: progress)
                     }
                     .frame(height: 2)
                 }

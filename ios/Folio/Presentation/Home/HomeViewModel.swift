@@ -476,9 +476,13 @@ final class HomeViewModel {
         FolioLogger.data.info("vm-debug: loadPage reset=\(reset), collected=\(collected.count), offset=\(self.currentPage * self.pageSize)")
 
         if reset {
-            articles = collected
+            withAnimation(Motion.settle) {
+                articles = collected
+            }
         } else {
-            articles.append(contentsOf: collected)
+            withAnimation(Motion.ink) {
+                articles.append(contentsOf: collected)
+            }
         }
 
         hasMorePages = !exhausted
