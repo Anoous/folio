@@ -36,6 +36,8 @@ type Analyzer interface {
 	ExpandQuery(ctx context.Context, question string) ([]string, error)
 	RerankArticles(ctx context.Context, question string, candidates []RerankCandidate) ([]RerankResult, error)
 	SelectRelatedArticles(ctx context.Context, sourceTitle, sourceSummary string, candidates []RerankCandidate) ([]RelatedResult, error)
+	GenerateRAGAnswerStream(ctx context.Context, systemPrompt, userPrompt string, tokens chan<- string) (fullAnswer string, err error)
+	GenerateFollowups(ctx context.Context, question, answer string) ([]string, error)
 	// IsRealAI reports whether this analyzer calls a real LLM (vs a mock).
 	IsRealAI() bool
 }
@@ -110,18 +112,20 @@ var validCategories = func() map[string]string {
 
 // DeepSeekAnalyzer calls the DeepSeek (OpenAI-compatible) API directly.
 type DeepSeekAnalyzer struct {
-	apiKey     string
-	baseURL    string
-	httpClient *http.Client
+	apiKey           string
+	baseURL          string
+	httpClient       *http.Client
+	streamHTTPClient *http.Client
 }
 
 // NewDeepSeekAnalyzer creates a DeepSeekAnalyzer.
 // baseURL should be e.g. "https://api.deepseek.com" (no trailing slash).
 func NewDeepSeekAnalyzer(apiKey, baseURL string) *DeepSeekAnalyzer {
 	return &DeepSeekAnalyzer{
-		apiKey:     apiKey,
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		httpClient: &http.Client{Timeout: 60 * time.Second},
+		apiKey:           apiKey,
+		baseURL:          strings.TrimRight(baseURL, "/"),
+		httpClient:       &http.Client{Timeout: 60 * time.Second},
+		streamHTTPClient: &http.Client{},
 	}
 }
 
@@ -158,6 +162,31 @@ type chatChoice struct {
 type chatError struct {
 	Message string `json:"message"`
 	Type    string `json:"type"`
+}
+
+// streamChatRequest is like chatRequest but with Stream field.
+type streamChatRequest struct {
+	Model       string        `json:"model"`
+	Messages    []chatMessage `json:"messages"`
+	Temperature float64       `json:"temperature"`
+	MaxTokens   int           `json:"max_tokens"`
+	Stream      bool          `json:"stream"`
+}
+
+// streamDelta is the delta content in a streaming response chunk.
+type streamDelta struct {
+	Content string `json:"content"`
+}
+
+// streamChoice is a single choice in a streaming response chunk.
+type streamChoice struct {
+	Delta        streamDelta `json:"delta"`
+	FinishReason *string     `json:"finish_reason"`
+}
+
+// streamChunk is one SSE data payload from the DeepSeek streaming API.
+type streamChunk struct {
+	Choices []streamChoice `json:"choices"`
 }
 
 // Analyze sends the article to DeepSeek and returns the structured analysis.

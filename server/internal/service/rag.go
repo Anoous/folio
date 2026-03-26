@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -286,6 +287,63 @@ func buildRAGUserPrompt(articles []domain.RAGSource, history []domain.RAGMessage
 	fmt.Fprintf(&b, "\n用户问题：%s", question)
 
 	return b.String()
+}
+
+// extractCitedIndices extracts 1-based citation indices from answer text.
+// Matches Unicode superscript digits (¹²³⁴⁵⁶⁷⁸⁹) and bracket citations ([1], [12]).
+// Returns deduplicated, sorted indices.
+func extractCitedIndices(answer string) []int {
+	seen := make(map[int]bool)
+	var indices []int
+
+	superscripts := map[rune]int{
+		'\u00B9': 1, '\u00B2': 2, '\u00B3': 3,
+		'\u2074': 4, '\u2075': 5, '\u2076': 6,
+		'\u2077': 7, '\u2078': 8, '\u2079': 9,
+	}
+
+	runes := []rune(answer)
+	for i := 0; i < len(runes); i++ {
+		if idx, ok := superscripts[runes[i]]; ok {
+			if !seen[idx] {
+				seen[idx] = true
+				indices = append(indices, idx)
+			}
+			continue
+		}
+
+		if runes[i] == '[' && i+2 < len(runes) {
+			j := i + 1
+			num := 0
+			for j < len(runes) && runes[j] >= '0' && runes[j] <= '9' {
+				num = num*10 + int(runes[j]-'0')
+				j++
+			}
+			if j > i+1 && j < len(runes) && runes[j] == ']' && num > 0 {
+				if !seen[num] {
+					seen[num] = true
+					indices = append(indices, num)
+				}
+				i = j
+			}
+		}
+	}
+
+	slices.Sort(indices)
+	return indices
+}
+
+// buildRAGStreamSystemPrompt returns the system prompt for streaming RAG queries.
+// Unlike buildRAGSystemPrompt, this produces plain text (not JSON) for streaming.
+func buildRAGStreamSystemPrompt() string {
+	return `你是用户的个人知识助手。以下是用户收藏的文章摘要列表。
+基于且仅基于这些文章回答用户的问题。
+
+规则：
+1. 只基于用户的收藏回答，不编造内容
+2. 在引用处用上标数字标注对应文章编号，如 ¹ ² ³
+3. 回答风格：简洁、有洞察力、直击核心。对核心观点用 **加粗** 强调
+4. 如果收藏中没有相关内容，回答"你的收藏中没有找到与此相关的内容。"`
 }
 
 // extractAnswerFromContent tries to parse stored assistant content as JSON and extract
