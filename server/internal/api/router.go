@@ -103,6 +103,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 			// RAG (question answering over saved articles)
 			r.Post("/rag/query", deps.RAGHandler.HandleQuery)
+			r.Post("/rag/query/stream", deps.RAGHandler.HandleQueryStream)
 
 			// Devices (push notification registration)
 			r.Post("/devices", deps.DeviceHandler.HandleRegister)
