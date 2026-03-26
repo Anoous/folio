@@ -154,6 +154,9 @@ struct ReaderView: View {
                 viewModel = vm
             }
         }
+        .onDisappear {
+            viewModel?.persistProgressIfNeeded()
+        }
         .task {
             await viewModel?.fetchContentIfNeeded()
             await viewModel?.fetchHighlights()

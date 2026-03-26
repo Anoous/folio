@@ -244,26 +244,8 @@ final class HomeViewModel {
     }
 
     func deleteArticle(_ article: Article) {
-        let serverID = article.serverID
-
-        article.cleanupLocalImage()
-
-        // Record deletion intent for server sync (before deleting the article)
-        if let serverID {
-            context.insert(PendingDeletion(serverID: serverID))
-            // Anti-resurrection: remember this serverID was deleted
-            let existing = try? context.fetch(FetchDescriptor<DeletionRecord>(
-                predicate: #Predicate<DeletionRecord> { $0.serverID == serverID }
-            ))
-            if existing?.isEmpty ?? true {
-                context.insert(DeletionRecord(serverID: serverID))
-            }
-        }
-
-        context.delete(article)
-        ModelContext.safeSave(context)
+        article.prepareForDeletion(context: context)
         fetchArticles()
-
         showToastMessage(String(localized: "home.article.deleted", defaultValue: "Article deleted"), icon: "trash")
     }
 

@@ -166,16 +166,7 @@ final class ReaderViewModel {
     // MARK: - Delete
 
     func deleteArticle() {
-        let serverID = article.serverID
-
-        article.cleanupLocalImage()
-
-        context.delete(article)
-        ModelContext.safeSave(context)
-
-        if isAuthenticated, let serverID {
-            Task { try? await apiClient.deleteArticle(id: serverID) }
-        }
+        article.prepareForDeletion(context: context)
     }
 
     // MARK: - Copy Markdown

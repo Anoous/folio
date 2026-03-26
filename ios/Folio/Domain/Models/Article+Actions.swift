@@ -18,6 +18,25 @@ extension Article {
         ModelContext.safeSave(context)
     }
 
+    /// Prepare this article for deletion: clean up local image, record sync intent,
+    /// and delete from SwiftData. Callers handle post-actions (refetch, toast, dismiss).
+    func prepareForDeletion(context: ModelContext) {
+        cleanupLocalImage()
+
+        if let serverID {
+            context.insert(PendingDeletion(serverID: serverID))
+            let existing = try? context.fetch(FetchDescriptor<DeletionRecord>(
+                predicate: #Predicate<DeletionRecord> { $0.serverID == serverID }
+            ))
+            if existing?.isEmpty ?? true {
+                context.insert(DeletionRecord(serverID: serverID))
+            }
+        }
+
+        context.delete(self)
+        ModelContext.safeSave(context)
+    }
+
     /// Generic optimistic toggle + server sync pattern.
     @MainActor
     private func toggleBoolWithSync(

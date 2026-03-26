@@ -95,6 +95,7 @@ final class ContentSaveService {
         // Create article immediately, then run OCR in background
         let article = Article(url: nil, sourceType: .screenshot)
         article.localImagePath = relativePath
+        article.title = String(localized: "home.screenshotTitle", defaultValue: "Screenshot")
         article.status = .clientReady
         context.insert(article)
         do {
@@ -113,18 +114,22 @@ final class ContentSaveService {
         let sync = syncService
         Task {
             let extractor = ImageOCRExtractor()
-            if let text = try? await extractor.extract(from: ocrImage), !text.isEmpty {
-                await MainActor.run {
-                    // Re-fetch the article from context by ID
-                    let descriptor = FetchDescriptor<Article>(predicate: #Predicate { $0.id == articleID })
-                    guard let article = try? ctx.fetch(descriptor).first else { return }
-                    article.markdownContent = text
-                    article.title = String(text.prefix(40)).components(separatedBy: .newlines).first ?? String(text.prefix(40))
-                    article.wordCount = Article.countWords(text)
-                    article.updatedAt = .now
-                    try? ctx.save()
-                    onOCRComplete()
+            do {
+                let text = try await extractor.extract(from: ocrImage)
+                if let text, !text.isEmpty {
+                    await MainActor.run {
+                        let descriptor = FetchDescriptor<Article>(predicate: #Predicate { $0.id == articleID })
+                        guard let article = try? ctx.fetch(descriptor).first else { return }
+                        article.markdownContent = text
+                        article.title = String(text.prefix(40)).components(separatedBy: .newlines).first ?? String(text.prefix(40))
+                        article.wordCount = Article.countWords(text)
+                        article.updatedAt = .now
+                        try? ctx.save()
+                        onOCRComplete()
+                    }
                 }
+            } catch {
+                FolioLogger.data.error("OCR extraction failed for screenshot \(articleID): \(error.localizedDescription)")
             }
             await sync?.incrementalSync()
         }
@@ -137,7 +142,9 @@ final class ContentSaveService {
 
     func saveVoiceNote(_ transcribedText: String) -> SaveResult {
         let trimmed = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return .error(message: "") }
+        guard !trimmed.isEmpty else {
+            return .error(message: String(localized: "home.voiceEmpty", defaultValue: "No speech detected"))
+        }
 
         guard checkQuota() else { return .quotaExceeded }
 

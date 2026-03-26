@@ -332,11 +332,8 @@ enum SSEEventParser {
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let dateString = try container.decode(String.self)
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = formatter.date(from: dateString) { return date }
-            formatter.formatOptions = [.withInternetDateTime]
-            if let date = formatter.date(from: dateString) { return date }
+            if let date = ISO8601Formatters.fractional.date(from: dateString) { return date }
+            if let date = ISO8601Formatters.standard.date(from: dateString) { return date }
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(dateString)")
         }
 
@@ -541,13 +538,78 @@ final class APIClient: @unchecked Sendable {
         }
     }
 
-    // Variant for void responses (DELETE, PUT that return StatusResponse internally)
+    // Variant for void responses (DELETE, PUT).
+    // Handles both 200 (with JSON body) and 204 No Content (empty body).
     private func requestVoid(
         method: String,
         path: String,
-        body: (any Encodable)? = nil
+        body: (any Encodable)? = nil,
+        isRetryAfterRefresh: Bool = false
     ) async throws {
-        let _: StatusResponse = try await request(method: method, path: path, body: body)
+        guard let components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: true) else {
+            throw APIError.invalidURL
+        }
+        guard let url = components.url else {
+            throw APIError.invalidURL
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = method
+
+        FolioLogger.network.debug("\(method) \(path)")
+
+        if let token = keychainManager.accessToken {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        if let body {
+            urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            do {
+                urlRequest.httpBody = try encoder.encode(AnyEncodable(body))
+            } catch {
+                throw APIError.encodingFailed
+            }
+        }
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: urlRequest)
+        } catch {
+            throw APIError.networkError(error.localizedDescription)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError("Invalid response")
+        }
+
+        switch httpResponse.statusCode {
+        case 200...299:
+            return // Success — ignore body (handles both 200 and 204)
+        case 401:
+            FolioLogger.network.info("401 unauthorized, attempting refresh — \(path)")
+            if !isRetryAfterRefresh {
+                try await performTokenRefresh()
+                try await requestVoid(method: method, path: path, body: body, isRetryAfterRefresh: true)
+                return
+            }
+            throw APIError.unauthorized
+        case 403:
+            throw APIError.forbidden
+        case 404:
+            throw APIError.notFound
+        case 409:
+            throw APIError.conflict
+        default:
+            FolioLogger.network.error("HTTP \(httpResponse.statusCode) — \(method) \(path)")
+            if httpResponse.statusCode >= 500 {
+                throw APIError.serverError(httpResponse.statusCode)
+            }
+            if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
+                throw APIError.serverMessage(errorResponse.error)
+            }
+            throw APIError.serverError(httpResponse.statusCode)
+        }
     }
 
     // MARK: - Token Refresh
