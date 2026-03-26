@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -112,6 +113,120 @@ func (s *RAGService) Query(ctx context.Context, userID, question, conversationID
 		FollowupSuggestions: ragResult.FollowupSuggestions,
 		ConversationID:      conversationID,
 	}, nil
+}
+
+// QueryStream runs the three-phase RAG pipeline, emitting events to the channel.
+func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversationID string, events chan<- domain.RAGStreamEvent) {
+	defer close(events)
+
+	// Phase 1: Retrieval
+
+	if err := s.checkQuota(ctx, userID); err != nil {
+		if errors.Is(err, ErrRAGQuotaExceeded) {
+			events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "quota_exceeded", ErrorMessage: "monthly RAG quota exceeded"}
+		} else {
+			events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "internal error"}
+		}
+		return
+	}
+
+	articles, err := s.ragRepo.LoadArticleSummaries(ctx, userID)
+	if err != nil {
+		events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "internal error"}
+		return
+	}
+	if len(articles) == 0 {
+		events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "no_articles", ErrorMessage: "no articles saved yet"}
+		return
+	}
+
+	articles = s.applyTokenBudget(ctx, userID, question, articles)
+
+	var history []domain.RAGMessage
+	if conversationID != "" {
+		history, err = s.ragRepo.GetConversationMessages(ctx, conversationID, ragHistoryLimit)
+		if err != nil {
+			slog.Warn("failed to load conversation history", "conversation_id", conversationID, "error", err)
+			history = nil
+		}
+	}
+
+	question = strings.TrimSpace(client.SanitizeField(question))
+	systemPrompt := buildRAGStreamSystemPrompt()
+	userPrompt := buildRAGUserPrompt(articles, history, question)
+
+	// Create conversation early so we can send conversation_id in sources event
+	if conversationID == "" {
+		conv := &domain.RAGConversation{
+			UserID: userID,
+			Title:  truncateStringPtr(question, 50),
+		}
+		if err := s.ragRepo.CreateConversation(ctx, conv); err != nil {
+			slog.Error("failed to create conversation", "error", err)
+		} else {
+			conversationID = conv.ID
+		}
+	}
+
+	events <- domain.RAGStreamEvent{
+		Type:           "sources",
+		Sources:        articles,
+		SourceCount:    len(articles),
+		ConversationID: conversationID,
+	}
+
+	// Phase 2: Streaming answer generation
+
+	tokens := make(chan string, 64)
+	var fullAnswer string
+	var streamErr error
+
+	go func() {
+		fullAnswer, streamErr = s.aiClient.GenerateRAGAnswerStream(ctx, systemPrompt, userPrompt, tokens)
+	}()
+
+	for token := range tokens {
+		select {
+		case events <- domain.RAGStreamEvent{Type: "delta", Text: token}:
+		case <-ctx.Done():
+			return
+		}
+	}
+
+	if streamErr != nil {
+		slog.Error("rag stream failed", "user_id", userID, "error", streamErr)
+		events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "answer generation failed"}
+		return
+	}
+
+	// Phase 3: Post-processing
+
+	citedIndices := extractCitedIndices(fullAnswer)
+
+	followups, err := s.aiClient.GenerateFollowups(ctx, question, fullAnswer)
+	if err != nil {
+		slog.Warn("failed to generate followups", "error", err)
+		followups = []string{}
+	}
+
+	sources := mapCitedSources(citedIndices, articles)
+	if _, saveErr := s.saveConversation(ctx, userID, conversationID, question, &client.RAGResult{
+		Answer:              fullAnswer,
+		CitedIndices:        citedIndices,
+		FollowupSuggestions: followups,
+	}, sources); saveErr != nil {
+		slog.Error("failed to save rag conversation", "user_id", userID, "error", saveErr)
+	}
+
+	if incrErr := s.incrementQuotaIfFree(ctx, userID); incrErr != nil {
+		slog.Error("failed to increment rag quota", "user_id", userID, "error", incrErr)
+	}
+
+	events <- domain.RAGStreamEvent{
+		Type:                "done",
+		CitedIndices:        citedIndices,
+		FollowupSuggestions: followups,
+	}
 }
 
 // checkQuota verifies the user hasn't exceeded their monthly RAG quota.
