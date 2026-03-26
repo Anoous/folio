@@ -1076,3 +1076,16 @@ wc -l ios/Folio/Domain/Models/Article+Actions.swift
 wc -l server/internal/worker/crawl_handler.go
 ```
 Expected: HomeView ~350 lines (was 865), SettingsView ~520 (was 753), Article+Actions smaller, crawl_handler ~440 (was 484).
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | 7 proposals, 11 accepted, 3 deferred |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 6 issues, 5 critical gaps |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+
+- **OUTSIDE VOICE:** Codex ran twice (CEO + Eng reviews). Key insights: deletion is two workflows not one, ai.go needs feature-based split, UserFacingError/ViewState need concrete VM migration.
+- **UNRESOLVED:** 0
+- **VERDICT:** CEO + ENG CLEARED — ready to implement.
