@@ -351,53 +351,88 @@ struct ReaderView: View {
 
     // MARK: - Screenshot / Voice Content
 
+    @State private var screenshotImage: UIImage?
+
     @ViewBuilder
     private var screenshotContentView: some View {
+        let hasOCRText = article.markdownContent != nil
+            && !article.markdownContent!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
         VStack(alignment: .leading, spacing: Spacing.md) {
-            // Screenshot image thumbnail (only for .screenshot with localImagePath)
-            if article.sourceType == .screenshot,
-               let localPath = article.localImagePath,
-               let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) {
-                let imageURL = containerURL.appendingPathComponent(localPath)
-                if let uiImage = UIImage(contentsOfFile: imageURL.path) {
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 80, height: 120)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .onTapGesture {
-                                tappedImageURL = imageURL
-                            }
-
-                        Button {
-                            tappedImageURL = imageURL
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text("查看原图")
-                                    .font(.system(size: 14))
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 12))
-                            }
-                            .foregroundStyle(Color.folio.accent)
+            // Screenshot image (large display for .screenshot)
+            if article.sourceType == .screenshot, let localPath = article.localImagePath {
+                if let image = screenshotImage {
+                    let imageURL = screenshotImageURL(localPath)
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity, maxHeight: hasOCRText ? 300 : 400)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .onTapGesture { tappedImageURL = imageURL }
+                        .accessibilityLabel(hasOCRText
+                            ? String(article.markdownContent!.prefix(200))
+                            : String(localized: "reader.screenshot", defaultValue: "Screenshot"))
+                        .padding(.horizontal, Spacing.screenPadding)
+                } else {
+                    // Placeholder while loading
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.folio.separator.opacity(0.3))
+                        .frame(height: 200)
+                        .overlay {
+                            Image(systemName: "photo")
+                                .font(.system(size: 32))
+                                .foregroundStyle(Color.folio.textQuaternary)
                         }
-
-                        Spacer()
-                    }
-                    .padding(.horizontal, Spacing.screenPadding)
+                        .padding(.horizontal, Spacing.screenPadding)
                 }
             }
 
             // Text content (OCR text or voice transcription)
-            if let content = article.markdownContent, !content.isEmpty {
-                Text(content)
+            if hasOCRText {
+                Text(article.markdownContent!)
                     .font(Typography.body)
                     .foregroundStyle(Color.folio.textPrimary)
                     .lineSpacing(17 * 0.65)
                     .padding(.horizontal, Spacing.screenPadding)
                     .textSelection(.enabled)
+            } else if article.sourceType == .screenshot {
+                // No OCR text empty state
+                VStack(spacing: 8) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 24))
+                        .foregroundStyle(Color.folio.textQuaternary)
+                    Text(String(localized: "reader.noOCRText", defaultValue: "No text detected"))
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.folio.textTertiary)
+                    Text(String(localized: "reader.tapToViewImage", defaultValue: "Tap image to view full size"))
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.folio.textQuaternary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Spacing.lg)
+                .accessibilityLabel(String(localized: "reader.noOCRText", defaultValue: "No text detected"))
             }
         }
+        .task {
+            guard article.sourceType == .screenshot,
+                  let localPath = article.localImagePath else { return }
+            screenshotImage = await loadLocalImage(relativePath: localPath)
+        }
+    }
+
+    private func screenshotImageURL(_ localPath: String) -> URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier)?
+            .appendingPathComponent(localPath)
+    }
+
+    private func loadLocalImage(relativePath: String) async -> UIImage? {
+        await Task.detached {
+            guard let containerURL = FileManager.default.containerURL(
+                forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier
+            ) else { return nil }
+            let fileURL = containerURL.appendingPathComponent(relativePath)
+            return UIImage(contentsOfFile: fileURL.path)
+        }.value
     }
 
     // MARK: - Insight Panel

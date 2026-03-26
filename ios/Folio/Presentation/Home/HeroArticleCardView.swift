@@ -5,8 +5,33 @@ struct HeroArticleCardView: View {
 
     let article: Article
 
+    @State private var screenshotImage: UIImage?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // 0. Screenshot thumbnail (if applicable)
+            if article.sourceType == .screenshot, let _ = article.localImagePath {
+                if let image = screenshotImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(maxWidth: .infinity, maxHeight: 140)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .accessibilityLabel(String(localized: "home.screenshotPreview", defaultValue: "Screenshot preview"))
+                        .padding(.bottom, 12)
+                } else {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.folio.separator.opacity(0.3))
+                        .frame(height: 140)
+                        .overlay {
+                            Image(systemName: "photo")
+                                .font(.system(size: 24))
+                                .foregroundStyle(Color.folio.textQuaternary)
+                        }
+                        .padding(.bottom, 12)
+                }
+            }
+
             // 1. Title
             HStack(spacing: 6) {
                 if article.sourceType == .voice {
@@ -54,6 +79,17 @@ struct HeroArticleCardView: View {
             .foregroundStyle(Color.folio.textTertiary)
         }
         .padding(.bottom, 24)
+        .task {
+            guard article.sourceType == .screenshot,
+                  let localPath = article.localImagePath,
+                  let containerURL = FileManager.default.containerURL(
+                    forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier
+                  ) else { return }
+            let fileURL = containerURL.appendingPathComponent(localPath)
+            screenshotImage = await Task.detached {
+                UIImage(contentsOfFile: fileURL.path)
+            }.value
+        }
     }
 
     private var dotSeparator: some View {
