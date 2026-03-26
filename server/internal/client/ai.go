@@ -544,7 +544,7 @@ func (d *DeepSeekAnalyzer) GenerateFollowups(ctx context.Context, question, answ
 	}
 
 	systemPrompt := `基于用户的问题和回答，生成 2 个有深度的跟进问题。
-输出 JSON 数组，不要 markdown 代码块：["问题1", "问题2"]`
+输出 JSON 对象：{"suggestions": ["问题1", "问题2"]}`
 
 	userPrompt := fmt.Sprintf("用户问题：%s\n\n回答：%s", SanitizeField(question), SanitizeField(answer))
 

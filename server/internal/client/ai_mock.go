@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -310,11 +311,21 @@ func (m *MockAnalyzer) RerankArticles(_ context.Context, _ string, candidates []
 }
 
 // GenerateRAGAnswerStream simulates streaming by sending the mock answer character by character.
-func (m *MockAnalyzer) GenerateRAGAnswerStream(_ context.Context, _, _ string, tokens chan<- string) (string, error) {
+// Adds 30ms delay between tokens to simulate real LLM token generation rate.
+func (m *MockAnalyzer) GenerateRAGAnswerStream(ctx context.Context, _, _ string, tokens chan<- string) (string, error) {
 	defer close(tokens)
 	answer := "这是一个模拟回答。基于你的收藏¹，技术趋势正在改变²。"
 	for _, r := range answer {
-		tokens <- string(r)
+		select {
+		case tokens <- string(r):
+		case <-ctx.Done():
+			return string([]rune(answer)[:0]), ctx.Err()
+		}
+		select {
+		case <-time.After(30 * time.Millisecond):
+		case <-ctx.Done():
+			return answer, ctx.Err()
+		}
 	}
 	return answer, nil
 }

@@ -168,11 +168,15 @@ func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversa
 		}
 	}
 
-	events <- domain.RAGStreamEvent{
+	select {
+	case events <- domain.RAGStreamEvent{
 		Type:           "sources",
 		Sources:        articles,
 		SourceCount:    len(articles),
 		ConversationID: conversationID,
+	}:
+	case <-ctx.Done():
+		return
 	}
 
 	// Phase 2: Streaming answer generation
@@ -195,7 +199,10 @@ func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversa
 
 	if streamErr != nil {
 		slog.Error("rag stream failed", "user_id", userID, "error", streamErr)
-		events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "answer generation failed"}
+		select {
+		case events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "answer generation failed"}:
+		case <-ctx.Done():
+		}
 		return
 	}
 
@@ -222,10 +229,13 @@ func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversa
 		slog.Error("failed to increment rag quota", "user_id", userID, "error", incrErr)
 	}
 
-	events <- domain.RAGStreamEvent{
+	select {
+	case events <- domain.RAGStreamEvent{
 		Type:                "done",
 		CitedIndices:        citedIndices,
 		FollowupSuggestions: followups,
+	}:
+	case <-ctx.Done():
 	}
 }
 
