@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -307,6 +308,31 @@ func (m *MockAnalyzer) RerankArticles(_ context.Context, _ string, candidates []
 		results = append(results, RerankResult{Index: c.Index, Relevance: "high"})
 	}
 	return results, nil
+}
+
+// GenerateRAGAnswerStream simulates streaming by sending the mock answer character by character.
+// Adds 30ms delay between tokens to simulate real LLM token generation rate.
+func (m *MockAnalyzer) GenerateRAGAnswerStream(ctx context.Context, _, _ string, tokens chan<- string) (string, error) {
+	defer close(tokens)
+	answer := "这是一个模拟回答。基于你的收藏¹，技术趋势正在改变²。"
+	for _, r := range answer {
+		select {
+		case tokens <- string(r):
+		case <-ctx.Done():
+			return string([]rune(answer)[:0]), ctx.Err()
+		}
+		select {
+		case <-time.After(30 * time.Millisecond):
+		case <-ctx.Done():
+			return answer, ctx.Err()
+		}
+	}
+	return answer, nil
+}
+
+// GenerateFollowups returns deterministic follow-up suggestions without calling any API.
+func (m *MockAnalyzer) GenerateFollowups(_ context.Context, _, _ string) ([]string, error) {
+	return []string{"还有什么相关的？", "能展开说说吗？"}, nil
 }
 
 // SelectRelatedArticles returns the first 3 candidates as related.

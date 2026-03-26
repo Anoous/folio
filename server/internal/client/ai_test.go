@@ -227,6 +227,32 @@ func TestMockAnalyzer_SelectRelatedArticles(t *testing.T) {
 	}
 }
 
+func TestGenerateFollowups_MockReturnsNonEmpty(t *testing.T) {
+	mock := &MockAnalyzer{}
+	followups, err := mock.GenerateFollowups(context.Background(), "什么是 RAG？", "RAG 是...")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(followups) == 0 {
+		t.Error("expected non-empty followup suggestions from mock")
+	}
+}
+
+func TestGenerateRAGAnswerStream_MockStreamsTokens(t *testing.T) {
+	mock := &MockAnalyzer{}
+	tokens := make(chan string, 100)
+	answer, err := mock.GenerateRAGAnswerStream(context.Background(), "system", "user", tokens)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if answer == "" {
+		t.Error("expected non-empty answer")
+	}
+	if len(answer) < 5 {
+		t.Errorf("answer too short: %q", answer)
+	}
+}
+
 func TestMockAnalyzer_CategoryFromURL(t *testing.T) {
 	tests := []struct {
 		source   string

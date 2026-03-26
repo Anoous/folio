@@ -75,15 +75,20 @@ struct HomeSearchView: View {
             if !trimmed.isEmpty {
                 if viewModel.isRAGQuery(trimmed) {
                     // RAG mode
-                    if viewModel.ragIsLoading {
+                    if viewModel.ragIsStreaming && viewModel.ragSources == nil && viewModel.ragPartialAnswer.isEmpty {
                         RAGLoadingView()
                     } else if let error = viewModel.ragError {
                         RAGErrorView(errorType: error, onRetry: { viewModel.submitRAGQuery(trimmed) })
-                    } else if let response = viewModel.ragResponse {
+                    } else if viewModel.ragSources != nil || !viewModel.ragPartialAnswer.isEmpty {
                         ScrollView {
                             RAGAnswerView(
                                 thread: viewModel.ragThread,
-                                response: response,
+                                partialAnswer: viewModel.ragPartialAnswer,
+                                sources: viewModel.ragSources?.sources ?? [],
+                                sourceCount: viewModel.ragSources?.sourceCount ?? 0,
+                                citedIndices: viewModel.ragCitedIndices,
+                                followupSuggestions: viewModel.ragFollowupSuggestions,
+                                isStreaming: viewModel.ragIsStreaming,
                                 onSourceTap: { articleId in
                                     let repo = ArticleRepository(context: modelContext)
                                     if let article = try? repo.fetchByServerID(articleId) {
@@ -92,12 +97,15 @@ struct HomeSearchView: View {
                                 },
                                 onFollowup: { question in
                                     viewModel.submitFollowup(question)
+                                },
+                                onStop: {
+                                    viewModel.ragStreamTask?.cancel()
                                 }
                             )
                         }
                         .scrollDismissesKeyboard(.interactively)
                     } else {
-                        Spacer() // RAG not yet triggered
+                        Spacer()
                     }
                 } else if let svm = searchViewModel {
                     // FTS mode (existing search results)

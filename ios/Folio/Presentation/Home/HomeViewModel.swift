@@ -337,11 +337,15 @@ final class HomeViewModel {
 
     // MARK: - RAG State
 
-    var ragResponse: RAGQueryResponse?
-    var ragIsLoading = false
+    var ragPartialAnswer: String = ""
+    var ragIsStreaming: Bool = false
+    var ragSources: RAGSourcesPayload?
+    var ragCitedIndices: [Int] = []
+    var ragFollowupSuggestions: [String] = []
     var ragError: RAGErrorView.ErrorType?
     var ragConversationId: String?
-    var ragThread: [(question: String, response: RAGQueryResponse)] = []
+    var ragThread: [RAGThreadEntry] = []
+    var ragStreamTask: Task<Void, Never>?
 
     func isRAGQuery(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -352,11 +356,9 @@ final class HomeViewModel {
         return indicators.contains { trimmed.contains($0) }
     }
 
-    private var ragDebounceTask: Task<Void, Never>?
-
     func submitRAGQuery(_ question: String) {
-        ragDebounceTask?.cancel()
-        ragDebounceTask = Task {
+        ragStreamTask?.cancel()
+        ragStreamTask = Task {
             try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
             await executeRAGQuery(question)
@@ -365,45 +367,77 @@ final class HomeViewModel {
 
     @MainActor
     private func executeRAGQuery(_ question: String) async {
-        ragIsLoading = true
+        ragIsStreaming = true
+        ragPartialAnswer = ""
+        ragSources = nil
         ragError = nil
+        ragCitedIndices = []
+        ragFollowupSuggestions = []
+
         do {
-            let response = try await apiClient.ragQuery(
+            let stream = apiClient.ragQueryStream(
                 question: question,
                 conversationId: ragConversationId
             )
-            ragResponse = response
-            ragConversationId = response.conversationId
-        } catch let error as APIError {
-            if case .quotaExceeded = error {
-                ragError = .quota
-            } else {
-                ragError = .error
+            for try await event in stream {
+                switch event {
+                case .sources(let payload):
+                    ragSources = payload
+                    ragConversationId = payload.conversationId
+                case .delta(let text):
+                    ragPartialAnswer += text
+                case .done(let payload):
+                    ragCitedIndices = payload.citedIndices
+                    ragFollowupSuggestions = payload.followupSuggestions
+                case .error(let err):
+                    switch err.code {
+                    case "quota_exceeded":
+                        ragError = .quota
+                    case "no_articles":
+                        ragError = .noArticles
+                    default:
+                        ragError = .error
+                    }
+                }
             }
-            ragResponse = nil
         } catch {
-            ragError = .error
-            ragResponse = nil
+            if !Task.isCancelled {
+                if ragPartialAnswer.isEmpty {
+                    ragError = .error
+                }
+            }
         }
-        ragIsLoading = false
+        ragIsStreaming = false
     }
 
     func submitFollowup(_ question: String) {
-        // Save current response to thread before making new query
-        if let current = ragResponse {
-            ragThread.append((question: question, response: current))
+        if let sources = ragSources, !ragPartialAnswer.isEmpty {
+            ragThread.append(RAGThreadEntry(
+                question: question,
+                answer: ragPartialAnswer,
+                sources: sources.sources,
+                sourceCount: sources.sourceCount,
+                citedIndices: ragCitedIndices
+            ))
         }
-        ragResponse = nil
+        ragPartialAnswer = ""
+        ragSources = nil
+        ragCitedIndices = []
+        ragFollowupSuggestions = []
         submitRAGQuery(question)
     }
 
     func clearRAG() {
-        ragResponse = nil
+        ragPartialAnswer = ""
+        ragSources = nil
         ragConversationId = nil
         ragThread = []
         ragError = nil
-        ragIsLoading = false
-        ragDebounceTask?.cancel()
+        ragIsStreaming = false
+        ragCitedIndices = []
+        ragFollowupSuggestions = []
+        ragStreamTask?.cancel()
+        ragStreamTask = nil
     }
 
     // MARK: - Private

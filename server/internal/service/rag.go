@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -111,6 +113,130 @@ func (s *RAGService) Query(ctx context.Context, userID, question, conversationID
 		FollowupSuggestions: ragResult.FollowupSuggestions,
 		ConversationID:      conversationID,
 	}, nil
+}
+
+// QueryStream runs the three-phase RAG pipeline, emitting events to the channel.
+func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversationID string, events chan<- domain.RAGStreamEvent) {
+	defer close(events)
+
+	// Phase 1: Retrieval
+
+	if err := s.checkQuota(ctx, userID); err != nil {
+		if errors.Is(err, ErrRAGQuotaExceeded) {
+			events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "quota_exceeded", ErrorMessage: "monthly RAG quota exceeded"}
+		} else {
+			events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "internal error"}
+		}
+		return
+	}
+
+	articles, err := s.ragRepo.LoadArticleSummaries(ctx, userID)
+	if err != nil {
+		events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "internal error"}
+		return
+	}
+	if len(articles) == 0 {
+		events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "no_articles", ErrorMessage: "no articles saved yet"}
+		return
+	}
+
+	articles = s.applyTokenBudget(ctx, userID, question, articles)
+
+	var history []domain.RAGMessage
+	if conversationID != "" {
+		history, err = s.ragRepo.GetConversationMessages(ctx, conversationID, ragHistoryLimit)
+		if err != nil {
+			slog.Warn("failed to load conversation history", "conversation_id", conversationID, "error", err)
+			history = nil
+		}
+	}
+
+	question = strings.TrimSpace(client.SanitizeField(question))
+	systemPrompt := buildRAGStreamSystemPrompt()
+	userPrompt := buildRAGUserPrompt(articles, history, question)
+
+	// Create conversation early so we can send conversation_id in sources event
+	if conversationID == "" {
+		conv := &domain.RAGConversation{
+			UserID: userID,
+			Title:  truncateStringPtr(question, 50),
+		}
+		if err := s.ragRepo.CreateConversation(ctx, conv); err != nil {
+			slog.Error("failed to create conversation", "error", err)
+		} else {
+			conversationID = conv.ID
+		}
+	}
+
+	select {
+	case events <- domain.RAGStreamEvent{
+		Type:           "sources",
+		Sources:        articles,
+		SourceCount:    len(articles),
+		ConversationID: conversationID,
+	}:
+	case <-ctx.Done():
+		return
+	}
+
+	// Phase 2: Streaming answer generation
+
+	tokens := make(chan string, 64)
+	var fullAnswer string
+	var streamErr error
+
+	go func() {
+		fullAnswer, streamErr = s.aiClient.GenerateRAGAnswerStream(ctx, systemPrompt, userPrompt, tokens)
+	}()
+
+	for token := range tokens {
+		select {
+		case events <- domain.RAGStreamEvent{Type: "delta", Text: token}:
+		case <-ctx.Done():
+			return
+		}
+	}
+
+	if streamErr != nil {
+		slog.Error("rag stream failed", "user_id", userID, "error", streamErr)
+		select {
+		case events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "answer generation failed"}:
+		case <-ctx.Done():
+		}
+		return
+	}
+
+	// Phase 3: Post-processing
+
+	citedIndices := extractCitedIndices(fullAnswer)
+
+	followups, err := s.aiClient.GenerateFollowups(ctx, question, fullAnswer)
+	if err != nil {
+		slog.Warn("failed to generate followups", "error", err)
+		followups = []string{}
+	}
+
+	sources := mapCitedSources(citedIndices, articles)
+	if _, saveErr := s.saveConversation(ctx, userID, conversationID, question, &client.RAGResult{
+		Answer:              fullAnswer,
+		CitedIndices:        citedIndices,
+		FollowupSuggestions: followups,
+	}, sources); saveErr != nil {
+		slog.Error("failed to save rag conversation", "user_id", userID, "error", saveErr)
+	}
+
+	if incrErr := s.incrementQuotaIfFree(ctx, userID); incrErr != nil {
+		slog.Error("failed to increment rag quota", "user_id", userID, "error", incrErr)
+	}
+
+	select {
+	case events <- domain.RAGStreamEvent{
+		Type:                "done",
+		CitedIndices:        citedIndices,
+		FollowupSuggestions: followups,
+	}:
+	case <-ctx.Done():
+	}
 }
 
 // checkQuota verifies the user hasn't exceeded their monthly RAG quota.
@@ -286,6 +412,63 @@ func buildRAGUserPrompt(articles []domain.RAGSource, history []domain.RAGMessage
 	fmt.Fprintf(&b, "\n用户问题：%s", question)
 
 	return b.String()
+}
+
+// extractCitedIndices extracts 1-based citation indices from answer text.
+// Matches Unicode superscript digits (¹²³⁴⁵⁶⁷⁸⁹) and bracket citations ([1], [12]).
+// Returns deduplicated, sorted indices.
+func extractCitedIndices(answer string) []int {
+	seen := make(map[int]bool)
+	var indices []int
+
+	superscripts := map[rune]int{
+		'\u00B9': 1, '\u00B2': 2, '\u00B3': 3,
+		'\u2074': 4, '\u2075': 5, '\u2076': 6,
+		'\u2077': 7, '\u2078': 8, '\u2079': 9,
+	}
+
+	runes := []rune(answer)
+	for i := 0; i < len(runes); i++ {
+		if idx, ok := superscripts[runes[i]]; ok {
+			if !seen[idx] {
+				seen[idx] = true
+				indices = append(indices, idx)
+			}
+			continue
+		}
+
+		if runes[i] == '[' && i+2 < len(runes) {
+			j := i + 1
+			num := 0
+			for j < len(runes) && runes[j] >= '0' && runes[j] <= '9' {
+				num = num*10 + int(runes[j]-'0')
+				j++
+			}
+			if j > i+1 && j < len(runes) && runes[j] == ']' && num > 0 {
+				if !seen[num] {
+					seen[num] = true
+					indices = append(indices, num)
+				}
+				i = j
+			}
+		}
+	}
+
+	slices.Sort(indices)
+	return indices
+}
+
+// buildRAGStreamSystemPrompt returns the system prompt for streaming RAG queries.
+// Unlike buildRAGSystemPrompt, this produces plain text (not JSON) for streaming.
+func buildRAGStreamSystemPrompt() string {
+	return `你是用户的个人知识助手。以下是用户收藏的文章摘要列表。
+基于且仅基于这些文章回答用户的问题。
+
+规则：
+1. 只基于用户的收藏回答，不编造内容
+2. 在引用处用上标数字标注对应文章编号，如 ¹ ² ³
+3. 回答风格：简洁、有洞察力、直击核心。对核心观点用 **加粗** 强调
+4. 如果收藏中没有相关内容，回答"你的收藏中没有找到与此相关的内容。"`
 }
 
 // extractAnswerFromContent tries to parse stored assistant content as JSON and extract

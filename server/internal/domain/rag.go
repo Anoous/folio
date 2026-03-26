@@ -37,3 +37,24 @@ type RAGConversation struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
+
+// RAGStreamEvent is an event emitted by the streaming RAG pipeline.
+type RAGStreamEvent struct {
+	Type string // "sources" | "delta" | "done" | "error"
+
+	// sources event fields
+	Sources        []RAGSource
+	SourceCount    int
+	ConversationID string
+
+	// delta event field
+	Text string
+
+	// done event fields
+	CitedIndices        []int
+	FollowupSuggestions []string
+
+	// error event fields
+	ErrorCode    string
+	ErrorMessage string
+}
