@@ -3,34 +3,55 @@ import SwiftUI
 // MARK: - RAGAnswerView
 
 struct RAGAnswerView: View {
-    let thread: [(question: String, response: RAGQueryResponse)]
-    let response: RAGQueryResponse
+    let thread: [RAGThreadEntry]
+    let partialAnswer: String
+    let sources: [RAGSource]
+    let sourceCount: Int
+    let citedIndices: [Int]
+    let followupSuggestions: [String]
+    let isStreaming: Bool
     let onSourceTap: (String) -> Void
     let onFollowup: (String) -> Void
+    let onStop: () -> Void
 
     @State private var expandedSourceId: String?
     @State private var followupText = ""
     @State private var sourcesVisible = false
+    @State private var cursorOpacity: Double = 1.0
     @FocusState private var isFollowupFocused: Bool
+
+    private var citedSources: [RAGSource] {
+        if citedIndices.isEmpty { return [] }
+        return citedIndices.compactMap { idx in
+            let arrayIdx = idx - 1
+            guard arrayIdx >= 0, arrayIdx < sources.count else { return nil }
+            return sources[arrayIdx]
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // 0. Previous Q&A thread
             if !thread.isEmpty {
                 threadView
                     .padding(.bottom, 24)
             }
 
-            // 1. Badge
-            badgeView
-                .padding(.bottom, 16)
+            if sourceCount > 0 {
+                badgeView
+                    .padding(.bottom, 16)
+            }
 
-            // 2. Answer body
-            answerBodyView
-                .padding(.bottom, 24)
+            if !partialAnswer.isEmpty {
+                answerBodyView
+                    .padding(.bottom, isStreaming ? 16 : 24)
+            }
 
-            // 3. Sources section
-            if !response.sources.isEmpty {
+            if isStreaming {
+                stopButton
+                    .padding(.bottom, 24)
+            }
+
+            if !isStreaming && !citedSources.isEmpty {
                 sourcesSection
                     .padding(.bottom, 24)
                     .opacity(sourcesVisible ? 1 : 0)
@@ -42,14 +63,14 @@ struct RAGAnswerView: View {
                     }
             }
 
-            // 4. Follow-up suggestions
-            if !response.followupSuggestions.isEmpty {
+            if !isStreaming && !followupSuggestions.isEmpty {
                 followupSuggestionsSection
                     .padding(.bottom, 20)
             }
 
-            // 5. Follow-up input
-            followupInputView
+            if !isStreaming {
+                followupInputView
+            }
         }
         .padding(.horizontal, Spacing.screenPadding)
         .padding(.vertical, Spacing.lg)
@@ -59,21 +80,19 @@ struct RAGAnswerView: View {
 
     private var threadView: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(thread.enumerated()), id: \.offset) { _, pair in
-                // User question (gray left border)
+            ForEach(Array(thread.enumerated()), id: \.offset) { _, entry in
                 HStack(alignment: .top, spacing: 0) {
                     RoundedRectangle(cornerRadius: 1)
                         .fill(Color.folio.textQuaternary)
                         .frame(width: 2)
-                    Text(pair.question)
+                    Text(entry.question)
                         .font(.system(size: 15))
                         .foregroundStyle(Color.folio.textTertiary)
                         .padding(.leading, 12)
                 }
                 .padding(.bottom, 12)
 
-                // AI answer (answer text only — no sources repeat)
-                Text(pair.response.answer)
+                Text(entry.answer)
                     .font(Font.custom("LXGWWenKaiTC-Regular", size: 16))
                     .foregroundStyle(Color.folio.textPrimary)
                     .lineSpacing(16 * 0.75)
@@ -85,7 +104,7 @@ struct RAGAnswerView: View {
     // MARK: - Badge
 
     private var badgeView: some View {
-        Text("\u{2726} \u{57FA}\u{4E8E} \(response.sourceCount) \u{7BC7}\u{6536}\u{85CF}")
+        Text("\u{2726} 基于 \(sourceCount) 篇收藏")
             .font(.system(size: 11, weight: .medium))
             .tracking(1)
             .textCase(.uppercase)
@@ -95,10 +114,178 @@ struct RAGAnswerView: View {
     // MARK: - Answer Body
 
     private var answerBodyView: some View {
-        parseAnswerText(response.answer)
-            .font(Font.custom("LXGWWenKaiTC-Regular", size: 16))
-            .foregroundStyle(Color.folio.textPrimary)
-            .lineSpacing(16 * 0.75)
+        HStack(alignment: .bottom, spacing: 0) {
+            parseAnswerText(partialAnswer)
+                .font(Font.custom("LXGWWenKaiTC-Regular", size: 16))
+                .foregroundStyle(Color.folio.textPrimary)
+                .lineSpacing(16 * 0.75)
+
+            if isStreaming {
+                Text("|")
+                    .font(Font.custom("LXGWWenKaiTC-Regular", size: 16))
+                    .foregroundStyle(Color.folio.accent)
+                    .opacity(cursorOpacity)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+                            cursorOpacity = 0.0
+                        }
+                    }
+                    .onDisappear {
+                        cursorOpacity = 1.0
+                    }
+            }
+        }
+    }
+
+    // MARK: - Stop Button
+
+    private var stopButton: some View {
+        HStack {
+            Spacer()
+            Button {
+                onStop()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 10))
+                    Text("停止生成")
+                        .font(.system(size: 14))
+                }
+                .foregroundStyle(Color.folio.textSecondary)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 16)
+                .background(Capsule().strokeBorder(Color.folio.textQuaternary, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+    }
+
+    // MARK: - Sources Section
+
+    private var sourcesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("来源文章")
+                .font(.system(size: 14))
+                .foregroundStyle(Color.folio.textSecondary)
+                .padding(.top, 20)
+
+            ForEach(citedSources, id: \.articleId) { source in
+                sourceRow(source)
+            }
+        }
+    }
+
+    private func sourceRow(_ source: RAGSource) -> some View {
+        Button {
+            if expandedSourceId == source.articleId {
+                onSourceTap(source.articleId)
+            } else {
+                withAnimation(Motion.quick) {
+                    expandedSourceId = source.articleId
+                }
+            }
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Circle()
+                    .fill(Color.folio.accent)
+                    .frame(width: 4, height: 4)
+                    .padding(.top, 7)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(source.title)
+                        .font(.system(size: 15, design: .serif))
+                        .foregroundStyle(Color.folio.textPrimary)
+                        .multilineTextAlignment(.leading)
+
+                    Text(sourceMetaText(source))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.folio.textTertiary)
+
+                    if expandedSourceId == source.articleId,
+                       let summary = source.summary, !summary.isEmpty {
+                        Text(summary)
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.folio.textSecondary)
+                            .lineSpacing(4)
+                            .padding(.top, 8)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func sourceMetaText(_ source: RAGSource) -> String {
+        var parts: [String] = []
+        if let siteName = source.siteName, !siteName.isEmpty {
+            parts.append(siteName)
+        }
+        parts.append(formatSourceDate(source.createdAt))
+        return parts.joined(separator: " \u{00B7} ")
+    }
+
+    // MARK: - Follow-up Suggestions
+
+    private var followupSuggestionsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(followupSuggestions, id: \.self) { suggestion in
+                Button {
+                    onFollowup(suggestion)
+                } label: {
+                    Text("→ \(suggestion)")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Color.folio.accent)
+                        .multilineTextAlignment(.leading)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: - Follow-up Input
+
+    private var followupInputView: some View {
+        HStack(spacing: 10) {
+            TextField("继续提问…", text: $followupText)
+                .font(.system(size: 15))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.folio.echoBg)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .focused($isFollowupFocused)
+                .onSubmit {
+                    submitFollowup()
+                }
+
+            Button {
+                submitFollowup()
+            } label: {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        Circle()
+                            .fill(followupText.trimmingCharacters(in: .whitespaces).isEmpty
+                                  ? Color.folio.accent.opacity(0.4)
+                                  : Color.folio.accent)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(followupText.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func submitFollowup() {
+        let trimmed = followupText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        followupText = ""
+        isFollowupFocused = false
+        onFollowup(trimmed)
     }
 
     /// Parses answer text, rendering **bold** and superscript citations.
@@ -195,137 +382,10 @@ struct RAGAnswerView: View {
         return result
     }
 
-    // MARK: - Sources Section
-
-    private var sourcesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("\u{6765}\u{6E90}\u{6587}\u{7AE0}")
-                .font(.system(size: 14))
-                .foregroundStyle(Color.folio.textSecondary)
-                .padding(.top, 20)
-
-            ForEach(response.sources, id: \.articleId) { source in
-                sourceRow(source)
-            }
-        }
-    }
-
-    private func sourceRow(_ source: RAGSource) -> some View {
-        Button {
-            if expandedSourceId == source.articleId {
-                onSourceTap(source.articleId)
-            } else {
-                withAnimation(Motion.quick) {
-                    expandedSourceId = source.articleId
-                }
-            }
-        } label: {
-            HStack(alignment: .top, spacing: 10) {
-                Circle()
-                    .fill(Color.folio.accent)
-                    .frame(width: 4, height: 4)
-                    .padding(.top, 7)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(source.title)
-                        .font(.system(size: 15, design: .serif))
-                        .foregroundStyle(Color.folio.textPrimary)
-                        .multilineTextAlignment(.leading)
-
-                    Text(sourceMetaText(source))
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.folio.textTertiary)
-
-                    if expandedSourceId == source.articleId,
-                       let summary = source.summary, !summary.isEmpty {
-                        Text(summary)
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color.folio.textSecondary)
-                            .lineSpacing(4)
-                            .padding(.top, 8)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-                }
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func sourceMetaText(_ source: RAGSource) -> String {
-        var parts: [String] = []
-        if let siteName = source.siteName, !siteName.isEmpty {
-            parts.append(siteName)
-        }
-        parts.append(formatSourceDate(source.createdAt))
-        return parts.joined(separator: " \u{00B7} ")
-    }
-
-    // MARK: - Follow-up Suggestions
-
-    private var followupSuggestionsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(response.followupSuggestions, id: \.self) { suggestion in
-                Button {
-                    onFollowup(suggestion)
-                } label: {
-                    Text("\u{2192} \(suggestion)")
-                        .font(.system(size: 15))
-                        .foregroundStyle(Color.folio.accent)
-                        .multilineTextAlignment(.leading)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    // MARK: - Follow-up Input
-
-    private var followupInputView: some View {
-        HStack(spacing: 10) {
-            TextField("\u{7EE7}\u{7EED}\u{63D0}\u{95EE}\u{2026}", text: $followupText)
-                .font(.system(size: 15))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.folio.echoBg)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .focused($isFollowupFocused)
-                .onSubmit {
-                    submitFollowup()
-                }
-
-            Button {
-                submitFollowup()
-            } label: {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle()
-                            .fill(followupText.trimmingCharacters(in: .whitespaces).isEmpty
-                                  ? Color.folio.accent.opacity(0.4)
-                                  : Color.folio.accent)
-                    )
-            }
-            .buttonStyle(.plain)
-            .disabled(followupText.trimmingCharacters(in: .whitespaces).isEmpty)
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func submitFollowup() {
-        let trimmed = followupText.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        followupText = ""
-        isFollowupFocused = false
-        onFollowup(trimmed)
-    }
-
     private static let sourceDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M\u{6708}d\u{65E5}\u{6536}\u{85CF}"
+        f.dateFormat = "M月d日收藏"
         return f
     }()
 
@@ -343,7 +403,7 @@ struct RAGLoadingView: View {
         HStack(spacing: 8) {
             Text("\u{2726}")
                 .foregroundStyle(Color.folio.accent)
-            Text("\u{6B63}\u{5728}\u{601D}\u{8003}...")
+            Text("正在思考...")
                 .foregroundStyle(Color.folio.textSecondary)
         }
         .font(.system(size: 15))
@@ -402,11 +462,11 @@ struct RAGErrorView: View {
     private var message: String {
         switch errorType {
         case .error:
-            return "\u{56DE}\u{7B54}\u{751F}\u{6210}\u{5931}\u{8D25}\u{FF0C}\u{8BF7}\u{91CD}\u{8BD5}\u{3002}"
+            return "回答生成失败，请重试。"
         case .quota:
-            return "\u{672C}\u{6708}\u{95EE}\u{7B54}\u{6B21}\u{6570}\u{5DF2}\u{7528}\u{5B8C}"
+            return "本月问答次数已用完"
         case .noArticles:
-            return "\u{5148}\u{6536}\u{85CF}\u{4E00}\u{4E9B}\u{6587}\u{7AE0}\u{518D}\u{6765}\u{63D0}\u{95EE}\u{5427}\u{3002}"
+            return "先收藏一些文章再来提问吧。"
         }
     }
 
@@ -414,9 +474,9 @@ struct RAGErrorView: View {
         switch errorType {
         case .error:
             guard let onRetry else { return nil }
-            return ("\u{91CD}\u{8BD5}", onRetry)
+            return ("重试", onRetry)
         case .quota:
-            return ("\u{5347}\u{7EA7} Pro", { /* handled by parent */ })
+            return ("升级 Pro", { /* handled by parent */ })
         case .noArticles:
             return nil
         }

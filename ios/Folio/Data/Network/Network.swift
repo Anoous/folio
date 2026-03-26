@@ -289,6 +289,77 @@ struct RAGSource: Codable {
     let relevance: Double
 }
 
+// MARK: - RAG Streaming DTOs
+
+enum RAGStreamEvent {
+    case sources(RAGSourcesPayload)
+    case delta(String)
+    case done(RAGDonePayload)
+    case error(RAGStreamError)
+}
+
+struct RAGSourcesPayload: Codable {
+    let sources: [RAGSource]
+    let sourceCount: Int
+    let conversationId: String
+}
+
+struct RAGDonePayload: Codable {
+    let citedIndices: [Int]
+    let followupSuggestions: [String]
+}
+
+struct RAGStreamError: Codable {
+    let code: String
+    let message: String
+}
+
+struct RAGThreadEntry {
+    let question: String
+    let answer: String
+    let sources: [RAGSource]
+    let sourceCount: Int
+    let citedIndices: [Int]
+}
+
+// MARK: - SSE Event Parser
+
+enum SSEEventParser {
+    static func parse(eventType: String, data: String) throws -> RAGStreamEvent {
+        let jsonData = Data(data.utf8)
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: dateString) { return date }
+            formatter.formatOptions = [.withInternetDateTime]
+            if let date = formatter.date(from: dateString) { return date }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(dateString)")
+        }
+
+        switch eventType {
+        case "sources":
+            let payload = try decoder.decode(RAGSourcesPayload.self, from: jsonData)
+            return .sources(payload)
+        case "delta":
+            struct DeltaPayload: Codable { let text: String }
+            let payload = try decoder.decode(DeltaPayload.self, from: jsonData)
+            return .delta(payload.text)
+        case "done":
+            let payload = try decoder.decode(RAGDonePayload.self, from: jsonData)
+            return .done(payload)
+        case "error":
+            let payload = try decoder.decode(RAGStreamError.self, from: jsonData)
+            return .error(payload)
+        default:
+            throw URLError(.cannotParseResponse)
+        }
+    }
+}
+
 // MARK: - Stats DTOs
 
 struct MonthlyStatsResponse: Codable {
@@ -724,6 +795,84 @@ final class APIClient: @unchecked Sendable {
     func ragQuery(question: String, conversationId: String? = nil) async throws -> RAGQueryResponse {
         let body = RAGQueryRequest(question: question, conversationId: conversationId)
         return try await request(method: "POST", path: "/api/v1/rag/query", body: body)
+    }
+
+    func ragQueryStream(question: String, conversationId: String? = nil) -> AsyncThrowingStream<RAGStreamEvent, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    let body = RAGQueryRequest(question: question, conversationId: conversationId)
+                    let bodyData = try encoder.encode(body)
+
+                    var urlRequest = URLRequest(url: baseURL.appendingPathComponent("/api/v1/rag/query/stream"))
+                    urlRequest.httpMethod = "POST"
+                    urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    if let token = keychainManager.accessToken {
+                        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    }
+                    urlRequest.httpBody = bodyData
+
+                    let (bytes, response) = try await session.bytes(for: urlRequest)
+
+                    guard let httpResponse = response as? HTTPURLResponse else {
+                        throw APIError.networkError("Invalid response")
+                    }
+
+                    if httpResponse.statusCode == 401 {
+                        try await refreshTokensInternal()
+                        if let newToken = keychainManager.accessToken {
+                            urlRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                        }
+                        let (retryBytes, retryResponse) = try await session.bytes(for: urlRequest)
+                        guard let retryHttp = retryResponse as? HTTPURLResponse, retryHttp.statusCode == 200 else {
+                            throw APIError.unauthorized
+                        }
+                        try await self.parseSSEStream(retryBytes, continuation: continuation)
+                        return
+                    }
+
+                    if httpResponse.statusCode != 200 {
+                        var bodyData = Data()
+                        for try await byte in bytes {
+                            bodyData.append(byte)
+                        }
+                        if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: bodyData) {
+                            throw APIError.serverMessage(errorResponse.error)
+                        }
+                        throw APIError.serverError(httpResponse.statusCode)
+                    }
+
+                    try await self.parseSSEStream(bytes, continuation: continuation)
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func parseSSEStream(
+        _ bytes: URLSession.AsyncBytes,
+        continuation: AsyncThrowingStream<RAGStreamEvent, Error>.Continuation
+    ) async throws {
+        var currentEventType: String?
+        var currentData: String?
+
+        for try await line in bytes.lines {
+            if line.hasPrefix("event: ") {
+                currentEventType = String(line.dropFirst(7))
+            } else if line.hasPrefix("data: ") {
+                currentData = String(line.dropFirst(6))
+            } else if line.isEmpty {
+                if let eventType = currentEventType, let data = currentData {
+                    let event = try SSEEventParser.parse(eventType: eventType, data: data)
+                    continuation.yield(event)
+                }
+                currentEventType = nil
+                currentData = nil
+            }
+        }
+
+        continuation.finish()
     }
 
     // MARK: - Subscription
