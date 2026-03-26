@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -446,6 +447,142 @@ func (d *DeepSeekAnalyzer) GenerateRAGAnswer(ctx context.Context, systemPrompt, 
 	}
 
 	return &result, nil
+}
+
+// GenerateRAGAnswerStream calls DeepSeek with stream=true and sends each token
+// through the tokens channel. Closes tokens when done. Returns the full answer.
+func (d *DeepSeekAnalyzer) GenerateRAGAnswerStream(ctx context.Context, systemPrompt, userPrompt string, tokens chan<- string) (string, error) {
+	defer close(tokens)
+
+	if d.apiKey == "" {
+		mockAnswer := "这是一个模拟回答。基于你的收藏¹，..."
+		for _, r := range mockAnswer {
+			tokens <- string(r)
+		}
+		return mockAnswer, nil
+	}
+
+	streamCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	reqBody := streamChatRequest{
+		Model: "deepseek-chat",
+		Messages: []chatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+		Temperature: 0.3,
+		MaxTokens:   2048,
+		Stream:      true,
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal stream request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(streamCtx, "POST", d.baseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create stream request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+d.apiKey)
+
+	resp, err := d.streamHTTPClient.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("stream request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("deepseek stream error: status %d, body: %s", resp.StatusCode, string(respBody))
+	}
+
+	var fullAnswer strings.Builder
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			break
+		}
+
+		var chunk streamChunk
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			continue
+		}
+		if len(chunk.Choices) == 0 {
+			continue
+		}
+
+		content := chunk.Choices[0].Delta.Content
+		if content != "" {
+			fullAnswer.WriteString(content)
+			select {
+			case tokens <- content:
+			case <-streamCtx.Done():
+				return fullAnswer.String(), streamCtx.Err()
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fullAnswer.String(), fmt.Errorf("read stream: %w", err)
+	}
+
+	return fullAnswer.String(), nil
+}
+
+// GenerateFollowups calls DeepSeek to generate 2 follow-up question suggestions.
+func (d *DeepSeekAnalyzer) GenerateFollowups(ctx context.Context, question, answer string) ([]string, error) {
+	if d.apiKey == "" {
+		return []string{"还有什么相关的？", "能展开说说吗？"}, nil
+	}
+
+	systemPrompt := `基于用户的问题和回答，生成 2 个有深度的跟进问题。
+输出 JSON 数组，不要 markdown 代码块：["问题1", "问题2"]`
+
+	userPrompt := fmt.Sprintf("用户问题：%s\n\n回答：%s", SanitizeField(question), SanitizeField(answer))
+
+	chatReq := chatRequest{
+		Model: "deepseek-chat",
+		Messages: []chatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+		Temperature:    0.3,
+		MaxTokens:      128,
+		ResponseFormat: &respFormat{Type: "json_object"},
+	}
+
+	respBody, err := d.doRequest(ctx, chatReq)
+	if err != nil {
+		return nil, fmt.Errorf("generate followups: %w", err)
+	}
+
+	var suggestions []string
+	if err := json.Unmarshal(respBody, &suggestions); err != nil {
+		var wrapper map[string]json.RawMessage
+		if err2 := json.Unmarshal(respBody, &wrapper); err2 == nil {
+			for _, v := range wrapper {
+				if err3 := json.Unmarshal(v, &suggestions); err3 == nil && len(suggestions) > 0 {
+					break
+				}
+			}
+		}
+	}
+
+	if len(suggestions) == 0 {
+		return []string{}, nil
+	}
+	if len(suggestions) > 2 {
+		suggestions = suggestions[:2]
+	}
+	return suggestions, nil
 }
 
 // doRequest sends a chat request and returns the raw content string from the first choice.

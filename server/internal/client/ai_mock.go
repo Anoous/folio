@@ -309,6 +309,21 @@ func (m *MockAnalyzer) RerankArticles(_ context.Context, _ string, candidates []
 	return results, nil
 }
 
+// GenerateRAGAnswerStream simulates streaming by sending the mock answer character by character.
+func (m *MockAnalyzer) GenerateRAGAnswerStream(_ context.Context, _, _ string, tokens chan<- string) (string, error) {
+	defer close(tokens)
+	answer := "这是一个模拟回答。基于你的收藏¹，技术趋势正在改变²。"
+	for _, r := range answer {
+		tokens <- string(r)
+	}
+	return answer, nil
+}
+
+// GenerateFollowups returns deterministic follow-up suggestions without calling any API.
+func (m *MockAnalyzer) GenerateFollowups(_ context.Context, _, _ string) ([]string, error) {
+	return []string{"还有什么相关的？", "能展开说说吗？"}, nil
+}
+
 // SelectRelatedArticles returns the first 3 candidates as related.
 func (m *MockAnalyzer) SelectRelatedArticles(_ context.Context, _, _ string, candidates []RerankCandidate) ([]RelatedResult, error) {
 	results := make([]RelatedResult, 0, len(candidates))
