@@ -68,36 +68,7 @@ struct HomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Custom top bar (prototype 01)
-            if !isSearchActive {
-                HStack {
-                    Text("页集")
-                        .font(Typography.v3PageTitle)
-                        .foregroundStyle(Color.folio.textPrimary)
-                    Spacer()
-                    HStack(spacing: 4) {
-                        Button { isSearchActive = true } label: {
-                            Circle().fill(Color.clear).frame(width: 38, height: 38)
-                                .overlay {
-                                    Image(systemName: "magnifyingglass")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundStyle(Color.folio.textSecondary)
-                                }
-                        }
-                        NavigationLink(value: HomeDestination.settings) {
-                            Circle().fill(Color.clear).frame(width: 38, height: 38)
-                                .overlay {
-                                    Image(systemName: "gearshape")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundStyle(Color.folio.textSecondary)
-                                }
-                        }
-                    }
-                }
-                .padding(.horizontal, Spacing.screenPadding)
-                .padding(.top, 6)
-            }
-
+            if !isSearchActive { topBar }
             mainContent
         }
         .safeAreaInset(edge: .bottom) {
@@ -168,6 +139,37 @@ struct HomeView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 handleScenePhaseChange(newPhase)
             }
+    }
+
+    // MARK: - Top Bar
+
+    private var topBar: some View {
+        HStack {
+            Text("页集")
+                .font(Typography.v3PageTitle)
+                .foregroundStyle(Color.folio.textPrimary)
+            Spacer()
+            HStack(spacing: 4) {
+                Button { isSearchActive = true } label: {
+                    Circle().fill(Color.clear).frame(width: 38, height: 38)
+                        .overlay {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(Color.folio.textSecondary)
+                        }
+                }
+                NavigationLink(value: HomeDestination.settings) {
+                    Circle().fill(Color.clear).frame(width: 38, height: 38)
+                        .overlay {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(Color.folio.textSecondary)
+                        }
+                }
+            }
+        }
+        .padding(.horizontal, Spacing.screenPadding)
+        .padding(.top, 6)
     }
 
     // MARK: - Main Content
@@ -485,8 +487,6 @@ struct HomeView: View {
 
     private func saveVoiceNote(_ transcribedText: String) {
         guard let result = saveService?.saveVoiceNote(transcribedText) else { return }
-        // Empty text returns .error with empty message — just silently return
-        if case .error(let msg) = result, msg.isEmpty { return }
         handleSaveResult(result)
         if case .success = result { viewModel?.fetchArticles() }
     }
