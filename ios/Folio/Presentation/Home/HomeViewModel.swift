@@ -147,7 +147,7 @@ final class HomeViewModel {
             await fetchMissingContent(needsDetail)
         } catch {
             FolioLogger.sync.error("refreshFromServer failed: \(error)")
-            syncError = error.localizedDescription
+            syncError = (error as? UserFacingError)?.userMessage ?? error.localizedDescription
         }
 
         fetchArticles()
@@ -295,7 +295,7 @@ final class HomeViewModel {
                 } catch {
                     FolioLogger.sync.error("retryArticle failed: \(error) — \(article.url ?? SourceType.manual.rawValue)")
                     article.status = .failed
-                    article.fetchError = error.localizedDescription
+                    article.fetchError = (error as? UserFacingError)?.userMessage ?? error.localizedDescription
                 }
                 ModelContext.safeSave(context)
                 fetchArticles()

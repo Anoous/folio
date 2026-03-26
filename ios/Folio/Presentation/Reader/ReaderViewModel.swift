@@ -101,7 +101,7 @@ final class ReaderViewModel {
                 return
             } catch {
                 FolioLogger.data.error("reader: client extraction failed — \(error)")
-                contentLoadError = error.localizedDescription
+                contentLoadError = (error as? UserFacingError)?.userMessage ?? error.localizedDescription
             }
         } else if article.sourceType == .manual {
             contentLoadError = String(localized: "reader.noContent", defaultValue: "Content not available")
