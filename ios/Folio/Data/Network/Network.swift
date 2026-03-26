@@ -799,7 +799,7 @@ final class APIClient: @unchecked Sendable {
 
     func ragQueryStream(question: String, conversationId: String? = nil) -> AsyncThrowingStream<RAGStreamEvent, Error> {
         AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 do {
                     let body = RAGQueryRequest(question: question, conversationId: conversationId)
                     let bodyData = try encoder.encode(body)
@@ -847,6 +847,10 @@ final class APIClient: @unchecked Sendable {
                     continuation.finish(throwing: error)
                 }
             }
+            // Cancel the internal task when the consumer stops iterating
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
         }
     }
 
@@ -859,17 +863,22 @@ final class APIClient: @unchecked Sendable {
 
         for try await line in bytes.lines {
             if line.hasPrefix("event: ") {
-                currentEventType = String(line.dropFirst(7))
-            } else if line.hasPrefix("data: ") {
-                currentData = String(line.dropFirst(6))
-            } else if line.isEmpty {
+                // New event starting — emit any pending event first
                 if let eventType = currentEventType, let data = currentData {
                     let event = try SSEEventParser.parse(eventType: eventType, data: data)
                     continuation.yield(event)
                 }
-                currentEventType = nil
+                currentEventType = String(line.dropFirst(7))
                 currentData = nil
+            } else if line.hasPrefix("data: ") {
+                currentData = String(line.dropFirst(6))
             }
+            // Empty lines are ignored — we emit on next "event:" or stream end
+        }
+        // Emit final pending event when stream ends
+        if let eventType = currentEventType, let data = currentData {
+            let event = try SSEEventParser.parse(eventType: eventType, data: data)
+            continuation.yield(event)
         }
 
         continuation.finish()
