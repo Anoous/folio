@@ -403,61 +403,7 @@ struct ReaderView: View {
     // MARK: - Insight Panel
 
     private var insightPanel: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header (always visible)
-            Button {
-                withAnimation(Motion.settle) { isInsightExpanded.toggle() }
-            } label: {
-                HStack(spacing: 10) {
-                    Text("✦")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.folio.accent)
-
-                    Text(article.displaySummary ?? "")
-                        .font(Typography.v3InsightMain)
-                        .foregroundStyle(Color.folio.textPrimary)
-                        .lineSpacing(15 * 0.55)
-                        .lineLimit(isInsightExpanded ? nil : 2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.folio.textQuaternary)
-                        .rotationEffect(.degrees(isInsightExpanded ? 180 : 0))
-                }
-            }
-            .buttonStyle(.plain)
-
-            // Detail (expanded only)
-            if isInsightExpanded {
-                VStack(alignment: .leading, spacing: 0) {
-                    Rectangle()
-                        .fill(Color.folio.separator)
-                        .frame(height: 0.5)
-                        .padding(.top, 14)
-                        .padding(.bottom, 12)
-
-                    ForEach(article.keyPoints, id: \.self) { point in
-                        HStack(alignment: .top, spacing: 0) {
-                            Text("·")
-                                .foregroundStyle(Color.folio.textQuaternary)
-                                .frame(width: 24)
-                            Text(point)
-                                .font(.system(size: 14))
-                                .foregroundStyle(Color.folio.textSecondary)
-                                .lineSpacing(14 * 0.6)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-        .padding(16)
-        .background(Color.folio.accentSoft)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal, Spacing.screenPadding)
-        .padding(.bottom, 24)
+        ReaderInsightPanel(article: article, isExpanded: $isInsightExpanded)
     }
 
     // MARK: - Content Unavailable
@@ -542,109 +488,17 @@ struct ReaderView: View {
 
     // MARK: - Menu Sheet
 
-    private func dismissMenuThen(_ action: @escaping () -> Void) {
-        showMoreMenu = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: action)
-    }
-
     private var readerMenuSheet: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 0) {
-                menuRow(
-                    icon: article.isFavorite ? "bookmark.fill" : "bookmark",
-                    label: article.isFavorite
-                        ? String(localized: "reader.unfavorite", defaultValue: "取消收藏")
-                        : String(localized: "reader.favorite", defaultValue: "收藏")
-                ) {
-                    dismissMenuThen { viewModel?.toggleFavorite() }
-                }
-
-                menuSeparator
-
-                menuRow(icon: "doc.on.doc", label: String(localized: "reader.copyMarkdown", defaultValue: "复制 Markdown")) {
-                    dismissMenuThen { viewModel?.copyMarkdown() }
-                }
-
-                menuSeparator
-
-                menuRow(icon: "textformat.size", label: String(localized: "reader.readingPrefs", defaultValue: "阅读偏好")) {
-                    dismissMenuThen { showsReadingPreferences = true }
-                }
-
-                menuSeparator
-
-                menuRow(
-                    icon: article.isArchived ? "archivebox.fill" : "archivebox",
-                    label: article.isArchived
-                        ? String(localized: "reader.unarchive", defaultValue: "取消归档")
-                        : String(localized: "reader.archive", defaultValue: "归档")
-                ) {
-                    dismissMenuThen { viewModel?.archiveArticle() }
-                }
-
-                if article.url != nil {
-                    menuSeparator
-
-                    menuRow(icon: "globe", label: String(localized: "reader.openInBrowser", defaultValue: "查看原文")) {
-                        dismissMenuThen { openOriginal() }
-                    }
-                }
-
-                menuSeparator
-
-                menuRow(icon: "trash", label: String(localized: "reader.delete", defaultValue: "删除"), isDestructive: true) {
-                    dismissMenuThen { showsDeleteConfirmation = true }
-                }
-            }
-            .padding(.horizontal, Spacing.screenPadding)
-
-            Spacer().frame(height: Spacing.lg)
-
-            // Cancel button
-            Button {
-                showMoreMenu = false
-            } label: {
-                Text(String(localized: "button.cancel", defaultValue: "取消"))
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(Color.folio.textPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.folio.accentSoft)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .padding(.horizontal, Spacing.screenPadding)
-        }
-        .padding(.top, Spacing.md)
-        .padding(.bottom, 34)
-        .background(Color.folio.background)
-    }
-
-    private func menuRow(icon: String, label: String, isDestructive: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: Spacing.sm) {
-                Image(systemName: icon)
-                    .font(.system(size: 18))
-                    .imageScale(.medium)
-                    .symbolRenderingMode(.monochrome)
-                    .fontWeight(.regular)
-                    .foregroundStyle(isDestructive ? Color.folio.error : Color.folio.textPrimary)
-                    .frame(width: 24, alignment: .center)
-
-                Text(label)
-                    .font(.system(size: 16))
-                    .foregroundStyle(isDestructive ? Color.folio.error : Color.folio.textPrimary)
-
-                Spacer()
-            }
-            .padding(.vertical, 14)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var menuSeparator: some View {
-        Rectangle()
-            .fill(Color.folio.separator)
-            .frame(height: 0.5)
+        ReaderMenuView(
+            article: article,
+            onDismiss: { showMoreMenu = false },
+            onToggleFavorite: { viewModel?.toggleFavorite() },
+            onCopyMarkdown: { viewModel?.copyMarkdown() },
+            onReadingPreferences: { showsReadingPreferences = true },
+            onToggleArchive: { viewModel?.archiveArticle() },
+            onOpenOriginal: { openOriginal() },
+            onDelete: { showsDeleteConfirmation = true }
+        )
     }
 
     // MARK: - Bottom Toolbar
@@ -721,18 +575,6 @@ struct ReaderView: View {
         }
     }
 
-}
-
-// MARK: - Share Sheet (UIKit wrapper)
-
-struct ShareSheet: UIViewControllerRepresentable {
-    let activityItems: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 #Preview {
