@@ -107,7 +107,7 @@ final class ContentSaveService {
         }
         SharedDataManager.incrementQuota()
 
-        // Run OCR in background
+        // Run OCR in background — sync AFTER OCR completes to avoid uploading empty content
         let ocrImage = Self.resizedImage(image, maxDimension: 1280)
         let articleID = article.id
         let ctx = context
@@ -116,8 +116,8 @@ final class ContentSaveService {
             let extractor = ImageOCRExtractor()
             do {
                 let text = try await extractor.extract(from: ocrImage)
-                if let text, !text.isEmpty {
-                    await MainActor.run {
+                await MainActor.run {
+                    if let text, !text.isEmpty {
                         let descriptor = FetchDescriptor<Article>(predicate: #Predicate { $0.id == articleID })
                         guard let article = try? ctx.fetch(descriptor).first else { return }
                         article.markdownContent = text
@@ -125,11 +125,12 @@ final class ContentSaveService {
                         article.wordCount = Article.countWords(text)
                         article.updatedAt = .now
                         try? ctx.save()
-                        onOCRComplete()
                     }
+                    onOCRComplete()
                 }
             } catch {
                 FolioLogger.data.error("OCR extraction failed for screenshot \(articleID): \(error.localizedDescription)")
+                await MainActor.run { onOCRComplete() }
             }
             await sync?.incrementalSync()
         }

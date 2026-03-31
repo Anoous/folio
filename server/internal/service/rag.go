@@ -484,7 +484,7 @@ func extractAnswerFromContent(content string) string {
 }
 
 // mapCitedSources converts 1-based cited indices to actual RAGSource entries.
-// Invalid indices (out of range) are silently filtered.
+// Invalid indices (out of range) are logged and filtered.
 func mapCitedSources(citedIndices []int, articles []domain.RAGSource) []domain.RAGSource {
 	if len(citedIndices) == 0 {
 		return nil
@@ -495,7 +495,11 @@ func mapCitedSources(citedIndices []int, articles []domain.RAGSource) []domain.R
 	for _, idx := range citedIndices {
 		// cited_indices are 1-based.
 		arrayIdx := idx - 1
-		if arrayIdx < 0 || arrayIdx >= len(articles) || seen[idx] {
+		if arrayIdx < 0 || arrayIdx >= len(articles) {
+			slog.Warn("rag: citation index out of bounds", "index", idx, "total", len(articles))
+			continue
+		}
+		if seen[idx] {
 			continue
 		}
 		seen[idx] = true

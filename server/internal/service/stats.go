@@ -70,6 +70,7 @@ func (s *StatsService) GetMonthlyStats(ctx context.Context, userID string, year,
 	err := s.db.QueryRow(ctx, `
 		SELECT COUNT(*) FROM articles
 		WHERE user_id = $1 AND status = 'ready'
+		  AND deleted_at IS NULL
 		  AND created_at >= $2 AND created_at < $3`,
 		userID, start, end,
 	).Scan(&articlesCount)
@@ -83,6 +84,7 @@ func (s *StatsService) GetMonthlyStats(ctx context.Context, userID string, year,
 		SELECT COUNT(*) FROM articles
 		WHERE user_id = $1
 		  AND summary IS NOT NULL AND summary != ''
+		  AND deleted_at IS NULL
 		  AND created_at >= $2 AND created_at < $3`,
 		userID, start, end,
 	).Scan(&insightsCount)
@@ -139,6 +141,7 @@ func (s *StatsService) calcStreakDays(ctx context.Context, userID string) (int, 
 		SELECT DISTINCT DATE(created_at AT TIME ZONE 'UTC') AS day
 		FROM articles
 		WHERE user_id = $1
+		  AND deleted_at IS NULL
 		ORDER BY day DESC
 		LIMIT 366`, userID)
 	if err != nil {
@@ -185,6 +188,7 @@ func (s *StatsService) getTopicDistribution(ctx context.Context, userID string, 
 		FROM articles a
 		JOIN categories c ON a.category_id = c.id
 		WHERE a.user_id = $1
+		  AND a.deleted_at IS NULL
 		  AND a.created_at >= $2 AND a.created_at < $3
 		GROUP BY c.slug, c.name_zh
 		ORDER BY cnt DESC

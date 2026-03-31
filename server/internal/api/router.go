@@ -74,6 +74,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Get("/articles/{id}", deps.ArticleHandler.HandleGetArticle)
 			r.Put("/articles/{id}", deps.ArticleHandler.HandleUpdateArticle)
 			r.Delete("/articles/{id}", deps.ArticleHandler.HandleDeleteArticle)
+			r.Post("/articles/{id}/retry", deps.ArticleHandler.HandleRetryArticle)
 
 			// Tags
 			r.Get("/tags", deps.TagHandler.HandleListTags)

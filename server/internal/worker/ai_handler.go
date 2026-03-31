@@ -64,6 +64,15 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("unmarshal ai payload: %w", err)
 	}
 
+	// Check if AI already processed (dedup for crash-retry scenarios)
+	article, err := h.articleRepo.GetByID(ctx, p.ArticleID)
+	if err == nil && article != nil && article.Summary != nil && *article.Summary != "" {
+		slog.Info("ai: article already analyzed, skipping", "article_id", p.ArticleID)
+		// Still mark task as finished
+		h.taskRepo.SetAIFinished(ctx, p.TaskID)
+		return nil
+	}
+
 	start := time.Now()
 
 	// Mark AI started
@@ -95,13 +104,17 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	// Ensure category exists (create if needed)
 	cat, err := h.categoryRepo.FindOrCreate(ctx, result.Category, result.CategoryName, result.CategoryName)
 	if err != nil {
-		slog.Error("ai task failed to find/create category",
+		slog.Warn("ai: category creation failed, falling back to 'other'",
 			"article_id", p.ArticleID,
 			"slug", result.Category,
 			"error", err,
 		)
-		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
-		return fmt.Errorf("find or create category: %w", err)
+		cat, err = h.categoryRepo.FindOrCreate(ctx, "other", "其他", "Other")
+		if err != nil {
+			// Only fail if even the fallback fails
+			h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
+			return fmt.Errorf("create fallback category: %w", err)
+		}
 	}
 
 	// Update article with AI results
@@ -122,7 +135,7 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 
 	// Backfill title for manual entries that have no user-provided title
-	article, err := h.articleRepo.GetByID(ctx, p.ArticleID)
+	article, err = h.articleRepo.GetByID(ctx, p.ArticleID)
 	if err == nil && article != nil && article.SourceType == domain.SourceManual && (article.Title == nil || *article.Title == "") {
 		var generatedTitle string
 		if len(result.KeyPoints) > 0 {

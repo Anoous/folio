@@ -511,19 +511,9 @@ final class SyncService {
                 ))
                 article.syncState = .synced
             } catch let error as APIError where error == .notFound {
-                // Server no longer has this article.
-                // Keep serverID so ArticleMerger can still match if the server
-                // sends a deletion notification (multi-device delete scenario).
-                // Mark as pendingUpload; submitLocalPendingArticles will re-upload
-                // only if incrementalSync didn't delete it first.
-                FolioLogger.sync.info("article gone from server, marking for re-upload: \(serverID)")
-                article.syncState = .pendingUpload
-                if article.markdownContent != nil {
-                    article.extractionSource = .client
-                    article.status = .clientReady
-                } else {
-                    article.status = .pending
-                }
+                // Server deleted this article. Accept the server's state — do not re-upload.
+                FolioLogger.sync.info("article deleted on server, accepting: \(serverID)")
+                article.syncState = .synced
             } catch {
                 FolioLogger.sync.error("update sync failed: \(serverID) — \(error)")
             }

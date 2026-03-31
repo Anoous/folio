@@ -80,6 +80,10 @@ func (m *mockArticleRepo) BroadRecallArticles(ctx context.Context, userID string
 	return nil, nil
 }
 
+func (m *mockArticleRepo) UpdateStatus(ctx context.Context, id string, status domain.ArticleStatus) error {
+	return nil
+}
+
 type mockTaskRepo struct {
 	createFn    func(ctx context.Context, p repository.CreateTaskParams) (*domain.CrawlTask, error)
 	lastCreateP *repository.CreateTaskParams

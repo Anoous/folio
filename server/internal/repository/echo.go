@@ -255,6 +255,19 @@ func (r *EchoRepo) CountCardsByArticle(ctx context.Context, articleID string) (i
 	return count, nil
 }
 
+// CountCardsByArticleAndType returns count of echo_cards for a given article filtered by card type.
+func (r *EchoRepo) CountCardsByArticleAndType(ctx context.Context, articleID string, cardType domain.EchoCardType) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM echo_cards WHERE article_id = $1 AND card_type = $2`,
+		articleID, string(cardType),
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count cards by article and type: %w", err)
+	}
+	return count, nil
+}
+
 // GetUserEchoQuota returns echo_count_this_week and echo_week_reset_at for a user.
 func (r *EchoRepo) GetUserEchoQuota(ctx context.Context, userID string) (count int, resetAt *time.Time, err error) {
 	err = r.db.QueryRow(ctx,

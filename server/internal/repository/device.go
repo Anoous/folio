@@ -67,16 +67,21 @@ func (r *DeviceRepo) GetByUserID(ctx context.Context, userID string) ([]domain.D
 // GetPushableDevices returns one device per user that has due echo cards,
 // has not been pushed today, and has not reviewed today. The returned
 // question is the earliest due card's question for that user.
+// Date comparisons use the user's timezone (defaults to Asia/Shanghai).
 func (r *DeviceRepo) GetPushableDevices(ctx context.Context) ([]domain.PushTarget, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT DISTINCT ON (d.user_id) d.user_id, d.token, ec.question
 		FROM devices d
+		JOIN users u ON u.id = d.user_id
 		JOIN echo_cards ec ON ec.user_id = d.user_id
 		WHERE ec.next_review_at <= NOW()
-		AND (d.last_push_at IS NULL OR d.last_push_at < CURRENT_DATE)
+		AND (d.last_push_at IS NULL
+		     OR d.last_push_at < (NOW() AT TIME ZONE COALESCE(u.timezone, 'Asia/Shanghai'))::date)
 		AND NOT EXISTS (
 			SELECT 1 FROM echo_reviews er
-			WHERE er.user_id = d.user_id AND er.reviewed_at >= CURRENT_DATE
+			WHERE er.user_id = d.user_id
+			AND DATE(er.reviewed_at AT TIME ZONE COALESCE(u.timezone, 'Asia/Shanghai'))
+			    = (NOW() AT TIME ZONE COALESCE(u.timezone, 'Asia/Shanghai'))::date
 		)
 		ORDER BY d.user_id, ec.next_review_at ASC`)
 	if err != nil {
@@ -96,6 +101,19 @@ func (r *DeviceRepo) GetPushableDevices(ctx context.Context) ([]domain.PushTarge
 		return nil, fmt.Errorf("iterate push targets: %w", err)
 	}
 	return targets, nil
+}
+
+// DeleteByToken removes a device registration by its APNs token. Used to
+// clean up tokens that APNs has reported as invalid (HTTP 410 / bad token).
+func (r *DeviceRepo) DeleteByToken(ctx context.Context, token string) error {
+	_, err := r.db.Exec(ctx,
+		`DELETE FROM devices WHERE token = $1`,
+		token,
+	)
+	if err != nil {
+		return fmt.Errorf("delete device by token: %w", err)
+	}
+	return nil
 }
 
 // UpdateLastPushAt sets last_push_at = NOW() for all devices of a user.

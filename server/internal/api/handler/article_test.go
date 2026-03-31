@@ -56,6 +56,10 @@ func (m *mockArticleService) SubmitManualContent(ctx context.Context, userID str
 	return &service.SubmitURLResponse{ArticleID: "art-manual-1", TaskID: "task-manual-1"}, nil
 }
 
+func (m *mockArticleService) RetryArticle(ctx context.Context, userID, articleID string) (*service.SubmitURLResponse, error) {
+	return &service.SubmitURLResponse{ArticleID: articleID, TaskID: "task-retry-1"}, nil
+}
+
 // --- Mock user getter for handler tests ---
 
 type mockUserGetter struct{}

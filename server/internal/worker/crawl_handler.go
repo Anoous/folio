@@ -78,13 +78,33 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	// Load article once for pre-crawl checks
 	preCheckArticle, preCheckErr := h.articleRepo.GetByID(ctx, p.ArticleID)
 
-	// Skip re-crawl if article has highlights (user content takes priority)
+	// If article has highlights AND already has server-extracted content, skip Reader and go to AI.
+	// If article has highlights but NO content, proceed with Reader crawl normally.
 	if preCheckErr == nil && preCheckArticle != nil && preCheckArticle.HighlightCount > 0 {
-		slog.Info("crawl skipped: article has highlights",
+		if preCheckArticle.MarkdownContent != nil && *preCheckArticle.MarkdownContent != "" {
+			slog.Info("crawl skipped: article has highlights and content, routing to AI",
+				"article_id", p.ArticleID,
+				"highlight_count", preCheckArticle.HighlightCount,
+			)
+			if err := h.taskRepo.SetCrawlFinished(ctx, p.TaskID); err != nil {
+				return fmt.Errorf("highlights: set crawl finished: %w", err)
+			}
+			title := derefOrEmpty(preCheckArticle.Title)
+			source := derefOrDefault(preCheckArticle.SiteName, "web")
+			aiTask := NewAIProcessTask(
+				p.ArticleID, p.TaskID, p.UserID,
+				title, *preCheckArticle.MarkdownContent,
+				source, derefOrEmpty(preCheckArticle.Author),
+			)
+			if _, enqErr := h.asynqClient.EnqueueContext(ctx, aiTask); enqErr != nil {
+				return fmt.Errorf("enqueue ai task (highlights): %w", enqErr)
+			}
+			return nil
+		}
+		slog.Info("crawl proceeding: article has highlights but no content",
 			"article_id", p.ArticleID,
 			"highlight_count", preCheckArticle.HighlightCount,
 		)
-		return nil
 	}
 
 	// Skip crawl for screenshot/voice — they have content, just need AI

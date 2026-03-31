@@ -27,6 +27,7 @@ type articleServicer interface {
 	Update(ctx context.Context, userID, articleID string, params repository.UpdateArticleParams) error
 	Delete(ctx context.Context, userID, articleID string) error
 	Search(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error)
+	RetryArticle(ctx context.Context, userID, articleID string) (*service.SubmitURLResponse, error)
 }
 
 type userGetter interface {
@@ -255,4 +256,17 @@ func (h *ArticleHandler) HandleDeleteArticle(w http.ResponseWriter, r *http.Requ
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (h *ArticleHandler) HandleRetryArticle(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	articleID := chi.URLParam(r, "id")
+
+	resp, err := h.articleService.RetryArticle(r.Context(), userID, articleID)
+	if err != nil {
+		handleServiceError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, resp)
 }

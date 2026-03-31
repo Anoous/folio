@@ -35,9 +35,11 @@ class SubscriptionManager {
             switch result {
             case .success(let verification):
                 let transaction = try checkVerified(verification)
-                // Verify with server
-                await verifyWithServer(transactionID: transaction.id, productID: product.id)
+                let serverOK = await verifyWithServer(transactionID: transaction.id, productID: product.id)
                 purchasedProductIDs.insert(product.id)
+                if !serverOK {
+                    savePendingVerification(transactionID: transaction.id, productID: product.id)
+                }
                 await transaction.finish()
             case .pending:
                 errorMessage = nil // Awaiting approval
@@ -66,9 +68,14 @@ class SubscriptionManager {
         Task.detached {
             for await result in Transaction.updates {
                 if let transaction = try? self.checkVerified(result) {
-                    await self.verifyWithServer(transactionID: transaction.id, productID: transaction.productID)
-                    await MainActor.run {
+                    let serverOK = await self.verifyWithServer(transactionID: transaction.id, productID: transaction.productID)
+                    _ = await MainActor.run {
                         self.purchasedProductIDs.insert(transaction.productID)
+                    }
+                    if !serverOK {
+                        await MainActor.run {
+                            self.savePendingVerification(transactionID: transaction.id, productID: transaction.productID)
+                        } as Void
                     }
                     await transaction.finish()
                 }
@@ -90,18 +97,62 @@ class SubscriptionManager {
         }
     }
 
-    private func verifyWithServer(transactionID: UInt64, productID: String) async {
-        do {
-            _ = try await APIClient.shared.verifySubscription(
-                transactionID: transactionID,
-                productID: productID
-            )
-        } catch {
-            // Server verification failed — still honor local StoreKit verification
+    private func verifyWithServer(transactionID: UInt64, productID: String) async -> Bool {
+        for attempt in 0..<3 {
+            do {
+                _ = try await APIClient.shared.verifySubscription(
+                    transactionID: transactionID,
+                    productID: productID
+                )
+                return true
+            } catch {
+                FolioLogger.auth.error("server verification attempt \(attempt + 1) failed: \(error)")
+                if attempt < 2 {
+                    try? await Task.sleep(for: .seconds(Double(1 << attempt)))
+                }
+            }
         }
+        return false
     }
 
     enum StoreError: Error {
         case verificationFailed
+    }
+
+    // MARK: - Pending Server Verification
+
+    private struct PendingVerification: Codable {
+        let transactionID: UInt64
+        let productID: String
+    }
+
+    private static let pendingVerificationsKey = "pendingServerVerifications"
+
+    private func savePendingVerification(transactionID: UInt64, productID: String) {
+        var pending = Self.loadPendingVerifications()
+        pending.append(PendingVerification(transactionID: transactionID, productID: productID))
+        if let data = try? JSONEncoder().encode(pending) {
+            UserDefaults.standard.set(data, forKey: Self.pendingVerificationsKey)
+        }
+    }
+
+    private static func loadPendingVerifications() -> [PendingVerification] {
+        guard let data = UserDefaults.standard.data(forKey: pendingVerificationsKey),
+              let items = try? JSONDecoder().decode([PendingVerification].self, from: data)
+        else { return [] }
+        return items
+    }
+
+    func retryPendingVerifications() async {
+        let pending = Self.loadPendingVerifications()
+        guard !pending.isEmpty else { return }
+        var remaining: [PendingVerification] = []
+        for item in pending {
+            let ok = await verifyWithServer(transactionID: item.transactionID, productID: item.productID)
+            if !ok { remaining.append(item) }
+        }
+        if let data = try? JSONEncoder().encode(remaining) {
+            UserDefaults.standard.set(data, forKey: Self.pendingVerificationsKey)
+        }
     }
 }

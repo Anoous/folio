@@ -16,6 +16,7 @@ import (
 // echoCardRepo abstracts the echo repository methods used by EchoHandler.
 type echoCardRepo interface {
 	CountCardsByArticle(ctx context.Context, articleID string) (int, error)
+	CountCardsByArticleAndType(ctx context.Context, articleID string, cardType domain.EchoCardType) (int, error)
 	CreateCard(ctx context.Context, card *domain.EchoCard) error
 }
 
@@ -146,15 +147,15 @@ func (h *EchoHandler) processInsightCards(ctx context.Context, p EchoPayload, st
 		return nil
 	}
 
-	// Skip if echo cards already exist for this article
-	count, err := h.echoRepo.CountCardsByArticle(ctx, p.ArticleID)
+	// Skip if insight cards already exist for this article (highlight cards don't block insight generation)
+	insightCount, err := h.echoRepo.CountCardsByArticleAndType(ctx, p.ArticleID, domain.EchoCardInsight)
 	if err != nil {
-		return fmt.Errorf("count echo cards: %w", err)
+		return fmt.Errorf("count insight echo cards: %w", err)
 	}
-	if count > 0 {
-		slog.Debug("echo task: cards already exist, skipping",
+	if insightCount > 0 {
+		slog.Debug("echo task: insight cards already exist, skipping",
 			"article_id", p.ArticleID,
-			"existing_cards", count,
+			"existing_insight_cards", insightCount,
 		)
 		return nil
 	}

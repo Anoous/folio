@@ -161,6 +161,71 @@ func (r *UserRepo) UpdateSubscription(ctx context.Context, userID string, subscr
 	return nil
 }
 
+// UpsertByEmail atomically finds or creates a user by email.
+// If the email exists, it touches updated_at; otherwise it creates a new row.
+func (r *UserRepo) UpsertByEmail(ctx context.Context, email string) (*domain.User, error) {
+	u, err := scanUser(r.pool.QueryRow(ctx, `
+		INSERT INTO users (email)
+		VALUES ($1)
+		ON CONFLICT (email) DO UPDATE SET updated_at = NOW()
+		RETURNING `+userColumns,
+		email,
+	))
+	if err != nil {
+		return nil, fmt.Errorf("upsert user by email: %w", err)
+	}
+	return u, nil
+}
+
+// UpsertByAppleID atomically finds or creates a user by Apple ID.
+// It handles three cases:
+//  1. Existing Apple user — return immediately.
+//  2. Existing email-only user — link the Apple ID to that user.
+//  3. New user — create with ON CONFLICT safety.
+func (r *UserRepo) UpsertByAppleID(ctx context.Context, appleID string, email *string, nickname *string) (*domain.User, error) {
+	// Step 1: Try to find by apple_id
+	u, err := r.GetByAppleID(ctx, appleID)
+	if err != nil {
+		return nil, err
+	}
+	if u != nil {
+		return u, nil // Existing Apple user
+	}
+
+	// Step 2: If email provided, try to link to existing email-only user
+	if email != nil && *email != "" {
+		existing, err := r.GetByEmail(ctx, *email)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil && existing.AppleID == nil {
+			// Link Apple ID to existing email user
+			_, err := r.pool.Exec(ctx, `
+				UPDATE users SET apple_id = $2, nickname = COALESCE($3, nickname), updated_at = NOW()
+				WHERE id = $1`,
+				existing.ID, appleID, nickname,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("link apple id to existing user: %w", err)
+			}
+			return r.GetByID(ctx, existing.ID)
+		}
+	}
+
+	// Step 3: Create new user with ON CONFLICT safety
+	u, err = scanUser(r.pool.QueryRow(ctx, `
+		INSERT INTO users (apple_id, email, nickname)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (apple_id) DO UPDATE SET updated_at = NOW()
+		RETURNING `+userColumns,
+		appleID, email, nickname,
+	))
+	if err != nil {
+		return nil, fmt.Errorf("upsert user by apple_id: %w", err)
+	}
+	return u, nil
+}
+
 // GetByOriginalTransactionID finds a user by their Apple original transaction ID.
 func (r *UserRepo) GetByOriginalTransactionID(ctx context.Context, txnID string) (*domain.User, error) {
 	u, err := scanUser(r.pool.QueryRow(ctx,

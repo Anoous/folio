@@ -99,11 +99,12 @@ final class SharedDataManagerTests: XCTestCase {
         XCTAssertEqual(defaults.integer(forKey: key), 12)
     }
 
-    func testSyncQuotaFromServer_doesNotDecreaseLocalCount() {
+    func testSyncQuotaFromServer_alwaysUsesServerValue() {
         let defaults = UserDefaults(suiteName: "test.quota.\(UUID())")!
         let key = SharedDataManager.quotaKey()
         defaults.set(15, forKey: key)
 
+        // Server has lower count — should still sync (server is source of truth)
         SharedDataManager.syncQuotaFromServer(
             monthlyQuota: 30,
             currentMonthCount: 10,
@@ -111,7 +112,7 @@ final class SharedDataManagerTests: XCTestCase {
             userDefaults: defaults
         )
 
-        XCTAssertEqual(defaults.integer(forKey: key), 15)
+        XCTAssertEqual(defaults.integer(forKey: key), 10)
     }
 
     func testCanSave_usesServerQuotaWhenAvailable() {

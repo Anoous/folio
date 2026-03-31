@@ -65,8 +65,9 @@ type emailCode struct {
 }
 
 var (
-	emailCodes   sync.Map // key: email, value: *emailCode
-	codeCooldown sync.Map // key: email, value: time.Time
+	codeMu       sync.Mutex
+	emailCodes   = map[string]*emailCode{}
+	codeCooldown = map[string]time.Time{}
 )
 
 type SendCodeRequest struct {
@@ -106,25 +107,13 @@ func (s *AuthService) LoginWithApple(ctx context.Context, req AppleAuthRequest) 
 		return nil, fmt.Errorf("invalid apple token: %w", err)
 	}
 
-	// Find or create user
-	user, err := s.userRepo.GetByAppleID(ctx, appleUserID)
+	// Atomically find-or-create user (handles existing Apple user, email linking, new user)
+	user, err := s.userRepo.UpsertByAppleID(ctx, appleUserID, req.Email, req.Nickname)
 	if err != nil {
-		return nil, fmt.Errorf("lookup user: %w", err)
+		return nil, fmt.Errorf("upsert user by apple_id: %w", err)
 	}
 
-	isNew := user == nil
-	if user == nil {
-		user, err = s.userRepo.Create(ctx, repository.CreateUserParams{
-			AppleID:  &appleUserID,
-			Email:    req.Email,
-			Nickname: req.Nickname,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("create user: %w", err)
-		}
-	}
-
-	slog.Info("apple login succeeded", "user_id", user.ID, "new_user", isNew)
+	slog.Info("apple login succeeded", "user_id", user.ID)
 	return s.issueTokenPair(user)
 }
 
@@ -134,32 +123,31 @@ func (s *AuthService) SendEmailCode(ctx context.Context, req SendCodeRequest) er
 		return fmt.Errorf("invalid email address")
 	}
 
-	// Check 60s cooldown
-	if lastSent, ok := codeCooldown.Load(email); ok {
-		if time.Since(lastSent.(time.Time)) < 60*time.Second {
-			return ErrCodeRateLimit
-		}
-	}
-
 	// Generate 6-digit code
 	code := fmt.Sprintf("%06d", cryptoRandInt(1000000))
 
-	// Store code with 5min TTL
-	emailCodes.Store(email, &emailCode{
+	// Cooldown check + code store under one lock
+	codeMu.Lock()
+	if lastSent, ok := codeCooldown[email]; ok {
+		if time.Since(lastSent) < 60*time.Second {
+			codeMu.Unlock()
+			return ErrCodeRateLimit
+		}
+	}
+	emailCodes[email] = &emailCode{
 		code:      code,
 		expiresAt: time.Now().Add(5 * time.Minute),
 		attempts:  0,
-	})
+	}
+	codeCooldown[email] = time.Now()
+	codeMu.Unlock()
 
-	// Store send time for cooldown
-	codeCooldown.Store(email, time.Now())
-
-	// Send email via Resend (falls back to logging if no API key)
+	// Send email via Resend (I/O outside lock)
 	if err := s.resend.SendVerificationCode(email, code); err != nil {
 		slog.Error("failed to send verification email", "email", email, "error", err)
 		// Still log the code so dev/test can proceed
 		slog.Info("[AUTH] verification code (email failed)", "email", email, "code", code)
-		return nil
+		return fmt.Errorf("send verification email: %w", err)
 	}
 	return nil
 }
@@ -167,51 +155,43 @@ func (s *AuthService) SendEmailCode(ctx context.Context, req SendCodeRequest) er
 func (s *AuthService) VerifyEmailCode(ctx context.Context, req VerifyCodeRequest) (*AuthResponse, error) {
 	email := strings.TrimSpace(strings.ToLower(req.Email))
 
-	val, ok := emailCodes.Load(email)
+	// Validate code under one lock, then unlock before DB operations
+	codeMu.Lock()
+	ec, ok := emailCodes[email]
 	if !ok {
+		codeMu.Unlock()
 		return nil, ErrInvalidCode
 	}
-	ec := val.(*emailCode)
 
-	// Check expiry
 	if time.Now().After(ec.expiresAt) {
-		emailCodes.Delete(email)
+		delete(emailCodes, email)
+		codeMu.Unlock()
 		return nil, ErrInvalidCode
 	}
 
-	// Check max attempts
 	if ec.attempts >= 5 {
-		emailCodes.Delete(email)
+		delete(emailCodes, email)
+		codeMu.Unlock()
 		return nil, ErrInvalidCode
 	}
 
-	// Compare code
 	if ec.code != req.Code {
 		ec.attempts++
+		codeMu.Unlock()
 		return nil, ErrInvalidCode
 	}
 
 	// Success — delete code
-	emailCodes.Delete(email)
+	delete(emailCodes, email)
+	codeMu.Unlock()
 
-	// Find or create user
-	user, err := s.userRepo.GetByEmail(ctx, email)
+	// Atomically find-or-create user (DB operation outside lock)
+	user, err := s.userRepo.UpsertByEmail(ctx, email)
 	if err != nil {
-		return nil, fmt.Errorf("lookup user by email: %w", err)
+		return nil, fmt.Errorf("upsert user by email: %w", err)
 	}
 
-	isNew := user == nil
-	if user == nil {
-		emailPtr := email
-		user, err = s.userRepo.Create(ctx, repository.CreateUserParams{
-			Email: &emailPtr,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("create user: %w", err)
-		}
-	}
-
-	slog.Info("email login succeeded", "user_id", user.ID, "email", email, "new_user", isNew)
+	slog.Info("email login succeeded", "user_id", user.ID, "email", email)
 	return s.issueTokenPair(user)
 }
 
@@ -381,12 +361,22 @@ func fetchAppleJWKS() (*AppleJWKSResponse, error) {
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	resp, err := httpClient.Get("https://appleid.apple.com/auth/keys")
 	if err != nil {
+		// Grace period: return stale JWKS if available (up to 48h)
+		if appleJWKS != nil && time.Since(appleJWKSFetch) < 48*time.Hour {
+			slog.Warn("apple JWKS fetch failed, using stale cache", "age", time.Since(appleJWKSFetch), "error", err)
+			return appleJWKS, nil
+		}
 		return nil, fmt.Errorf("fetch apple jwks: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var jwks AppleJWKSResponse
 	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
+		// Grace period: return stale JWKS if available (up to 48h)
+		if appleJWKS != nil && time.Since(appleJWKSFetch) < 48*time.Hour {
+			slog.Warn("apple JWKS decode failed, using stale cache", "age", time.Since(appleJWKSFetch), "error", err)
+			return appleJWKS, nil
+		}
 		return nil, fmt.Errorf("decode apple jwks: %w", err)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -16,6 +17,7 @@ import (
 type pushDeviceRepo interface {
 	GetPushableDevices(ctx context.Context) ([]domain.PushTarget, error)
 	UpdateLastPushAt(ctx context.Context, userID string) error
+	DeleteByToken(ctx context.Context, token string) error
 }
 
 // PushHandler processes push:echo tasks. Each invocation queries for all
@@ -59,9 +61,22 @@ func (h *PushHandler) ProcessTask(ctx context.Context, _ *asynq.Task) error {
 				"user_id", t.UserID,
 				"error", err,
 			)
-			continue
+			// Clean up tokens that APNs reports as permanently invalid.
+			if isInvalidTokenError(err) {
+				if delErr := h.deviceRepo.DeleteByToken(ctx, t.Token); delErr != nil {
+					slog.Error("push:echo — delete invalid token failed",
+						"error", delErr,
+					)
+				} else {
+					slog.Info("push:echo — removed invalid device token",
+						"token_prefix", t.Token[:min(8, len(t.Token))],
+					)
+				}
+			}
+			continue // Do NOT update last_push_at on failure
 		}
 
+		// Only update last_push_at after a successful send.
 		if err := h.deviceRepo.UpdateLastPushAt(ctx, t.UserID); err != nil {
 			slog.Error("push:echo — update last_push_at failed",
 				"user_id", t.UserID,
@@ -78,4 +93,18 @@ func (h *PushHandler) ProcessTask(ctx context.Context, _ *asynq.Task) error {
 	)
 
 	return nil
+}
+
+// isInvalidTokenError returns true when the APNs error indicates the device
+// token is permanently invalid and should be removed. APNs returns HTTP 410
+// (Gone) for unregistered tokens and HTTP 400 for malformed tokens.
+func isInvalidTokenError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "status 410") ||
+		strings.Contains(msg, "BadDeviceToken") ||
+		strings.Contains(msg, "Unregistered") ||
+		strings.Contains(msg, "DeviceTokenNotForTopic")
 }

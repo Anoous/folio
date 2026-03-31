@@ -152,7 +152,7 @@ final class SharedDataManager {
     }
 
     /// 将服务端配额写入 UserDefaults，供 Share Extension 读取。
-    /// 只在服务端计数 > 本地计数时覆盖，避免本地乐观计数被回退。
+    /// 服务端为唯一真实来源，始终覆盖本地计数。
     static func syncQuotaFromServer(
         monthlyQuota: Int,
         currentMonthCount: Int,
@@ -160,10 +160,8 @@ final class SharedDataManager {
         userDefaults: UserDefaults = .appGroup
     ) {
         let key = quotaKey()
-        let localCount = userDefaults.integer(forKey: key)
-        if currentMonthCount > localCount {
-            userDefaults.set(currentMonthCount, forKey: key)
-        }
+        // Server is source of truth — always sync its count
+        userDefaults.set(currentMonthCount, forKey: key)
         userDefaults.set(monthlyQuota, forKey: monthlyQuotaKey)
         userDefaults.set(isPro, forKey: isProUserKey)
     }

@@ -54,7 +54,10 @@ func (h *ImageHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		if err != nil {
 			continue // Skip failed images
 		}
-		markdown = strings.ReplaceAll(markdown, imageURL, newURL)
+		// Replace only in markdown image syntax: ![...](oldURL)
+		old := "(" + imageURL + ")"
+		newRef := "(" + newURL + ")"
+		markdown = strings.Replace(markdown, old, newRef, -1)
 	}
 
 	// Update markdown with new image URLs
