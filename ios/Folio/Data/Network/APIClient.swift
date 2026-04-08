@@ -310,19 +310,25 @@ final class APIClient: @unchecked Sendable {
         do {
             (data, response) = try await session.data(for: urlRequest)
         } catch {
-            try? keychainManager.clearTokens()
-            throw APIError.unauthorized
+            // Network error (timeout, no internet, DNS failure) — do NOT clear
+            // tokens. The refresh token may still be valid; clearing it would
+            // force a full re-login on a transient network blip.
+            FolioLogger.network.error("token refresh: network error — \(error.localizedDescription)")
+            throw APIError.networkError(error.localizedDescription)
         }
 
         guard let httpResponse = response as? HTTPURLResponse else {
             FolioLogger.network.error("token refresh: invalid response")
-            try? keychainManager.clearTokens()
-            throw APIError.unauthorized
+            throw APIError.networkError("Invalid response")
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
             FolioLogger.network.error("token refresh failed: HTTP \(httpResponse.statusCode)")
-            try? keychainManager.clearTokens()
+            // Only clear tokens when the server explicitly rejects them.
+            // 5xx errors are transient server issues, not auth failures.
+            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                try? keychainManager.clearTokens()
+            }
             throw APIError.unauthorized
         }
 

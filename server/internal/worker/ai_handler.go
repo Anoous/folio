@@ -64,12 +64,13 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("unmarshal ai payload: %w", err)
 	}
 
-	// Check if AI already processed (dedup for crash-retry scenarios)
+	// Check if AI already processed (dedup for crash-retry scenarios).
+	// Return nil without calling SetAIFinished — SetAIStarted was never
+	// called, so skipping both keeps the state machine consistent.  The task
+	// was already marked done by the original successful run.
 	article, err := h.articleRepo.GetByID(ctx, p.ArticleID)
 	if err == nil && article != nil && article.Summary != nil && *article.Summary != "" {
 		slog.Info("ai: article already analyzed, skipping", "article_id", p.ArticleID)
-		// Still mark task as finished
-		h.taskRepo.SetAIFinished(ctx, p.TaskID)
 		return nil
 	}
 
@@ -111,8 +112,10 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		)
 		cat, err = h.categoryRepo.FindOrCreate(ctx, "other", "其他", "Other")
 		if err != nil {
-			// Only fail if even the fallback fails
+			// Both primary and fallback category creation failed.
+			// Mark task failed AND article as ready (content is still readable).
 			h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
+			h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusReady)
 			return fmt.Errorf("create fallback category: %w", err)
 		}
 	}

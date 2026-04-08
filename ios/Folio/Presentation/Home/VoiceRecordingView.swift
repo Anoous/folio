@@ -397,7 +397,11 @@ struct VoiceRecordingView: View {
 
     private func saveTranscription() {
         let text = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty else {
+            permissionError = String(localized: "voice.error.empty", defaultValue: "No speech detected. Please try again.")
+            state = .idle
+            return
+        }
         saveTrigger.toggle()
         onSave(text)
         dismiss()

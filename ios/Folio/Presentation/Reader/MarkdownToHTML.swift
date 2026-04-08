@@ -237,7 +237,16 @@ extension MarkdownToHTML {
         function getTextOffset(node, offset) {
             var body = document.querySelector('.article-body');
             if (!body) return 0;
-            var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+            var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+                acceptNode: function(n) {
+                    // Skip text inside highlight popups and hidden elements
+                    // so that DOM mutations from highlighting don't shift offsets.
+                    if (n.parentElement && n.parentElement.closest('.hl-popup')) return NodeFilter.FILTER_REJECT;
+                    var style = window.getComputedStyle(n.parentElement);
+                    if (style && style.display === 'none') return NodeFilter.FILTER_REJECT;
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
             var pos = 0;
             while (walker.nextNode()) {
                 if (walker.currentNode === node) return pos + offset;

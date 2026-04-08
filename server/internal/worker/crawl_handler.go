@@ -194,15 +194,19 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 			"article_id", p.ArticleID,
 			"duration_ms", time.Since(start).Milliseconds(),
 		)
-		h.taskRepo.SetCrawlFinished(ctx, p.TaskID)
 		source := derefOrDefault(article.SiteName, "web")
 		aiTask := NewAIProcessTask(
 			p.ArticleID, p.TaskID, p.UserID,
 			derefOrEmpty(article.Title), *article.MarkdownContent,
 			source, derefOrEmpty(article.Author),
 		)
+		// Enqueue AI BEFORE marking crawl finished — if enqueue fails, task
+		// retries and re-enters this path instead of becoming an orphan.
 		if _, enqErr := h.asynqClient.EnqueueContext(ctx, aiTask); enqErr != nil {
 			return fmt.Errorf("enqueue ai task (client content): %w", enqErr)
+		}
+		if err := h.taskRepo.SetCrawlFinished(ctx, p.TaskID); err != nil {
+			return fmt.Errorf("client content: set crawl finished: %w", err)
 		}
 		return nil
 	}
@@ -258,8 +262,6 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("update crawl result: %w", err)
 	}
 
-	h.taskRepo.SetCrawlFinished(ctx, p.TaskID)
-
 	source := result.Metadata.SiteName
 	if source == "" {
 		source = "web"
@@ -269,8 +271,13 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		title, markdown,
 		source, result.Metadata.Author,
 	)
+	// Enqueue AI BEFORE marking crawl finished — prevents orphaned tasks
+	// if enqueue fails (task retries will re-enter the normal scrape path).
 	if _, err := h.asynqClient.EnqueueContext(ctx, aiTask); err != nil {
 		return fmt.Errorf("enqueue ai task: %w", err)
+	}
+	if err := h.taskRepo.SetCrawlFinished(ctx, p.TaskID); err != nil {
+		return fmt.Errorf("set crawl finished: %w", err)
 	}
 
 	slog.Info("crawl task completed",

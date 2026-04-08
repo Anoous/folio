@@ -106,6 +106,9 @@ final class HomeViewModel {
     var toastIcon: String? = nil
 
     private var currentPage = 0
+    /// Tracks the actual database fetch offset (may diverge from currentPage *
+    /// pageSize when tag filtering skips rows).
+    private var nextFetchOffset = 0
     private let pageSize = 20
     private var hasMorePages = true
 
@@ -117,6 +120,7 @@ final class HomeViewModel {
 
     func fetchArticles() {
         currentPage = 0
+        nextFetchOffset = 0
         hasMorePages = true
         loadPage(reset: true)
     }
@@ -433,7 +437,9 @@ final class HomeViewModel {
         let needsTagFilter = !selectedTags.isEmpty
         let tagIDs = needsTagFilter ? Set(selectedTags.map(\.id)) : []
         var collected: [Article] = []
-        var fetchOffset = currentPage * pageSize
+        // Use the tracked offset directly instead of deriving it from
+        // currentPage, which drifts when tag filtering skips rows.
+        var fetchOffset = needsTagFilter ? nextFetchOffset : currentPage * pageSize
         let batchSize = needsTagFilter ? pageSize * 3 : pageSize
         var exhausted = false
 
@@ -486,6 +492,7 @@ final class HomeViewModel {
         }
 
         hasMorePages = !exhausted
+        nextFetchOffset = fetchOffset
         currentPage = fetchOffset / pageSize
         hasProcessingArticles = articles.contains { $0.status == .processing || $0.status == .clientReady }
         isLoading = false

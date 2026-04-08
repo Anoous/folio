@@ -70,6 +70,30 @@ var (
 	codeCooldown = map[string]time.Time{}
 )
 
+func init() {
+	// Periodically purge expired codes and stale cooldowns to prevent
+	// unbounded memory growth from never-verified emails.
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			codeMu.Lock()
+			now := time.Now()
+			for email, ec := range emailCodes {
+				if now.After(ec.expiresAt) {
+					delete(emailCodes, email)
+				}
+			}
+			for email, ts := range codeCooldown {
+				if now.Sub(ts) > 10*time.Minute {
+					delete(codeCooldown, email)
+				}
+			}
+			codeMu.Unlock()
+		}
+	}()
+}
+
 type SendCodeRequest struct {
 	Email string `json:"email"`
 }

@@ -178,42 +178,60 @@ func (r *UserRepo) UpsertByEmail(ctx context.Context, email string) (*domain.Use
 }
 
 // UpsertByAppleID atomically finds or creates a user by Apple ID.
-// It handles three cases:
+// It handles three cases inside a single transaction:
 //  1. Existing Apple user — return immediately.
-//  2. Existing email-only user — link the Apple ID to that user.
+//  2. Existing email-only user — link the Apple ID (with row lock to prevent races).
 //  3. New user — create with ON CONFLICT safety.
 func (r *UserRepo) UpsertByAppleID(ctx context.Context, appleID string, email *string, nickname *string) (*domain.User, error) {
-	// Step 1: Try to find by apple_id
-	u, err := r.GetByAppleID(ctx, appleID)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("begin tx: %w", err)
 	}
-	if u != nil {
+	defer tx.Rollback(ctx)
+
+	// Step 1: Try to find by apple_id
+	u, err := scanUser(tx.QueryRow(ctx,
+		`SELECT `+userColumns+` FROM users WHERE apple_id = $1`, appleID))
+	if err != nil && err != pgx.ErrNoRows {
+		return nil, fmt.Errorf("get user by apple_id: %w", err)
+	}
+	if err == nil {
+		_ = tx.Commit(ctx)
 		return u, nil // Existing Apple user
 	}
 
-	// Step 2: If email provided, try to link to existing email-only user
+	// Step 2: If email provided, try to link to existing email-only user.
+	// Use FOR UPDATE to lock the row and prevent concurrent linking.
 	if email != nil && *email != "" {
-		existing, err := r.GetByEmail(ctx, *email)
-		if err != nil {
-			return nil, err
+		existing, err := scanUser(tx.QueryRow(ctx,
+			`SELECT `+userColumns+` FROM users WHERE email = $1 FOR UPDATE`, *email))
+		if err != nil && err != pgx.ErrNoRows {
+			return nil, fmt.Errorf("get user by email for update: %w", err)
 		}
-		if existing != nil && existing.AppleID == nil {
-			// Link Apple ID to existing email user
-			_, err := r.pool.Exec(ctx, `
+		if err == nil && existing.AppleID == nil {
+			// Atomically link Apple ID — row is locked by FOR UPDATE
+			_, err := tx.Exec(ctx, `
 				UPDATE users SET apple_id = $2, nickname = COALESCE($3, nickname), updated_at = NOW()
-				WHERE id = $1`,
+				WHERE id = $1 AND apple_id IS NULL`,
 				existing.ID, appleID, nickname,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("link apple id to existing user: %w", err)
 			}
-			return r.GetByID(ctx, existing.ID)
+			u, err = scanUser(tx.QueryRow(ctx,
+				`SELECT `+userColumns+` FROM users WHERE id = $1`, existing.ID))
+			if err != nil {
+				return nil, fmt.Errorf("reload linked user: %w", err)
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return nil, fmt.Errorf("commit link tx: %w", err)
+			}
+			return u, nil
 		}
 	}
 
 	// Step 3: Create new user with ON CONFLICT safety
-	u, err = scanUser(r.pool.QueryRow(ctx, `
+	u, err = scanUser(tx.QueryRow(ctx, `
 		INSERT INTO users (apple_id, email, nickname)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (apple_id) DO UPDATE SET updated_at = NOW()
@@ -222,6 +240,9 @@ func (r *UserRepo) UpsertByAppleID(ctx context.Context, appleID string, email *s
 	))
 	if err != nil {
 		return nil, fmt.Errorf("upsert user by apple_id: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit create tx: %w", err)
 	}
 	return u, nil
 }

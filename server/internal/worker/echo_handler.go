@@ -131,13 +131,21 @@ func (h *EchoHandler) processHighlightCard(ctx context.Context, p EchoPayload, s
 
 // processInsightCards generates insight-type Echo cards from article key points.
 func (h *EchoHandler) processInsightCards(ctx context.Context, p EchoPayload, start time.Time) error {
-	// Fetch article
+	// Fetch article and verify ownership
 	article, err := h.articleRepo.GetByID(ctx, p.ArticleID)
 	if err != nil {
 		return fmt.Errorf("get article for echo: %w", err)
 	}
 	if article == nil {
 		slog.Warn("echo task: article not found, skipping", "article_id", p.ArticleID)
+		return nil
+	}
+	if article.UserID != p.UserID {
+		slog.Warn("echo task: article not owned by user, skipping",
+			"article_id", p.ArticleID,
+			"article_user", article.UserID,
+			"task_user", p.UserID,
+		)
 		return nil
 	}
 
