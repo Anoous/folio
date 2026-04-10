@@ -439,10 +439,18 @@ func (r *ArticleRepo) BroadRecallArticles(ctx context.Context, userID string, ke
 		escaped[i] = escapeILIKE(lc)
 	}
 
-	// Set low trigram threshold for broad recall
-	_, _ = r.pool.Exec(ctx, `SELECT set_config('pg_trgm.similarity_threshold', '0.1', true)`)
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin broad recall tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
 
-	rows, err := r.pool.Query(ctx, `
+	// Set low trigram threshold for broad recall (transaction-scoped)
+	if _, err := tx.Exec(ctx, `SELECT set_config('pg_trgm.similarity_threshold', '0.1', true)`); err != nil {
+		return nil, fmt.Errorf("set trigram threshold: %w", err)
+	}
+
+	rows, err := tx.Query(ctx, `
 		WITH keyword_matches AS (
 			SELECT DISTINCT ON (a.id)
 				a.id, a.user_id, a.url, a.title, a.summary, a.site_name, a.source_type, a.created_at,

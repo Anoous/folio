@@ -279,36 +279,20 @@ struct HomeView: View {
             }
 
             if let vm = viewModel {
-                ForEach(vm.feedSections, id: \.group) { section in
+                ForEach(Array(vm.feedSections.enumerated()), id: \.element.group) { sectionIndex, section in
                     Section {
                         ForEach(section.items) { item in
                             switch item {
                             case .article(let article):
-                                let isFirstUnreadToday = section.group == .today
-                                    && section.items.first(where: { if case .article = $0 { return true } else { return false } })?.id == item.id
-                                    && article.readProgress == 0 && article.status == .ready
-
-                                if isFirstUnreadToday {
-                                    HeroArticleCardView(article: article)
-                                        .contentShape(Rectangle())
-                                        .onTapGesture { selectArticle(article) }
-                                    .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
-                                    .listRowSeparator(.hidden)
-                                    .onAppear {
-                                        if article.id == vm.articles.last?.id {
-                                            vm.loadNextPage()
-                                        }
-                                    }
-                                } else {
-                                    HomeArticleRow(
-                                        article: article,
-                                        isLast: article.id == vm.articles.last?.id
-                                    ) { action in
-                                        handleArticleAction(action, article: article, vm: vm)
-                                    }
-                                    .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
-                                    .listRowSeparator(.hidden)
+                                HomeArticleRow(
+                                    article: article,
+                                    articleCount: vm.articles.count,
+                                    articleIndex: vm.articles.firstIndex(where: { $0.id == article.id })
+                                ) { action in
+                                    handleArticleAction(action, article: article, vm: vm)
                                 }
+                                .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
+                                .listRowSeparator(.hidden)
 
                             case .echo(let echoDTO):
                                 EchoCardView(
@@ -329,6 +313,18 @@ struct HomeView: View {
                             .textCase(nil)
                     }
                     .listSectionSeparator(.hidden)
+
+                    // Echo card between sections (max 1)
+                    if sectionIndex == 0, let echoCard = vm.intersectionEchoCard {
+                        EchoCardView(
+                            card: EchoCardData(from: echoCard),
+                            onReview: { result, completion in
+                                vm.submitEchoReview(cardID: echoCard.id, result: result, completion: completion)
+                            }
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                    }
                 }
             }
         }
@@ -365,15 +361,8 @@ struct HomeView: View {
 
     // MARK: - Date Formatting
 
-    private static let dateWeekdayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M月d日，EEEE"
-        return f
-    }()
-
     private func formattedDate() -> String {
-        Self.dateWeekdayFormatter.string(from: .now)
+        Date.now.formatted(.dateTime.month().day().weekday(.wide))
     }
 
     // MARK: - Status Banners

@@ -32,6 +32,23 @@ private final class RequestPathRecorder: @unchecked Sendable {
     var values: [String] = []
 }
 
+private final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func increment() {
+        lock.lock()
+        value += 1
+        lock.unlock()
+    }
+
+    func currentValue() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
 // MARK: - SyncService Tests
 
 final class SyncServiceTests: XCTestCase {
@@ -313,5 +330,89 @@ final class SyncServiceTests: XCTestCase {
         XCTAssertNotNil(updateIndex)
         XCTAssertNotNil(listIndex)
         XCTAssertLessThan(updateIndex!, listIndex!)
+    }
+
+    @MainActor
+    func testPerformFullSync_cancelsExistingPollersBeforeTheyHitTaskEndpoint() async throws {
+        let article = Article(url: "https://example.com/poll-cancel")
+        article.syncState = .pendingUpload
+        context.insert(article)
+        try context.save()
+
+        let pollRequests = LockedCounter()
+        let submitJSON = """
+        {"article_id": "server-art-1", "task_id": "task-1"}
+        """.data(using: .utf8)!
+
+        MockURLProtocol.requestHandler = { request in
+            let path = request.url?.path ?? ""
+
+            switch (request.httpMethod ?? "GET", path) {
+            case ("POST", "/api/v1/articles"):
+                return (submitJSON, self.makeResponse(statusCode: 202))
+            case ("GET", "/api/v1/tasks/task-1"):
+                pollRequests.increment()
+                let taskJSON = """
+                {"id":"task-1","url":"https://example.com","status":"queued","article_id":null,"retry_count":0,"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z"}
+                """.data(using: .utf8)!
+                return (taskJSON, self.makeResponse(statusCode: 200))
+            case ("GET", "/api/v1/categories"):
+                let json = """
+                {"data":[],"pagination":{"page":1,"per_page":20,"total":0}}
+                """.data(using: .utf8)!
+                return (json, self.makeResponse(statusCode: 200))
+            case ("GET", "/api/v1/tags"):
+                let json = """
+                {"data":[],"pagination":{"page":1,"per_page":20,"total":0}}
+                """.data(using: .utf8)!
+                return (json, self.makeResponse(statusCode: 200))
+            case ("GET", "/api/v1/articles"):
+                let json = """
+                {
+                  "data": [],
+                  "pagination": {"page": 1, "per_page": 50, "total": 0},
+                  "server_time": "2025-01-01T00:00:00Z",
+                  "sync_epoch": 1
+                }
+                """.data(using: .utf8)!
+                return (json, self.makeResponse(statusCode: 200))
+            case ("POST", "/api/v1/auth/refresh"):
+                let json = """
+                {
+                  "access_token":"new-token",
+                  "refresh_token":"new-refresh",
+                  "expires_in":3600,
+                  "user":{
+                    "id":"user-1",
+                    "email":"test@example.com",
+                    "nickname":"tester",
+                    "avatar_url":null,
+                    "subscription":"free",
+                    "subscription_expires_at":null,
+                    "monthly_quota":100,
+                    "current_month_count":1,
+                    "preferred_language":"en",
+                    "created_at":"2025-01-01T00:00:00Z",
+                    "updated_at":"2025-01-01T00:00:00Z",
+                    "sync_epoch":1
+                  }
+                }
+                """.data(using: .utf8)!
+                return (json, self.makeResponse(statusCode: 200))
+            default:
+                XCTFail("Unexpected request: \(request.httpMethod ?? "GET") \(path)")
+                return (Data(), self.makeResponse(statusCode: 500))
+            }
+        }
+
+        let syncService = SyncService(apiClient: apiClient, context: context)
+        let results = await syncService.submitPendingArticles([article])
+        XCTAssertEqual(results[article.id], true)
+
+        await Task.yield()
+        await syncService.performFullSync()
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(pollRequests.currentValue(), 0)
     }
 }

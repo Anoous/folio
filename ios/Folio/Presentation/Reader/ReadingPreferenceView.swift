@@ -62,8 +62,8 @@ struct ReadingPreferenceView: View {
     private var lineSpacingSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("行距")
-                    .font(.system(size: 15))
+                Text(String(localized: "reader.prefs.lineSpacing", defaultValue: "Line Spacing"))
+                    .font(Typography.listTitle)
                     .foregroundStyle(Color.folio.textPrimary)
                 Spacer()
                 Text(String(format: "%.1f", lineSpacing))
@@ -77,8 +77,8 @@ struct ReadingPreferenceView: View {
 
     private var fontFamilySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("字体")
-                .font(.system(size: 15))
+            Text(String(localized: "reader.prefs.fontFamily", defaultValue: "Font"))
+                .font(Typography.listTitle)
                 .foregroundStyle(Color.folio.textPrimary)
 
             HStack(spacing: 12) {
@@ -118,8 +118,8 @@ struct ReadingPreferenceView: View {
 
     private var themeSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("主题")
-                .font(.system(size: 15))
+            Text(String(localized: "reader.prefs.theme", defaultValue: "Theme"))
+                .font(Typography.listTitle)
                 .foregroundStyle(Color.folio.textPrimary)
 
             HStack(spacing: 12) {

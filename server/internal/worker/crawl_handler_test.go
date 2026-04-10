@@ -775,8 +775,9 @@ func TestProcessTask_ScrapeFail_NoClientContent_Fails(t *testing.T) {
 
 	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/article", "user-1")
 	err := h.ProcessTask(context.Background(), task)
-	if err == nil {
-		t.Fatal("ProcessTask should return error when scrape fails and no client content")
+	// After SetFailed, return nil to prevent asynq double-retry
+	if err != nil {
+		t.Fatalf("ProcessTask should return nil after SetFailed, got %v", err)
 	}
 
 	// Verify task was marked failed
@@ -825,8 +826,9 @@ func TestProcessTask_ScrapeFail_GetByIDError_Fails(t *testing.T) {
 
 	task := newCrawlAsynqTask("art-1", "task-1", "https://example.com/article", "user-1")
 	err := h.ProcessTask(context.Background(), task)
-	if err == nil {
-		t.Fatal("ProcessTask should return error when both scrape and GetByID fail")
+	// After SetFailed, return nil to prevent asynq double-retry
+	if err != nil {
+		t.Fatalf("ProcessTask should return nil after SetFailed, got %v", err)
 	}
 
 	// Verify task was marked failed (the original scrape error path)
@@ -867,8 +869,9 @@ func TestProcessTask_ScrapeFail_ArticleNotFound_Fails(t *testing.T) {
 
 	task := newCrawlAsynqTask("art-gone", "task-1", "https://example.com/deleted", "user-1")
 	err := h.ProcessTask(context.Background(), task)
-	if err == nil {
-		t.Fatal("ProcessTask should return error when scrape fails and article not found (nil, nil)")
+	// After SetFailed, return nil to prevent asynq double-retry
+	if err != nil {
+		t.Fatalf("ProcessTask should return nil after SetFailed, got %v", err)
 	}
 
 	// Verify task was marked failed

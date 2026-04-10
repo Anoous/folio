@@ -8,6 +8,7 @@ final class SyncService {
     private let apiClient: APIClient
     private let context: ModelContext
     private var isSyncing = false
+    private var pollingTasks: [UUID: Task<Void, Never>] = [:]
 
     private static let pollMaxAttempts = 10
     private static let pollInterval: Duration = .seconds(5)
@@ -72,9 +73,10 @@ final class SyncService {
                 // Start background polling for this article
                 let localID = article.id
                 let taskId = response.taskId
-                Task {
+                let pollingTask = Task {
                     await self.pollTask(taskId: taskId, articleLocalId: localID)
                 }
+                pollingTasks[localID] = pollingTask
             } catch let error as APIError {
                 switch error {
                 case .conflict:
@@ -128,8 +130,25 @@ final class SyncService {
     // MARK: - Task Polling
 
     private func pollTask(taskId: String, articleLocalId: UUID) async {
+        defer {
+            pollingTasks.removeValue(forKey: articleLocalId)
+        }
+
         for _ in 0..<Self.pollMaxAttempts {
-            try? await Task.sleep(for: Self.pollInterval)
+            do {
+                try await Task.sleep(for: Self.pollInterval)
+            } catch is CancellationError {
+                FolioLogger.sync.debug("task polling cancelled during sleep: \(taskId)")
+                return
+            } catch {
+                FolioLogger.sync.debug("task polling sleep failed: \(error) — task \(taskId)")
+                return
+            }
+
+            guard !Task.isCancelled else {
+                FolioLogger.sync.debug("task polling cancelled before request: \(taskId)")
+                return
+            }
 
             do {
                 let task = try await apiClient.getTask(id: taskId)
@@ -153,6 +172,10 @@ final class SyncService {
                     continue
                 }
             } catch {
+                guard !Task.isCancelled else {
+                    FolioLogger.sync.debug("task polling cancelled after request: \(taskId)")
+                    return
+                }
                 FolioLogger.sync.debug("poll network error: \(error) — task \(taskId)")
                 continue
             }
@@ -160,6 +183,13 @@ final class SyncService {
 
         FolioLogger.sync.error("task polling timed out: \(taskId)")
         updateArticleStatus(localID: articleLocalId, status: .failed, error: "Processing timed out")
+    }
+
+    private func cancelPollingTasks() {
+        for task in pollingTasks.values {
+            task.cancel()
+        }
+        pollingTasks.removeAll()
     }
 
     // MARK: - Fetch & Update Article
@@ -240,6 +270,7 @@ final class SyncService {
     // MARK: - Full Sync
 
     func performFullSync() async {
+        cancelPollingTasks()
         guard !isSyncing else {
             FolioLogger.sync.debug("full sync skipped — already syncing")
             return
@@ -262,6 +293,7 @@ final class SyncService {
     // MARK: - Incremental Sync (public entry point)
 
     func incrementalSync() async {
+        cancelPollingTasks()
         guard !isSyncing else {
             FolioLogger.sync.debug("incremental sync skipped — already syncing")
             return

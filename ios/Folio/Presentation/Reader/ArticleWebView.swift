@@ -1,14 +1,18 @@
 import SwiftUI
 import WebKit
 
-// MARK: - Custom WKWebView with "高亮" in system edit menu
+// MARK: - Custom WKWebView with localized highlight action in system edit menu
+
+private enum ReaderLocalizedStrings {
+    static let highlight = String(localized: "highlight.action", defaultValue: "Highlight")
+    static let highlighted = String(localized: "highlight.created", defaultValue: "Highlighted")
+}
 
 class HighlightableWebView: WKWebView {
     var coordinator: ArticleWebView.Coordinator?
 
     override func buildMenu(with builder: any UIMenuBuilder) {
-        // Add "高亮" action to the system edit menu (alongside Copy/Look Up/etc.)
-        let highlightAction = UIAction(title: "高亮", image: UIImage(systemName: "highlighter")) { [weak self] _ in
+        let highlightAction = UIAction(title: ReaderLocalizedStrings.highlight, image: UIImage(systemName: "highlighter")) { [weak self] _ in
             self?.coordinator?.handleHighlightFromMenu()
         }
         let highlightMenu = UIMenu(title: "", options: .displayInline, children: [highlightAction])
@@ -39,6 +43,7 @@ struct ArticleWebView: UIViewRepresentable {
     let onLinkTap: (String) -> Void                     // href URL
     let onToast: (String) -> Void                       // toast message
     let onContentReady: () -> Void                      // content loaded callback
+    let onTitleVisibilityChange: ((Bool) -> Void)?      // title scrolled in/out
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -55,6 +60,7 @@ struct ArticleWebView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.navigationDelegate = context.coordinator
         webView.coordinator = context.coordinator
 
@@ -132,6 +138,12 @@ struct ArticleWebView: UIViewRepresentable {
                 if let msg = body["message"] as? String {
                     parent.onToast(msg)
                 }
+            case "title.visibility":
+                if let visible = body["visible"] as? Bool {
+                    DispatchQueue.main.async { [self] in
+                        parent.onTitleVisibilityChange?(visible)
+                    }
+                }
             case "content.ready":
                 DispatchQueue.main.async { [self] in
                     parent.onContentReady()
@@ -195,7 +207,7 @@ struct ArticleWebView: UIViewRepresentable {
                       let end = dict["endOffset"] as? Int else { return }
                 DispatchQueue.main.async {
                     self?.parent.onHighlightCreate(text, start, end)
-                    self?.parent.onToast("已高亮")
+                    self?.parent.onToast(ReaderLocalizedStrings.highlighted)
                 }
             }
         }

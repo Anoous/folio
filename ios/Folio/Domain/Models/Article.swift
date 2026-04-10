@@ -124,6 +124,26 @@ final class Article {
         set { extractionSourceRaw = newValue.rawValue }
     }
 
+    // MARK: - Card Tier
+
+    enum CardTier {
+        case large     // Rich content: cover image + summary + long article
+        case standard  // Normal: has summary or cover image
+        case compact   // Short: tweet, voice note, screenshot, or minimal content
+    }
+
+    var cardTier: CardTier {
+        let hasCover = coverImageURL != nil && !(coverImageURL?.isEmpty ?? true)
+        let hasSummary = displaySummary != nil
+        let isShortForm = sourceType == .twitter || sourceType == .voice
+        let isScreenshot = sourceType == .screenshot
+
+        if isShortForm || isScreenshot { return .compact }
+        if status != .ready && status != .clientReady { return .standard }
+        if hasCover && hasSummary && wordCount > 500 { return .large }
+        return .standard
+    }
+
     /// Summary with markdown syntax stripped for display in cards and AI summary sections.
     var displaySummary: String? {
         guard let summary, !summary.isEmpty else { return nil }

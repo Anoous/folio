@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/redis/go-redis/v9"
 
 	"folio-server/internal/client"
 	"folio-server/internal/domain"
@@ -27,14 +29,16 @@ type AuthService struct {
 	jwtSecret     []byte
 	appleBundleID string
 	resend        *client.ResendClient
+	rdb           *redis.Client
 }
 
-func NewAuthService(userRepo *repository.UserRepo, jwtSecret string, appleBundleID string, resend *client.ResendClient) *AuthService {
+func NewAuthService(userRepo *repository.UserRepo, jwtSecret string, appleBundleID string, resend *client.ResendClient, rdb *redis.Client) *AuthService {
 	return &AuthService{
 		userRepo:      userRepo,
 		jwtSecret:     []byte(jwtSecret),
 		appleBundleID: appleBundleID,
 		resend:        resend,
+		rdb:           rdb,
 	}
 }
 
@@ -57,42 +61,10 @@ type AuthResponse struct {
 	User         *domain.User `json:"user"`
 }
 
-// Verification code in-memory storage
-type emailCode struct {
-	code      string
-	expiresAt time.Time
-	attempts  int
-}
-
-var (
-	codeMu       sync.Mutex
-	emailCodes   = map[string]*emailCode{}
-	codeCooldown = map[string]time.Time{}
-)
-
-func init() {
-	// Periodically purge expired codes and stale cooldowns to prevent
-	// unbounded memory growth from never-verified emails.
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
-			codeMu.Lock()
-			now := time.Now()
-			for email, ec := range emailCodes {
-				if now.After(ec.expiresAt) {
-					delete(emailCodes, email)
-				}
-			}
-			for email, ts := range codeCooldown {
-				if now.Sub(ts) > 10*time.Minute {
-					delete(codeCooldown, email)
-				}
-			}
-			codeMu.Unlock()
-		}
-	}()
-}
+// Redis key helpers for verification codes
+func codeKey(email string) string     { return "auth:code:" + email }
+func cooldownKey(email string) string { return "auth:cooldown:" + email }
+func attemptsKey(email string) string { return "auth:attempts:" + email }
 
 type SendCodeRequest struct {
 	Email string `json:"email"`
@@ -102,6 +74,12 @@ type VerifyCodeRequest struct {
 	Email string `json:"email"`
 	Code  string `json:"code"`
 }
+
+const (
+	emailCodeTTL          = 5 * time.Minute
+	emailCodeCooldownTTL  = 60 * time.Second
+	emailCodeWatchRetries = 3
+)
 
 // Apple JWKS cache
 var (
@@ -150,66 +128,82 @@ func (s *AuthService) SendEmailCode(ctx context.Context, req SendCodeRequest) er
 	// Generate 6-digit code
 	code := fmt.Sprintf("%06d", cryptoRandInt(1000000))
 
-	// Cooldown check + code store under one lock
-	codeMu.Lock()
-	if lastSent, ok := codeCooldown[email]; ok {
-		if time.Since(lastSent) < 60*time.Second {
-			codeMu.Unlock()
-			return ErrCodeRateLimit
-		}
+	if err := s.reserveEmailCode(ctx, email, code); err != nil {
+		slog.Error("failed to persist verification code", "email", email, "error", err)
+		return err
 	}
-	emailCodes[email] = &emailCode{
-		code:      code,
-		expiresAt: time.Now().Add(5 * time.Minute),
-		attempts:  0,
-	}
-	codeCooldown[email] = time.Now()
-	codeMu.Unlock()
 
-	// Send email via Resend (I/O outside lock)
+	// Send email via Resend
 	if err := s.resend.SendVerificationCode(email, code); err != nil {
 		slog.Error("failed to send verification email", "email", email, "error", err)
-		// Still log the code so dev/test can proceed
-		slog.Info("[AUTH] verification code (email failed)", "email", email, "code", code)
+		slog.Warn("[AUTH] verification email send failed — code stored, user can retry", "email", email)
 		return fmt.Errorf("send verification email: %w", err)
 	}
 	return nil
 }
 
+func (s *AuthService) reserveEmailCode(ctx context.Context, email, code string) error {
+	for range emailCodeWatchRetries {
+		err := s.rdb.Watch(ctx, func(tx *redis.Tx) error {
+			exists, err := tx.Exists(ctx, cooldownKey(email)).Result()
+			if err != nil {
+				return fmt.Errorf("check verification cooldown: %w", err)
+			}
+			if exists > 0 {
+				return ErrCodeRateLimit
+			}
+
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				pipe.Set(ctx, codeKey(email), code, emailCodeTTL)
+				pipe.Del(ctx, attemptsKey(email))
+				pipe.Set(ctx, cooldownKey(email), "1", emailCodeCooldownTTL)
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("persist verification code: %w", err)
+			}
+			return nil
+		}, cooldownKey(email))
+
+		switch {
+		case err == nil:
+			return nil
+		case errors.Is(err, ErrCodeRateLimit):
+			return err
+		case errors.Is(err, redis.TxFailedErr):
+			continue
+		default:
+			return fmt.Errorf("persist verification code: %w", err)
+		}
+	}
+
+	return ErrCodeRateLimit
+}
+
 func (s *AuthService) VerifyEmailCode(ctx context.Context, req VerifyCodeRequest) (*AuthResponse, error) {
 	email := strings.TrimSpace(strings.ToLower(req.Email))
 
-	// Validate code under one lock, then unlock before DB operations
-	codeMu.Lock()
-	ec, ok := emailCodes[email]
-	if !ok {
-		codeMu.Unlock()
+	// Retrieve stored code from Redis
+	storedCode, err := s.rdb.Get(ctx, codeKey(email)).Result()
+	if err != nil {
 		return nil, ErrInvalidCode
 	}
 
-	if time.Now().After(ec.expiresAt) {
-		delete(emailCodes, email)
-		codeMu.Unlock()
+	// Check attempt count (max 5)
+	attempts, _ := s.rdb.Incr(ctx, attemptsKey(email)).Result()
+	if attempts > 5 {
+		s.rdb.Del(ctx, codeKey(email), attemptsKey(email))
 		return nil, ErrInvalidCode
 	}
 
-	if ec.attempts >= 5 {
-		delete(emailCodes, email)
-		codeMu.Unlock()
+	if storedCode != req.Code {
 		return nil, ErrInvalidCode
 	}
 
-	if ec.code != req.Code {
-		ec.attempts++
-		codeMu.Unlock()
-		return nil, ErrInvalidCode
-	}
+	// Success — delete code and attempts
+	s.rdb.Del(ctx, codeKey(email), attemptsKey(email), cooldownKey(email))
 
-	// Success — delete code
-	delete(emailCodes, email)
-	codeMu.Unlock()
-
-	// Atomically find-or-create user (DB operation outside lock)
+	// Atomically find-or-create user
 	user, err := s.userRepo.UpsertByEmail(ctx, email)
 	if err != nil {
 		return nil, fmt.Errorf("upsert user by email: %w", err)

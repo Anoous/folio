@@ -12,6 +12,5 @@ struct ReadingProgressBar: View {
                 .animation(Motion.ink, value: progress)
         }
         .frame(height: 2)
-        .padding(.horizontal, Spacing.screenPadding)
     }
 }

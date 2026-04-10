@@ -73,6 +73,7 @@ services:
       - ./migrations/010_subscription_txn.up.sql:/docker-entrypoint-initdb.d/011_subscription_txn.sql
       - ./migrations/011_devices.up.sql:/docker-entrypoint-initdb.d/012_devices.sql
       - ./migrations/012_smart_retrieval.up.sql:/docker-entrypoint-initdb.d/013_smart_retrieval.sql
+      - ./migrations/013_bugfix_auth_stats.up.sql:/docker-entrypoint-initdb.d/014_bugfix_auth_stats.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U folio -d folio"]
       interval: 10s

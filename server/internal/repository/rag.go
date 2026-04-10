@@ -98,15 +98,23 @@ func (r *RAGRepo) BroadRecallSummaries(ctx context.Context, userID string, keywo
 		escaped[i] = escapeILIKE(lc)
 	}
 
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin broad recall tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	// Set low trigram threshold for broad recall (transaction-scoped)
-	_, _ = r.db.Exec(ctx, `SELECT set_config('pg_trgm.similarity_threshold', '0.1', true)`)
+	if _, err := tx.Exec(ctx, `SELECT set_config('pg_trgm.similarity_threshold', '0.1', true)`); err != nil {
+		return nil, fmt.Errorf("set trigram threshold: %w", err)
+	}
 
 	var excludeUUID interface{}
 	if excludeID != "" {
 		excludeUUID = excludeID
 	}
 
-	rows, err := r.db.Query(ctx, `
+	rows, err := tx.Query(ctx, `
 		WITH keyword_matches AS (
 			SELECT DISTINCT ON (a.id)
 				a.id, a.title, a.summary, a.key_points, a.site_name, a.created_at,

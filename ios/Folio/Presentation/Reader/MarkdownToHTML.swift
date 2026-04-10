@@ -7,7 +7,97 @@ import Markdown
 /// HTML document string suitable for rendering in WKWebView.
 struct MarkdownToHTML {
 
-    // MARK: - Public API
+    // MARK: - Article Header Metadata
+
+    struct ArticleHeader {
+        let title: String
+        let siteName: String?
+        let author: String?
+        let readingTime: String
+        let dateLabel: String
+        let summary: String?
+        let keyPoints: [String]
+    }
+
+    struct ReaderStrings {
+        let highlight: String
+        let copy: String
+        let removeHighlight: String
+        let highlighted: String
+        let copied: String
+        let removedHighlight: String
+
+        static let reader = ReaderStrings(
+            highlight: String(localized: "highlight.action", defaultValue: "Highlight"),
+            copy: String(localized: "button.copy", defaultValue: "Copy"),
+            removeHighlight: String(localized: "highlight.remove", defaultValue: "Remove Highlight"),
+            highlighted: String(localized: "highlight.created", defaultValue: "Highlighted"),
+            copied: String(localized: "highlight.copied", defaultValue: "Copied"),
+            removedHighlight: String(localized: "highlight.removed", defaultValue: "Highlight Removed")
+        )
+    }
+
+
+    // MARK: - Public API (with inline header)
+
+    static func convertWithHeader(
+        markdown: String,
+        header: ArticleHeader,
+        highlights: [(id: String, startOffset: Int, endOffset: Int)],
+        fontSize: CGFloat,
+        lineSpacing: CGFloat,
+        fontFamily: ReadingFontFamily,
+        theme: ReadingTheme,
+        strings: ReaderStrings = .reader
+    ) -> String {
+        let preprocessed = MarkdownRenderer.preprocessed(markdown, title: header.title)
+        let document = Document(parsing: preprocessed)
+        var visitor = MarkdownHTMLVisitor()
+        let bodyHTML = visitor.visitDocument(document)
+
+        let highlightsJSON = highlights.map { h in
+            "{id:\"\(escapeJS(h.id))\",startOffset:\(h.startOffset),endOffset:\(h.endOffset)}"
+        }.joined(separator: ",")
+
+        let colors = themeColors(theme)
+        let cssFontFamily = cssFontFamilyValue(fontFamily)
+        let lineHeightRatio = (fontSize + lineSpacing) / fontSize
+        let stringsJSON = jsObject(strings)
+
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+        <style>
+        \(cssTemplate(
+            fontSize: fontSize,
+            lineHeight: lineHeightRatio,
+            fontFamily: cssFontFamily,
+            bg: colors.bg,
+            text1: colors.text1,
+            text2: colors.text2
+        ))
+        \(headerCSS)
+        </style>
+        </head>
+        <body>
+        <div class="reader-shell">
+        \(headerHTML(header, accentHex: "#0071E3"))
+        <div class="article-body">\(bodyHTML)</div>
+        </div>
+        <script>
+        window.existingHighlights = [\(highlightsJSON)];
+        window.folioStrings = \(stringsJSON);
+        \(articleJS)
+        </script>
+        </body>
+        </html>
+        """
+    }
+
+    // MARK: - Public API (body only, legacy)
 
     static func convert(
         markdown: String,
@@ -16,7 +106,8 @@ struct MarkdownToHTML {
         fontSize: CGFloat,
         lineSpacing: CGFloat,
         fontFamily: ReadingFontFamily,
-        theme: ReadingTheme
+        theme: ReadingTheme,
+        strings: ReaderStrings = .reader
     ) -> String {
         let preprocessed = MarkdownRenderer.preprocessed(markdown, title: title)
         let document = Document(parsing: preprocessed)
@@ -31,13 +122,14 @@ struct MarkdownToHTML {
         let cssFontFamily = cssFontFamilyValue(fontFamily)
         // lineSpacing is in points; convert to a unitless ratio relative to fontSize
         let lineHeightRatio = (fontSize + lineSpacing) / fontSize
+        let stringsJSON = jsObject(strings)
 
         return """
         <!DOCTYPE html>
         <html>
         <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
         <style>
         \(cssTemplate(
             fontSize: fontSize,
@@ -50,9 +142,12 @@ struct MarkdownToHTML {
         </style>
         </head>
         <body>
+        <div class="reader-shell">
         <div class="article-body">\(bodyHTML)</div>
+        </div>
         <script>
         window.existingHighlights = [\(highlightsJSON)];
+        window.folioStrings = \(stringsJSON);
         \(articleJS)
         </script>
         </body>
@@ -99,6 +194,8 @@ struct MarkdownToHTML {
             --accent: #0071E3;
             --sep: rgba(0,0,0,0.05);
             --highlight: rgba(0,113,227,0.12);
+            --code-bg: rgba(0,0,0,0.03);
+            --blockquote-border: var(--text-2);
         }
         body {
             font-family: var(--font-family);
@@ -107,22 +204,24 @@ struct MarkdownToHTML {
             color: var(--text-1);
             background: var(--bg);
             margin: 0;
-            padding: 0 20px 80px;
+            padding: 0 20px 28px;
+            padding-top: calc(env(safe-area-inset-top, 0px) + 44px);
             -webkit-text-size-adjust: 100%;
             -webkit-tap-highlight-color: transparent;
         }
+        .reader-shell { max-width: 720px; margin: 0 auto; }
         h2 { font-size: 20px; font-weight: bold; margin: 32px 0 14px; line-height: 1.4; }
         h3 { font-size: 18px; font-weight: bold; margin: 24px 0 10px; line-height: 1.4; }
         p { margin-bottom: 20px; }
         blockquote {
             padding: 12px 0 12px 16px;
-            border-left: 2px solid var(--text-2);
+            border-left: 2px solid var(--blockquote-border);
             margin: 20px 0;
             font-style: italic;
             opacity: 0.8;
         }
         pre {
-            background: rgba(0,0,0,0.03);
+            background: var(--code-bg);
             padding: 16px;
             border-radius: 8px;
             overflow-x: auto;
@@ -131,7 +230,7 @@ struct MarkdownToHTML {
         code {
             font-family: ui-monospace, "SF Mono", monospace;
             font-size: 14px;
-            background: rgba(0,0,0,0.03);
+            background: var(--code-bg);
             padding: 2px 6px;
             border-radius: 4px;
         }
@@ -192,10 +291,29 @@ struct MarkdownToHTML {
             from { opacity: 0; transform: translateX(-50%) scale(0.9); }
             to { opacity: 1; transform: translateX(-50%) scale(1); }
         }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --code-bg: rgba(255,255,255,0.08);
+                --blockquote-border: rgba(255,255,255,0.18);
+            }
+        }
         """
     }
 
     // MARK: - Escape Helpers
+
+    private static func jsObject(_ strings: ReaderStrings) -> String {
+        """
+        {
+            highlight:"\(escapeJS(strings.highlight))",
+            copy:"\(escapeJS(strings.copy))",
+            removeHighlight:"\(escapeJS(strings.removeHighlight))",
+            highlighted:"\(escapeJS(strings.highlighted))",
+            copied:"\(escapeJS(strings.copied))",
+            removedHighlight:"\(escapeJS(strings.removedHighlight))"
+        }
+        """
+    }
 
     /// Escapes a string for safe inclusion inside a JavaScript string literal.
     private static func escapeJS(_ string: String) -> String {
@@ -220,6 +338,14 @@ extension MarkdownToHTML {
         "use strict";
 
         var activePopup = null;
+        var strings = window.folioStrings || {
+            highlight: "Highlight",
+            copy: "Copy",
+            removeHighlight: "Remove Highlight",
+            highlighted: "Highlighted",
+            copied: "Copied",
+            removedHighlight: "Highlight Removed"
+        };
 
         // ── Swift bridge ─────────────────────────────────────
         function msg(type, data) {
@@ -437,13 +563,31 @@ extension MarkdownToHTML {
             }
         });
 
+        function articleBodyMetrics() {
+            var body = document.querySelector('.article-body');
+            if (!body) {
+                return {
+                    top: 0,
+                    scrollable: Math.max(0, document.body.scrollHeight - window.innerHeight)
+                };
+            }
+
+            var rect = body.getBoundingClientRect();
+            return {
+                top: rect.top + window.scrollY,
+                scrollable: Math.max(0, body.scrollHeight - window.innerHeight)
+            };
+        }
+
         // ── Scroll progress ──────────────────────────────────
         var scrollThrottle = null;
         window.addEventListener('scroll', function() {
             if (scrollThrottle) return;
             scrollThrottle = setTimeout(function() {
                 scrollThrottle = null;
-                var pct = window.scrollY / Math.max(1, document.body.scrollHeight - window.innerHeight);
+                var metrics = articleBodyMetrics();
+                var numerator = window.scrollY - metrics.top;
+                var pct = metrics.scrollable > 0 ? numerator / metrics.scrollable : 0;
                 msg('scroll.progress', {percent: Math.min(1, Math.max(0, pct))});
             }, 100);
         });
@@ -466,7 +610,9 @@ extension MarkdownToHTML {
 
         // ── Called from Swift ─────────────────────────────────
         window.scrollToProgress = function(pct) {
-            window.scrollTo(0, (document.body.scrollHeight - window.innerHeight) * pct);
+            var clamped = Math.min(1, Math.max(0, pct));
+            var metrics = articleBodyMetrics();
+            window.scrollTo(0, metrics.top + metrics.scrollable * clamped);
         };
 
         window.setPreferences = function(fontSize, lineHeight, fontFamily, bgColor, textColor, secondaryColor) {
@@ -479,13 +625,186 @@ extension MarkdownToHTML {
             r.setProperty('--text-2', secondaryColor);
         };
 
+        // ── Insight panel toggle ─────────────────────────────
+        document.addEventListener('click', function(e) {
+            var toggle = e.target.closest('#insight-toggle');
+            if (!toggle) return;
+            var text = document.getElementById('insight-text');
+            var details = document.getElementById('insight-details');
+            var chevron = document.getElementById('insight-chevron');
+            if (!text) return;
+            var expanded = text.classList.toggle('expanded');
+            if (details) details.classList.toggle('show', expanded);
+            if (chevron) chevron.classList.toggle('expanded', expanded);
+        });
+
+        // ── Title scroll visibility ──────────────────────────
+        var titleObserver = null;
+        function observeTitle() {
+            var titleEl = document.getElementById('reader-title');
+            if (!titleEl || !window.IntersectionObserver) return;
+            titleObserver = new IntersectionObserver(function(entries) {
+                entries.forEach(function(entry) {
+                    msg('title.visibility', {visible: entry.isIntersecting});
+                });
+            }, {threshold: 0});
+            titleObserver.observe(titleEl);
+        }
+
         // ── Init ─────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', function() {
             renderExistingHighlights();
+            observeTitle();
             msg('content.ready', {height: document.body.scrollHeight});
         });
     })();
     """
+}
+
+// MARK: - Inline Header HTML & CSS
+
+extension MarkdownToHTML {
+
+    static var headerCSS: String {
+        """
+        .reader-header {
+            padding: 0;
+        }
+        .reader-title {
+            font-size: 26px;
+            font-weight: 700;
+            line-height: 1.35;
+            margin: 0 0 16px;
+            font-family: var(--font-family);
+        }
+        .reader-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: var(--text-2);
+            margin-bottom: 20px;
+        }
+        .reader-meta-left { display: flex; gap: 4px; align-items: center; }
+        .reader-meta-dot { opacity: 0.5; }
+        .reader-insight {
+            background: rgba(0,113,227,0.06);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 24px;
+        }
+        .reader-insight-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .reader-insight-icon { font-size: 14px; flex-shrink: 0; padding-top: 2px; }
+        .reader-insight-text {
+            font-size: 15px;
+            font-weight: 500;
+            line-height: 1.55;
+            color: var(--text-1);
+            flex: 1;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .reader-insight-text.expanded {
+            -webkit-line-clamp: unset;
+            overflow: visible;
+        }
+        .reader-insight-chevron {
+            font-size: 12px;
+            color: var(--text-2);
+            opacity: 0.5;
+            transition: transform 0.25s ease;
+            flex-shrink: 0;
+            padding-top: 4px;
+        }
+        .reader-insight-chevron.expanded { transform: rotate(180deg); }
+        .reader-insight-details {
+            display: none;
+            padding-top: 12px;
+            margin-top: 12px;
+            border-top: 0.5px solid var(--sep);
+        }
+        .reader-insight-details.show { display: block; }
+        .reader-insight-point {
+            display: flex;
+            gap: 8px;
+            padding: 4px 0;
+            font-size: 14px;
+            color: var(--text-2);
+            line-height: 1.6;
+        }
+        .reader-insight-point-dot { color: var(--text-2); opacity: 0.4; flex-shrink: 0; }
+        .reader-divider {
+            border: none;
+            border-top: 0.5px solid var(--sep);
+            margin: 0 0 24px;
+        }
+        """
+    }
+
+    static func headerHTML(_ header: ArticleHeader, accentHex: String) -> String {
+        var metaLeft = ""
+        if let siteName = header.siteName, !siteName.isEmpty {
+            metaLeft += "<span>\(escapeHeaderHTML(siteName))</span>"
+        }
+        if let author = header.author, !author.isEmpty {
+            if !metaLeft.isEmpty { metaLeft += "<span class=\"reader-meta-dot\">&middot;</span>" }
+            metaLeft += "<span>\(escapeHeaderHTML(author))</span>"
+        }
+        if !metaLeft.isEmpty { metaLeft += "<span class=\"reader-meta-dot\">&middot;</span>" }
+        metaLeft += "<span>\(escapeHeaderHTML(header.readingTime))</span>"
+
+        var insightHTML = ""
+        if let summary = header.summary, !summary.isEmpty {
+            let hasPoints = !header.keyPoints.isEmpty
+            let chevron = hasPoints ? "<span class=\"reader-insight-chevron\" id=\"insight-chevron\">&#9662;</span>" : ""
+            var pointsHTML = ""
+            if hasPoints {
+                pointsHTML = "<div class=\"reader-insight-details\" id=\"insight-details\">"
+                for point in header.keyPoints {
+                    pointsHTML += "<div class=\"reader-insight-point\"><span class=\"reader-insight-point-dot\">&middot;</span><span>\(escapeHeaderHTML(point))</span></div>"
+                }
+                pointsHTML += "</div>"
+            }
+            insightHTML = """
+            <div class="reader-insight">
+                <div class="reader-insight-header" id="insight-toggle">
+                    <span class="reader-insight-icon">\u{2726}</span>
+                    <span class="reader-insight-text" id="insight-text">\(escapeHeaderHTML(summary))</span>
+                    \(chevron)
+                </div>
+                \(pointsHTML)
+            </div>
+            """
+        }
+
+        return """
+        <div class="reader-header" id="reader-header">
+            <h1 class="reader-title" id="reader-title">\(escapeHeaderHTML(header.title))</h1>
+            <div class="reader-meta">
+                <div class="reader-meta-left">\(metaLeft)</div>
+                <span>\(escapeHeaderHTML(header.dateLabel))</span>
+            </div>
+            \(insightHTML)
+            <hr class="reader-divider">
+        </div>
+        """
+    }
+
+    private static func escapeHeaderHTML(_ string: String) -> String {
+        string
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+    }
 }
 
 // MARK: - HTML Visitor

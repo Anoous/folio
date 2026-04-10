@@ -14,15 +14,24 @@ struct HomeArticleRow: View {
     @Environment(\.selectArticle) private var selectArticle
 
     let article: Article
-    let isLast: Bool
+    let articleCount: Int
+    let articleIndex: Int?
     let onAction: (ArticleRowAction) -> Void
 
     var body: some View {
         ArticleCardView(article: article)
             .contentShape(Rectangle())
-            .onTapGesture { selectArticle(article) }
+            .onTapGesture {
+                if article.status == .failed {
+                    onAction(.retry)
+                } else {
+                    selectArticle(article)
+                }
+            }
         .onAppear {
-            if isLast { onAction(.loadMore) }
+            if let idx = articleIndex, idx >= articleCount - 5 {
+                onAction(.loadMore)
+            }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {

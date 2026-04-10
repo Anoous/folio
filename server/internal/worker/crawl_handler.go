@@ -228,7 +228,7 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 			)
 			h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
 			h.articleRepo.SetError(ctx, p.ArticleID, err.Error())
-			return fmt.Errorf("scrape failed: %w", err)
+			return nil
 		}
 		slog.Info("jina fallback succeeded", "article_id", p.ArticleID, "url", p.URL, "duration_ms", time.Since(start).Milliseconds())
 	}

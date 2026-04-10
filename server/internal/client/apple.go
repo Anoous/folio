@@ -3,12 +3,14 @@ package client
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 	"strings"
@@ -21,6 +23,24 @@ const (
 	appleStoreKitProductionURL = "https://api.storekit.itunes.apple.com"
 	appleStoreKitSandboxURL    = "https://api.storekit-sandbox.itunes.apple.com"
 )
+
+// appleRootCAPEM is Apple Root CA - G3, used to verify the certificate chain
+// in JWS payloads from App Store Server Notifications.
+const appleRootCAPEM = `-----BEGIN CERTIFICATE-----
+MIICQzCCAcmgAwIBAgIILcX8iNLFS5UwCgYIKoZIzj0EAwMwZzEbMBkGA1UEAwwS
+QXBwbGUgUm9vdCBDQSAtIEczMSYwJAYDVQQLDB1BcHBsZSBDZXJ0aWZpY2F0aW9u
+IEF1dGhvcml0eTETMBEGA1UECgwKQXBwbGUgSW5jLjELMAkGA1UEBhMCVVMwHhcN
+MTQwNDMwMTgxOTA2WhcNMzkwNDMwMTgxOTA2WjBnMRswGQYDVQQDDBJBcHBsZSBS
+b290IENBIC0gRzMxJjAkBgNVBAsMHUFwcGxlIENlcnRpZmljYXRpb24gQXV0aG9y
+aXR5MRMwEQYDVQQKDApBcHBsZSBJbmMuMQswCQYDVQQGEwJVUzB2MBAGByqGSM49
+AgEGBSuBBAAiA2IABJjpLz1AcqTtkyJygRMc3RCV8cWjTnHcFBbZDuWmBSp3ZHtf
+TjjTuxxEtX/1H7YyYl3J6YRbTzBPEVoA/VhYDKX1DyxNB0cTddqXl5dvMVztK517
+IDvYuVTZXpmkOlEKMaNCMEAwHQYDVR0OBBYEFLuw3GKhkYO5TsEwFBOLC7ABRISA
+MA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2gA
+MGUCMQCd7BAtljYhR0hl/gz7BYvfDYQ3YEOOmQEfF4ixdNHQxD4rvs/MNRzKpV0k
+LHKDGGICMG5C8t30og64eu7Q3LyNT8LNEP693gHDPAHF7ixiKRjNPpdxBYvLGqm/
+fhEzO1cjdw==
+-----END CERTIFICATE-----`
 
 // TransactionInfo holds parsed App Store transaction data.
 type TransactionInfo struct {
@@ -164,13 +184,12 @@ func (c *AppleClient) ParseSignedTransaction(signedTxn string) (*TransactionInfo
 
 // ---------- Shared JWS helpers ----------
 
-// parseSignedTransaction base64-decodes the payload portion of a JWS and
-// unmarshals it into TransactionInfo. Full JWS signature verification is
-// skipped for the MVP — Apple's TLS guarantees authenticity in transit.
+// parseSignedTransaction verifies the JWS signature against Apple's
+// certificate chain and unmarshals the payload into TransactionInfo.
 func parseSignedTransaction(signed string) (*TransactionInfo, error) {
-	payload, err := decodeJWSPayload(signed)
+	payload, err := verifyAndDecodeJWSPayload(signed)
 	if err != nil {
-		return nil, fmt.Errorf("decode signed transaction: %w", err)
+		return nil, fmt.Errorf("verify signed transaction: %w", err)
 	}
 
 	var raw transactionInfoRaw
@@ -181,12 +200,12 @@ func parseSignedTransaction(signed string) (*TransactionInfo, error) {
 	return raw.toTransactionInfo(), nil
 }
 
-// parseWebhookPayload base64-decodes the payload portion of a JWS and
-// unmarshals it into WebhookEvent.
+// parseWebhookPayload verifies the JWS signature against Apple's certificate
+// chain and unmarshals the payload into WebhookEvent.
 func parseWebhookPayload(signedPayload string) (*WebhookEvent, error) {
-	payload, err := decodeJWSPayload(signedPayload)
+	payload, err := verifyAndDecodeJWSPayload(signedPayload)
 	if err != nil {
-		return nil, fmt.Errorf("decode webhook payload: %w", err)
+		return nil, fmt.Errorf("verify webhook payload: %w", err)
 	}
 
 	var event WebhookEvent
@@ -197,13 +216,121 @@ func parseWebhookPayload(signedPayload string) (*WebhookEvent, error) {
 }
 
 // decodeJWSPayload extracts and base64-decodes the payload (second segment)
-// of a JWS compact serialisation (header.payload.signature).
+// of a JWS compact serialisation (header.payload.signature). This does NOT
+// verify the signature and is only used by MockAppleClient.
 func decodeJWSPayload(jws string) ([]byte, error) {
 	parts := strings.SplitN(jws, ".", 3)
 	if len(parts) < 2 {
 		return nil, fmt.Errorf("invalid JWS: expected at least 2 dot-separated parts, got %d", len(parts))
 	}
 	return base64.RawURLEncoding.DecodeString(parts[1])
+}
+
+// verifyAndDecodeJWSPayload verifies the JWS signature against Apple's
+// certificate chain (x5c header → intermediate → Apple Root CA G3) and
+// returns the decoded payload bytes on success.
+func verifyAndDecodeJWSPayload(jwsCompact string) ([]byte, error) {
+	parts := strings.SplitN(jwsCompact, ".", 3)
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid JWS: expected 3 dot-separated parts, got %d", len(parts))
+	}
+	headerB64, payloadB64, sigB64 := parts[0], parts[1], parts[2]
+
+	// --- 1. Parse JWS header to extract x5c and alg ---
+	headerBytes, err := base64.RawURLEncoding.DecodeString(headerB64)
+	if err != nil {
+		return nil, fmt.Errorf("decode JWS header: %w", err)
+	}
+
+	var header struct {
+		Alg string   `json:"alg"`
+		X5c []string `json:"x5c"`
+	}
+	if err := json.Unmarshal(headerBytes, &header); err != nil {
+		return nil, fmt.Errorf("parse JWS header: %w", err)
+	}
+
+	if header.Alg != "ES256" {
+		return nil, fmt.Errorf("unsupported JWS algorithm: %s (expected ES256)", header.Alg)
+	}
+	if len(header.X5c) < 2 {
+		return nil, fmt.Errorf("x5c chain too short: need at least 2 certificates, got %d", len(header.X5c))
+	}
+
+	// --- 2. Build certificate chain from x5c ---
+	certs := make([]*x509.Certificate, len(header.X5c))
+	for i, certB64 := range header.X5c {
+		certDER, err := base64.StdEncoding.DecodeString(certB64)
+		if err != nil {
+			return nil, fmt.Errorf("decode x5c[%d]: %w", i, err)
+		}
+		cert, err := x509.ParseCertificate(certDER)
+		if err != nil {
+			return nil, fmt.Errorf("parse x5c[%d]: %w", i, err)
+		}
+		certs[i] = cert
+	}
+
+	// --- 3. Verify certificate chain against Apple Root CA G3 ---
+	block, _ := pem.Decode([]byte(appleRootCAPEM))
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode Apple Root CA PEM")
+	}
+	rootCert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse Apple Root CA: %w", err)
+	}
+
+	rootPool := x509.NewCertPool()
+	rootPool.AddCert(rootCert)
+
+	intermediatePool := x509.NewCertPool()
+	for _, cert := range certs[1:] {
+		intermediatePool.AddCert(cert)
+	}
+
+	leaf := certs[0]
+	if _, err := leaf.Verify(x509.VerifyOptions{
+		Roots:         rootPool,
+		Intermediates: intermediatePool,
+	}); err != nil {
+		return nil, fmt.Errorf("certificate chain verification failed: %w", err)
+	}
+
+	// --- 4. Verify JWS ES256 signature ---
+	sigBytes, err := base64.RawURLEncoding.DecodeString(sigB64)
+	if err != nil {
+		return nil, fmt.Errorf("decode JWS signature: %w", err)
+	}
+
+	// ES256 JWS signature is 64 bytes in IEEE P1363 format: R (32) || S (32).
+	if len(sigBytes) != 64 {
+		return nil, fmt.Errorf("invalid ES256 signature length: expected 64 bytes, got %d", len(sigBytes))
+	}
+
+	r := new(big.Int).SetBytes(sigBytes[:32])
+	s := new(big.Int).SetBytes(sigBytes[32:])
+
+	pubKey, ok := leaf.PublicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("leaf certificate public key is not ECDSA")
+	}
+
+	// Signing input for JWS is ASCII(header_b64url || '.' || payload_b64url).
+	signingInput := []byte(headerB64 + "." + payloadB64)
+	hash := sha256.Sum256(signingInput)
+
+	if !ecdsa.Verify(pubKey, hash[:], r, s) {
+		return nil, fmt.Errorf("JWS signature verification failed")
+	}
+
+	// --- 5. Decode and return payload ---
+	payload, err := base64.RawURLEncoding.DecodeString(payloadB64)
+	if err != nil {
+		return nil, fmt.Errorf("decode JWS payload: %w", err)
+	}
+
+	return payload, nil
 }
 
 // transactionInfoRaw mirrors Apple's JSON where dates are milliseconds since
@@ -286,9 +413,9 @@ func (m *MockAppleClient) VerifyTransaction(_ context.Context, txnID string) (*T
 }
 
 func (m *MockAppleClient) ParseWebhookPayload(signedPayload string) (*WebhookEvent, error) {
-	// Attempt real decoding first — the payload structure is independent of
-	// credentials.
-	event, err := parseWebhookPayload(signedPayload)
+	// Attempt decoding without signature verification — mock payloads are
+	// not signed by Apple.
+	payload, err := decodeJWSPayload(signedPayload)
 	if err != nil {
 		// Fallback: return a plausible renewal event.
 		return &WebhookEvent{
@@ -297,12 +424,21 @@ func (m *MockAppleClient) ParseWebhookPayload(signedPayload string) (*WebhookEve
 			Data:             WebhookData{SignedTransactionInfo: signedPayload},
 		}, nil
 	}
-	return event, nil
+	var event WebhookEvent
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return &WebhookEvent{
+			NotificationType: "DID_RENEW",
+			Subtype:          "",
+			Data:             WebhookData{SignedTransactionInfo: signedPayload},
+		}, nil
+	}
+	return &event, nil
 }
 
 func (m *MockAppleClient) ParseSignedTransaction(signedTxn string) (*TransactionInfo, error) {
-	// Attempt real decoding first.
-	info, err := parseSignedTransaction(signedTxn)
+	// Attempt decoding without signature verification — mock payloads are
+	// not signed by Apple.
+	payload, err := decodeJWSPayload(signedTxn)
 	if err != nil {
 		now := time.Now()
 		expires := now.Add(365 * 24 * time.Hour)
@@ -315,5 +451,18 @@ func (m *MockAppleClient) ParseSignedTransaction(signedTxn string) (*Transaction
 			PurchaseDate:          &now,
 		}, nil
 	}
-	return info, nil
+	var raw transactionInfoRaw
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		now := time.Now()
+		expires := now.Add(365 * 24 * time.Hour)
+		return &TransactionInfo{
+			TransactionID:         "mock-txn",
+			OriginalTransactionID: "mock-txn",
+			ProductID:             "com.folio.app.pro.yearly",
+			BundleID:              m.bundleID,
+			ExpiresDate:           &expires,
+			PurchaseDate:          &now,
+		}, nil
+	}
+	return raw.toTransactionInfo(), nil
 }

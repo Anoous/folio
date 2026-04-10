@@ -52,12 +52,16 @@ func NewRouter(deps RouterDeps) http.Handler {
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
+	// Rate limiters for public auth endpoints
+	authLimiter := middleware.NewRateLimiter(20, 5)       // 20 req/min, burst 5
+	emailCodeLimiter := middleware.NewRateLimiter(5, 3)   // 5 req/min, burst 3
+
 	r.Route("/api/v1", func(r chi.Router) {
-		// Public routes
-		r.Post("/auth/apple", deps.AuthHandler.HandleAppleLogin)
-		r.Post("/auth/refresh", deps.AuthHandler.HandleRefreshToken)
-		r.Post("/auth/email/code", deps.AuthHandler.HandleSendCode)
-		r.Post("/auth/email/verify", deps.AuthHandler.HandleVerifyCode)
+		// Public routes (rate-limited)
+		r.With(authLimiter.Middleware).Post("/auth/apple", deps.AuthHandler.HandleAppleLogin)
+		r.With(authLimiter.Middleware).Post("/auth/refresh", deps.AuthHandler.HandleRefreshToken)
+		r.With(emailCodeLimiter.Middleware).Post("/auth/email/code", deps.AuthHandler.HandleSendCode)
+		r.With(authLimiter.Middleware).Post("/auth/email/verify", deps.AuthHandler.HandleVerifyCode)
 
 		// Apple webhook — public endpoint (Apple calls without JWT)
 		r.Post("/webhook/apple", deps.SubscriptionHandler.HandleWebhook)

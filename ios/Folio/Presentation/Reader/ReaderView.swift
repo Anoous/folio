@@ -15,18 +15,15 @@ struct ReaderView: View {
     @State private var showsReadingPreferences = false
     @State private var showsWebView = false
     @State private var showsDeleteConfirmation = false
-    @State private var showMoreMenu = false
     @Environment(\.openURL) private var openURL
-    @State private var isInsightExpanded = false
-    @State private var metrics = ScaledArticleMetrics()
     @State private var showToastState = false
     @State private var tappedImageURL: URL?
 
     // Ink entrance
-    @State private var titleVisible = false
-    @State private var metaVisible = false
     @State private var contentVisible = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+
 
     // Swipe-to-dismiss
     @GestureState private var dragOffset: CGFloat = 0
@@ -64,13 +61,15 @@ struct ReaderView: View {
                     }
                 }
                 .onEnded { value in
-                    if value.translation.width > 80 {
+                    let shouldDismiss = value.translation.width > 120 || value.predictedEndTranslation.width > 200
+                    if shouldDismiss {
                         onDismiss?()
                     }
                 }
         )
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .toolbar(onDismiss != nil ? .hidden : .visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
@@ -80,61 +79,50 @@ struct ReaderView: View {
                         dismiss()
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .semibold))
-                        Text("页集")
-                            .font(.system(size: 16))
-                    }
-                    .foregroundStyle(Color.folio.accent)
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.folio.accent)
                 }
             }
+            ToolbarItem(placement: .principal) {
+                Text(article.displayTitle)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(readingTheme.textColor)
+                    .lineLimit(1)
+            }
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showMoreMenu = true
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .foregroundStyle(Color.folio.textPrimary)
-                }
-                .accessibilityLabel(String(localized: "button.more", defaultValue: "More options"))
+                readerMoreMenu(iconFont: nil, extraPadding: false)
             }
         }
         .overlay(alignment: .topLeading) {
-            // Inline back button for when ReaderView is outside NavigationStack (hero transition)
             if onDismiss != nil {
                 Button {
                     onDismiss?()
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .semibold))
-                        Text("页集")
-                            .font(.system(size: 16))
-                    }
-                    .foregroundStyle(Color.folio.accent)
-                    .padding(.horizontal, Spacing.screenPadding)
-                    .padding(.top, 12)
-                }
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            // Inline more menu button for hero transition mode
-            if onDismiss != nil {
-                Button {
-                    showMoreMenu = true
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 20))
-                        .foregroundStyle(Color.folio.textPrimary)
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.folio.accent)
                         .padding(.horizontal, Spacing.screenPadding)
                         .padding(.top, 12)
                 }
             }
         }
-        .sheet(isPresented: $showMoreMenu) {
-            readerMenuSheet
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
+        .overlay(alignment: .top) {
+            if onDismiss != nil {
+                Text(article.displayTitle)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(readingTheme.textColor)
+                    .lineLimit(1)
+                    .padding(.horizontal, 56)
+                    .padding(.top, 14)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if onDismiss != nil {
+                readerMoreMenu(iconFont: .system(size: 20), extraPadding: true)
+                    .padding(.horizontal, Spacing.screenPadding)
+                    .padding(.top, 12)
+            }
         }
         .toast(isPresented: $showToastState, message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
         .onChange(of: viewModel?.showToast) { _, newValue in
@@ -198,60 +186,41 @@ struct ReaderView: View {
 
     // MARK: - Reader Content
 
+    // MARK: - Article Header for HTML injection
+
+    private func makeArticleHeader(viewModel: ReaderViewModel) -> MarkdownToHTML.ArticleHeader {
+        let readingTime: String
+        if viewModel.estimatedReadTimeMinutes < 1 {
+            readingTime = String(localized: "meta.readTimeLess1", defaultValue: "< 1 min read")
+        } else {
+            readingTime = "~\(viewModel.estimatedReadTimeMinutes) " + String(localized: "meta.minRead", defaultValue: "min read")
+        }
+        let dateLabel: String
+        if let publishedAt = article.publishedAt {
+            dateLabel = publishedAt.relativeFormatted()
+        } else {
+            dateLabel = article.createdAt.relativeFormatted()
+        }
+        return MarkdownToHTML.ArticleHeader(
+            title: article.displayTitle,
+            siteName: article.siteName,
+            author: article.author,
+            readingTime: readingTime,
+            dateLabel: dateLabel,
+            summary: article.displaySummary,
+            keyPoints: article.keyPoints
+        )
+    }
+
     @ViewBuilder
     private func readerContent(viewModel: ReaderViewModel) -> some View {
         VStack(spacing: 0) {
-            // Native SwiftUI header (non-scrolling)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    // Article title
-                    Text(article.displayTitle)
-                        .font(.custom("NotoSerifSC-Bold", size: metrics.titleSize))
-                        .foregroundStyle(readingTheme.textColor)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .modifier(HeroGeometryModifier(id: "title-\(article.id)", namespace: heroNamespace))
-                        .padding(.top, 40)
-                        .opacity(titleVisible ? 1 : 0)
-
-                    // Inline meta info
-                    ArticleMetaInfoView(
-                        article: article,
-                        readingTimeMinutes: viewModel.estimatedReadTimeMinutes,
-                        textColor: readingTheme.secondaryTextColor
-                    )
-                    .padding(.top, Spacing.lg)
-                    .opacity(metaVisible ? 1 : 0)
-
-                    // Insight panel
-                    if let summary = article.displaySummary, !summary.isEmpty {
-                        insightPanel
-                            .padding(.top, Spacing.lg)
-                            .opacity(metaVisible ? 1 : 0)
-                    } else if !article.keyPoints.isEmpty {
-                        insightPanel
-                            .padding(.top, Spacing.lg)
-                            .opacity(metaVisible ? 1 : 0)
-                    }
-
-                    // Divider before body
-                    Divider()
-                        .padding(.top, Spacing.md)
-                }
-                .frame(maxWidth: 600)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 20)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .fixedSize(horizontal: false, vertical: true)
-
-            // Article body
             Group {
                 if article.sourceType == .screenshot || article.sourceType == .voice {
-                    // Native rendering for screenshot/voice articles
                     ScrollView {
                         screenshotContentView
                             .padding(.top, Spacing.md)
-                            .padding(.bottom, 80)
+                            .padding(.bottom, 32)
                     }
                     .opacity(contentVisible ? 1 : 0)
                     .onAppear {
@@ -264,14 +233,15 @@ struct ReaderView: View {
                         (id: $0.id, startOffset: $0.startOffset, endOffset: $0.endOffset)
                     }
                     ArticleWebView(
-                        htmlContent: MarkdownToHTML.convert(
+                        htmlContent: MarkdownToHTML.convertWithHeader(
                             markdown: markdown,
-                            title: article.title,
+                            header: makeArticleHeader(viewModel: viewModel),
                             highlights: highlightTuples,
                             fontSize: CGFloat(fontSize),
                             lineSpacing: CGFloat(lineSpacing),
                             fontFamily: readingFontFamily,
-                            theme: readingTheme
+                            theme: readingTheme,
+                            strings: .reader
                         ),
                         initialProgress: article.readProgress,
                         fontSize: CGFloat(fontSize),
@@ -304,7 +274,8 @@ struct ReaderView: View {
                             if !contentVisible {
                                 withAnimation(Motion.ink) { contentVisible = true }
                             }
-                        }
+                        },
+                        onTitleVisibilityChange: nil
                     )
                     .opacity(contentVisible ? 1 : 0)
                 } else if viewModel.isLoadingContent {
@@ -320,6 +291,7 @@ struct ReaderView: View {
                     contentUnavailableView
                 }
             }
+
         }
         .background(readingTheme.backgroundColor)
         .overlay(alignment: .top) {
@@ -329,25 +301,18 @@ struct ReaderView: View {
             bottomToolbar
         }
         .task {
-            guard !titleVisible else { return }
             if reduceMotion {
-                titleVisible = true
-                metaVisible = true
                 contentVisible = true
                 return
             }
-            try? await Task.sleep(for: .milliseconds(150))
-            withAnimation(Motion.ink) { titleVisible = true }
-            try? await Task.sleep(for: .milliseconds(100))
-            withAnimation(Motion.ink) { metaVisible = true }
-            // contentVisible is triggered by onContentReady when WebView is used;
-            // for non-WebView states (loading/error), show immediately.
             if article.markdownContent == nil {
-                try? await Task.sleep(for: .milliseconds(100))
+                try? await Task.sleep(for: .milliseconds(200))
                 withAnimation(Motion.ink) { contentVisible = true }
             }
         }
     }
+
+
 
     // MARK: - Screenshot / Voice Content
 
@@ -435,12 +400,6 @@ struct ReaderView: View {
         }.value
     }
 
-    // MARK: - Insight Panel
-
-    private var insightPanel: some View {
-        ReaderInsightPanel(article: article, isExpanded: $isInsightExpanded)
-    }
-
     // MARK: - Content Unavailable
 
     private var contentUnavailableView: some View {
@@ -521,77 +480,125 @@ struct ReaderView: View {
         .padding(.vertical, Spacing.xl)
     }
 
-    // MARK: - Menu Sheet
+    @ViewBuilder
+    private func readerMoreMenu(iconFont: Font?, extraPadding: Bool) -> some View {
+        Menu {
+            Button(
+                article.isFavorite
+                    ? String(localized: "reader.unfavorite", defaultValue: "Remove Favorite")
+                    : String(localized: "reader.favorite", defaultValue: "Favorite")
+            ) {
+                viewModel?.toggleFavorite()
+            }
 
-    private var readerMenuSheet: some View {
-        ReaderMenuView(
-            article: article,
-            onDismiss: { showMoreMenu = false },
-            onToggleFavorite: { viewModel?.toggleFavorite() },
-            onCopyMarkdown: { viewModel?.copyMarkdown() },
-            onReadingPreferences: { showsReadingPreferences = true },
-            onToggleArchive: { viewModel?.archiveArticle() },
-            onOpenOriginal: { openOriginal() },
-            onDelete: { showsDeleteConfirmation = true }
-        )
+            Button(String(localized: "reader.copyMarkdown", defaultValue: "Copy Markdown")) {
+                viewModel?.copyMarkdown()
+            }
+
+            Button(String(localized: "reader.readingPrefs", defaultValue: "Reading Preferences")) {
+                showsReadingPreferences = true
+            }
+
+            Button(
+                article.isArchived
+                    ? String(localized: "reader.unarchive", defaultValue: "Unarchive")
+                    : String(localized: "reader.archive", defaultValue: "Archive")
+            ) {
+                viewModel?.archiveArticle()
+            }
+
+            if article.url != nil {
+                Button(String(localized: "reader.openInBrowser", defaultValue: "Open Original")) {
+                    openOriginal()
+                }
+            }
+
+            Button(String(localized: "reader.delete", defaultValue: "Delete"), role: .destructive) {
+                showsDeleteConfirmation = true
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(iconFont)
+                .foregroundStyle(Color.folio.textPrimary)
+                .contentShape(Rectangle())
+                .frame(width: extraPadding ? nil : 28, height: extraPadding ? nil : 28)
+        }
+        .accessibilityLabel(String(localized: "button.more", defaultValue: "More options"))
     }
 
     // MARK: - Bottom Toolbar
 
     private var bottomToolbar: some View {
-        HStack {
-            // Globe: open original URL
-            Button {
-                openOriginal()
-            } label: {
-                Image(systemName: "globe")
-                    .font(.system(size: 18))
-                    .foregroundStyle(Color.folio.textSecondary)
-                    .frame(width: 40, height: 40)
-            }
-            .accessibilityLabel(String(localized: "reader.openOriginal", defaultValue: "Open Original"))
-            .opacity(article.url != nil ? 1 : 0)
-            .disabled(article.url == nil)
+        GeometryReader { proxy in
+            HStack {
+                Button {
+                    openOriginal()
+                } label: {
+                    Image(systemName: "globe")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Color.folio.textSecondary)
+                        .frame(width: 40, height: 40)
+                }
+                .accessibilityLabel(String(localized: "reader.openOriginal", defaultValue: "Open Original"))
+                .opacity(article.url != nil ? 1 : 0)
+                .disabled(article.url == nil)
 
-            Spacer()
+                Spacer()
 
-            // Progress percentage
-            Text("\(Int((viewModel?.readingProgress ?? 0) * 100))%")
-                .font(.system(size: 13, weight: .medium))
-                .tracking(0.5)
-                .foregroundStyle(Color.folio.textTertiary)
-                .accessibilityLabel(String(localized: "reader.progressLabel", defaultValue: "Reading progress \(Int((viewModel?.readingProgress ?? 0) * 100)) percent"))
+                Button {
+                    viewModel?.toggleFavorite()
+                } label: {
+                    Image(systemName: article.isFavorite ? "bookmark.fill" : "bookmark")
+                        .font(.system(size: 18))
+                        .foregroundStyle(article.isFavorite ? Color.folio.accent : Color.folio.textSecondary)
+                        .frame(width: 40, height: 40)
+                }
+                .accessibilityLabel(
+                    article.isFavorite
+                        ? String(localized: "reader.unfavorite", defaultValue: "Remove Favorite")
+                        : String(localized: "reader.favorite", defaultValue: "Favorite")
+                )
 
-            Spacer()
+                Spacer()
 
-            // Share button
-            Button {
-                showsShareSheet = true
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 18))
-                    .foregroundStyle(Color.folio.textSecondary)
-                    .frame(width: 40, height: 40)
-            }
-            .accessibilityLabel(String(localized: "reader.shareArticle", defaultValue: "Share article"))
-            .sheet(isPresented: $showsShareSheet) {
-                if let url = viewModel?.shareURL() {
-                    ShareSheet(activityItems: [url])
+                Text("\(Int((viewModel?.readingProgress ?? 0) * 100))%")
+                    .font(.system(size: 13, weight: .medium))
+                    .tracking(0.5)
+                    .foregroundStyle(Color.folio.textTertiary)
+                    .accessibilityLabel(String(localized: "reader.progressLabel", defaultValue: "Reading progress \(Int((viewModel?.readingProgress ?? 0) * 100)) percent"))
+
+                Spacer()
+
+                Button {
+                    showsShareSheet = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Color.folio.textSecondary)
+                        .frame(width: 40, height: 40)
+                }
+                .accessibilityLabel(String(localized: "reader.shareArticle", defaultValue: "Share article"))
+                .sheet(isPresented: $showsShareSheet) {
+                    if let url = viewModel?.shareURL() {
+                        ShareSheet(activityItems: [url])
+                    }
                 }
             }
-        }
-        .padding(.horizontal, Spacing.screenPadding)
-        .padding(.bottom, 34)
-        .background(
-            LinearGradient(
-                stops: [
-                    .init(color: Color.folio.background.opacity(0), location: 0),
-                    .init(color: Color.folio.background, location: 0.3),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
+            .padding(.horizontal, Spacing.screenPadding)
+            .padding(.top, 10)
+            .padding(.bottom, max(proxy.safeAreaInsets.bottom, 12))
+            .background(
+                LinearGradient(
+                    stops: [
+                        .init(color: readingTheme.backgroundColor.opacity(0), location: 0),
+                        .init(color: readingTheme.backgroundColor, location: 0.3),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             )
-        )
+        }
+        .frame(height: 62)
     }
 
     // MARK: - Open Original

@@ -99,7 +99,7 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		// article remains readable.  Only the AI enrichment (summary, tags,
 		// category) is missing.
 		h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusReady)
-		return fmt.Errorf("ai analyze failed: %w", err)
+		return nil
 	}
 
 	// Ensure category exists (create if needed)

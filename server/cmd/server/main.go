@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 
 	"folio-server/internal/api"
 	"folio-server/internal/api/handler"
@@ -86,10 +87,14 @@ func main() {
 	asynqClient := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.RedisAddr})
 	defer asynqClient.Close()
 
+	// Redis client (for verification codes and rate limiting)
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	defer rdb.Close()
+
 	// Services
 	quotaService := service.NewQuotaService(userRepo)
 	resendClient := client.NewResendClient(cfg.ResendAPIKey, "EchoLore <noreply@echolore.ai>")
-	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.AppleBundleID, resendClient)
+	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.AppleBundleID, resendClient, rdb)
 	tagService := service.NewTagService(tagRepo)
 	articleService := service.NewArticleService(
 		articleRepo, taskRepo, tagRepo, categoryRepo,

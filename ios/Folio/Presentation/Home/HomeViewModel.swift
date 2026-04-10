@@ -81,18 +81,14 @@ final class HomeViewModel {
     }
 
     var feedSections: [FeedSection] {
-        var echoIdx = 0
-        return groupedArticles.map { section in
-            var items: [FeedItem] = []
-            for (i, article) in section.articles.enumerated() {
-                items.append(.article(article))
-                if (i + 1) % 4 == 0, echoIdx < echoCards.count {
-                    items.append(.echo(echoCards[echoIdx]))
-                    echoIdx += 1
-                }
-            }
-            return FeedSection(group: section.group, items: items)
+        groupedArticles.map { section in
+            FeedSection(group: section.group, items: section.articles.map { .article($0) })
         }
+    }
+
+    /// Single echo card displayed between the first and second time-group sections.
+    var intersectionEchoCard: EchoCardDTO? {
+        echoCards.first
     }
 
     var selectedCategory: Folio.Category?
