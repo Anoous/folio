@@ -131,7 +131,7 @@ final class ReaderViewModel {
         // or reached 100%, to avoid writing on every scroll frame.
         let delta = abs(clamped - lastPersistedProgress)
         if delta >= Self.progressPersistThreshold || clamped >= 1.0 {
-            article.markPendingUpdateIfNeeded()
+            article.markPendingUpdateIfNeeded(for: .readProgress)
             ModelContext.safeSave(context)
             lastPersistedProgress = clamped
         }
@@ -139,8 +139,8 @@ final class ReaderViewModel {
 
     /// Flush any un-persisted progress (e.g., on view disappear).
     func persistProgressIfNeeded() {
-        guard abs(readingProgress - lastPersistedProgress) > Self.progressPersistThreshold else { return }
-        article.markPendingUpdateIfNeeded()
+        guard abs(readingProgress - lastPersistedProgress) > 0 else { return }
+        article.markPendingUpdateIfNeeded(for: .readProgress)
         ModelContext.safeSave(context)
         lastPersistedProgress = readingProgress
     }

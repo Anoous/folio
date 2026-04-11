@@ -67,18 +67,20 @@ func (r *ArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, 
 	var a domain.Article
 	var keyPointsJSON []byte
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, user_id, url, title, author, site_name, favicon_url, cover_image_url,
-		       markdown_content, word_count, language, category_id, summary, key_points,
-		       ai_confidence, status, source_type, fetch_error, retry_count,
-		       is_favorite, is_archived, read_progress, highlight_count, last_read_at, published_at,
-		       created_at, updated_at, deleted_at, semantic_keywords
-		FROM articles WHERE id = $1`, id,
+			SELECT id, user_id, url, title, author, site_name, favicon_url, cover_image_url,
+			       markdown_content, word_count, language, category_id, summary, key_points,
+			       ai_confidence, status, source_type, fetch_error, retry_count,
+			       is_favorite, is_archived, read_progress, favorite_updated_at, archived_updated_at,
+			       progress_updated_at, highlight_count, last_read_at, published_at,
+			       created_at, updated_at, deleted_at, semantic_keywords
+			FROM articles WHERE id = $1`, id,
 	).Scan(
 		&a.ID, &a.UserID, &a.URL, &a.Title, &a.Author, &a.SiteName,
 		&a.FaviconURL, &a.CoverImageURL, &a.MarkdownContent, &a.WordCount,
 		&a.Language, &a.CategoryID, &a.Summary, &keyPointsJSON,
 		&a.AIConfidence, &a.Status, &a.SourceType, &a.FetchError, &a.RetryCount,
-		&a.IsFavorite, &a.IsArchived, &a.ReadProgress, &a.HighlightCount, &a.LastReadAt, &a.PublishedAt,
+		&a.IsFavorite, &a.IsArchived, &a.ReadProgress, &a.FavoriteUpdatedAt, &a.ArchivedUpdatedAt,
+		&a.ProgressUpdatedAt, &a.HighlightCount, &a.LastReadAt, &a.PublishedAt,
 		&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt, &a.SemanticKeywords,
 	)
 	if err == pgx.ErrNoRows {
@@ -159,9 +161,10 @@ func (r *ArticleRepo) ListByUser(ctx context.Context, p ListArticlesParams) (*Li
 
 	// Query
 	query := `SELECT id, user_id, url, title, summary, cover_image_url, site_name,
-	                 source_type, category_id, word_count, is_favorite, is_archived,
-	                 read_progress, status, created_at, updated_at, deleted_at
-	          FROM articles WHERE user_id = $1`
+		                 source_type, category_id, word_count, is_favorite, is_archived,
+		                 read_progress, favorite_updated_at, archived_updated_at,
+		                 progress_updated_at, status, created_at, updated_at, deleted_at
+		          FROM articles WHERE user_id = $1`
 	queryArgs := []any{p.UserID}
 	qArgIdx := 2
 
@@ -204,8 +207,8 @@ func (r *ArticleRepo) ListByUser(ctx context.Context, p ListArticlesParams) (*Li
 		if err := rows.Scan(
 			&a.ID, &a.UserID, &a.URL, &a.Title, &a.Summary, &a.CoverImageURL,
 			&a.SiteName, &a.SourceType, &a.CategoryID, &a.WordCount,
-			&a.IsFavorite, &a.IsArchived, &a.ReadProgress, &a.Status, &a.CreatedAt,
-			&a.UpdatedAt, &a.DeletedAt,
+			&a.IsFavorite, &a.IsArchived, &a.ReadProgress, &a.FavoriteUpdatedAt, &a.ArchivedUpdatedAt,
+			&a.ProgressUpdatedAt, &a.Status, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan article: %w", err)
 		}
@@ -366,30 +369,87 @@ func (r *ArticleRepo) UpdateMarkdownContent(ctx context.Context, id string, mark
 }
 
 type UpdateArticleParams struct {
-	IsFavorite   *bool    `json:"is_favorite,omitempty"`
-	IsArchived   *bool    `json:"is_archived,omitempty"`
-	ReadProgress *float64 `json:"read_progress,omitempty"`
+	IsFavorite            *bool      `json:"is_favorite,omitempty"`
+	IsArchived            *bool      `json:"is_archived,omitempty"`
+	ReadProgress          *float64   `json:"read_progress,omitempty"`
+	FavoriteUpdatedAt     *time.Time `json:"favorite_updated_at,omitempty"`
+	ArchivedUpdatedAt     *time.Time `json:"archived_updated_at,omitempty"`
+	ReadProgressUpdatedAt *time.Time `json:"read_progress_updated_at,omitempty"`
 }
 
 func (r *ArticleRepo) Update(ctx context.Context, id string, userID string, p UpdateArticleParams) error {
 	setClauses := ""
+	whereClauses := []string{}
 	args := []any{}
 	argIdx := 1
 
 	if p.IsFavorite != nil {
-		setClauses += fmt.Sprintf("is_favorite = $%d, ", argIdx)
-		args = append(args, *p.IsFavorite)
-		argIdx++
+		ts := time.Now().UTC()
+		if p.FavoriteUpdatedAt != nil {
+			ts = p.FavoriteUpdatedAt.UTC()
+		}
+		valueIdx := argIdx
+		tsIdx := argIdx + 1
+		setClauses += fmt.Sprintf(`is_favorite = CASE
+			WHEN favorite_updated_at IS NULL OR $%d >= favorite_updated_at THEN $%d
+			ELSE is_favorite
+		END,
+		favorite_updated_at = CASE
+			WHEN favorite_updated_at IS NULL OR $%d >= favorite_updated_at THEN $%d
+			ELSE favorite_updated_at
+		END, `, tsIdx, valueIdx, tsIdx, tsIdx)
+		whereClauses = append(whereClauses, fmt.Sprintf(
+			"favorite_updated_at IS NULL OR $%d >= favorite_updated_at",
+			tsIdx,
+		))
+		args = append(args, *p.IsFavorite, ts)
+		argIdx += 2
 	}
 	if p.IsArchived != nil {
-		setClauses += fmt.Sprintf("is_archived = $%d, ", argIdx)
-		args = append(args, *p.IsArchived)
-		argIdx++
+		ts := time.Now().UTC()
+		if p.ArchivedUpdatedAt != nil {
+			ts = p.ArchivedUpdatedAt.UTC()
+		}
+		valueIdx := argIdx
+		tsIdx := argIdx + 1
+		setClauses += fmt.Sprintf(`is_archived = CASE
+			WHEN archived_updated_at IS NULL OR $%d >= archived_updated_at THEN $%d
+			ELSE is_archived
+		END,
+		archived_updated_at = CASE
+			WHEN archived_updated_at IS NULL OR $%d >= archived_updated_at THEN $%d
+			ELSE archived_updated_at
+		END, `, tsIdx, valueIdx, tsIdx, tsIdx)
+		whereClauses = append(whereClauses, fmt.Sprintf(
+			"archived_updated_at IS NULL OR $%d >= archived_updated_at",
+			tsIdx,
+		))
+		args = append(args, *p.IsArchived, ts)
+		argIdx += 2
 	}
 	if p.ReadProgress != nil {
-		setClauses += fmt.Sprintf("read_progress = $%d, last_read_at = NOW(), ", argIdx)
-		args = append(args, *p.ReadProgress)
-		argIdx++
+		ts := time.Now().UTC()
+		if p.ReadProgressUpdatedAt != nil {
+			ts = p.ReadProgressUpdatedAt.UTC()
+		}
+		valueIdx := argIdx
+		tsIdx := argIdx + 1
+		setClauses += fmt.Sprintf(`read_progress = GREATEST(read_progress, $%d),
+		progress_updated_at = CASE
+			WHEN progress_updated_at IS NULL OR $%d >= progress_updated_at THEN $%d
+			ELSE progress_updated_at
+		END,
+		last_read_at = CASE
+			WHEN $%d > read_progress THEN NOW()
+			WHEN progress_updated_at IS NULL OR $%d >= progress_updated_at THEN NOW()
+			ELSE last_read_at
+		END, `, valueIdx, tsIdx, tsIdx, valueIdx, tsIdx)
+		whereClauses = append(whereClauses, fmt.Sprintf(
+			"$%d > read_progress OR progress_updated_at IS NULL OR $%d >= progress_updated_at",
+			valueIdx, tsIdx,
+		))
+		args = append(args, *p.ReadProgress, ts)
+		argIdx += 2
 	}
 
 	if len(args) == 0 {
@@ -398,7 +458,13 @@ func (r *ArticleRepo) Update(ctx context.Context, id string, userID string, p Up
 
 	// Remove trailing comma+space
 	setClauses = setClauses[:len(setClauses)-2]
-	query := fmt.Sprintf("UPDATE articles SET %s WHERE id = $%d AND user_id = $%d", setClauses, argIdx, argIdx+1)
+	query := fmt.Sprintf(
+		"UPDATE articles SET %s WHERE id = $%d AND user_id = $%d AND (%s)",
+		setClauses,
+		argIdx,
+		argIdx+1,
+		strings.Join(whereClauses, " OR "),
+	)
 	args = append(args, id, userID)
 
 	_, err := r.pool.Exec(ctx, query, args...)
@@ -512,7 +578,10 @@ func (r *ArticleRepo) Search(ctx context.Context, userID, query string, page, pe
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, user_id, url, title, summary, site_name, source_type, created_at
+		SELECT id, user_id, url, title, summary, site_name, source_type,
+		       is_favorite, is_archived, read_progress,
+		       favorite_updated_at, archived_updated_at, progress_updated_at,
+		       created_at, updated_at
 		FROM articles WHERE user_id = $1 AND deleted_at IS NULL AND (
 			title ILIKE $2 OR summary ILIKE $2 OR author ILIKE $2 OR site_name ILIKE $2
 		)
@@ -530,7 +599,8 @@ func (r *ArticleRepo) Search(ctx context.Context, userID, query string, page, pe
 	for rows.Next() {
 		var a domain.Article
 		if err := rows.Scan(&a.ID, &a.UserID, &a.URL, &a.Title, &a.Summary,
-			&a.SiteName, &a.SourceType, &a.CreatedAt); err != nil {
+			&a.SiteName, &a.SourceType, &a.IsFavorite, &a.IsArchived, &a.ReadProgress,
+			&a.FavoriteUpdatedAt, &a.ArchivedUpdatedAt, &a.ProgressUpdatedAt, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan search result: %w", err)
 		}
 		a.KeyPoints = []string{}

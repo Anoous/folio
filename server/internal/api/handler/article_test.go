@@ -7,7 +7,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
+
+	"github.com/go-chi/chi/v5"
 
 	"folio-server/internal/api/middleware"
 	"folio-server/internal/domain"
@@ -18,9 +21,12 @@ import (
 // --- Mock article service for handler tests ---
 
 type mockArticleService struct {
-	submitURLFn  func(ctx context.Context, userID string, req service.SubmitURLRequest) (*service.SubmitURLResponse, error)
-	lastSubmitReq *service.SubmitURLRequest
-	lastUserID   string
+	submitURLFn          func(ctx context.Context, userID string, req service.SubmitURLRequest) (*service.SubmitURLResponse, error)
+	lastSubmitReq        *service.SubmitURLRequest
+	lastUserID           string
+	lastUpdateReq        *repository.UpdateArticleParams
+	lastUpdatedUserID    string
+	lastUpdatedArticleID string
 }
 
 func (m *mockArticleService) SubmitURL(ctx context.Context, userID string, req service.SubmitURLRequest) (*service.SubmitURLResponse, error) {
@@ -41,6 +47,9 @@ func (m *mockArticleService) GetByID(ctx context.Context, userID, articleID stri
 }
 
 func (m *mockArticleService) Update(ctx context.Context, userID, articleID string, params repository.UpdateArticleParams) error {
+	m.lastUpdatedUserID = userID
+	m.lastUpdatedArticleID = articleID
+	m.lastUpdateReq = &params
 	return nil
 }
 
@@ -85,6 +94,12 @@ func newAuthenticatedRequest(method, url, body, userID string) *http.Request {
 	req.Header.Set("Content-Type", "application/json")
 	ctx := middleware.ContextWithUserID(req.Context(), userID)
 	return req.WithContext(ctx)
+}
+
+func withURLParam(req *http.Request, key, value string) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add(key, value)
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 }
 
 func TestMaxMarkdownContentBytes_Constant(t *testing.T) {
@@ -430,6 +445,52 @@ func TestHandleSubmitURL_EmptyBody_ReturnsBadRequest(t *testing.T) {
 	}
 }
 
+func TestHandleUpdateArticle_ParsesFieldVersionTimestamps(t *testing.T) {
+	mockSvc := &mockArticleService{}
+	h := newTestArticleHandler(mockSvc)
+
+	body := `{
+		"is_favorite": true,
+		"favorite_updated_at": "2026-04-10T12:00:00Z",
+		"read_progress": 0.8,
+		"read_progress_updated_at": "2026-04-10T12:05:00Z"
+	}`
+
+	req := newAuthenticatedRequest("PUT", "/api/v1/articles/art-1", body, "user-1")
+	req = withURLParam(req, "id", "art-1")
+	w := httptest.NewRecorder()
+
+	h.HandleUpdateArticle(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", w.Code, http.StatusOK)
+	}
+	if mockSvc.lastUpdatedUserID != "user-1" {
+		t.Fatalf("userID = %q, want %q", mockSvc.lastUpdatedUserID, "user-1")
+	}
+	if mockSvc.lastUpdatedArticleID != "art-1" {
+		t.Fatalf("articleID = %q, want %q", mockSvc.lastUpdatedArticleID, "art-1")
+	}
+	if mockSvc.lastUpdateReq == nil {
+		t.Fatal("service.Update was not called")
+	}
+	if mockSvc.lastUpdateReq.IsFavorite == nil || !*mockSvc.lastUpdateReq.IsFavorite {
+		t.Fatalf("IsFavorite = %v, want true", mockSvc.lastUpdateReq.IsFavorite)
+	}
+	if mockSvc.lastUpdateReq.ReadProgress == nil || *mockSvc.lastUpdateReq.ReadProgress != 0.8 {
+		t.Fatalf("ReadProgress = %v, want 0.8", mockSvc.lastUpdateReq.ReadProgress)
+	}
+
+	expectedFavoriteAt := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	expectedProgressAt := time.Date(2026, 4, 10, 12, 5, 0, 0, time.UTC)
+	if mockSvc.lastUpdateReq.FavoriteUpdatedAt == nil || !mockSvc.lastUpdateReq.FavoriteUpdatedAt.Equal(expectedFavoriteAt) {
+		t.Fatalf("FavoriteUpdatedAt = %v, want %v", mockSvc.lastUpdateReq.FavoriteUpdatedAt, expectedFavoriteAt)
+	}
+	if mockSvc.lastUpdateReq.ReadProgressUpdatedAt == nil || !mockSvc.lastUpdateReq.ReadProgressUpdatedAt.Equal(expectedProgressAt) {
+		t.Fatalf("ReadProgressUpdatedAt = %v, want %v", mockSvc.lastUpdateReq.ReadProgressUpdatedAt, expectedProgressAt)
+	}
+}
+
 func TestHandleSubmitURL_QuotaExceeded_Returns429(t *testing.T) {
 	mockSvc := &mockArticleService{
 		submitURLFn: func(ctx context.Context, userID string, req service.SubmitURLRequest) (*service.SubmitURLResponse, error) {
@@ -587,9 +648,9 @@ func TestMarkdownTruncation_BoundaryWithMixedContent(t *testing.T) {
 	// Mix of ASCII and Chinese at the 500KB boundary.
 	// Verifies valid UTF-8 output and correct length calculation.
 	tests := []struct {
-		name            string
-		buildContent    func() string
-		minExpectedLen  int // minimum expected byte length after truncation
+		name           string
+		buildContent   func() string
+		minExpectedLen int // minimum expected byte length after truncation
 	}{
 		{
 			name: "ASCII then Chinese at exact boundary",

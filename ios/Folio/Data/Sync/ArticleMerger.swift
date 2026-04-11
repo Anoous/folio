@@ -39,9 +39,10 @@ struct ArticleMerger {
         let article: Article
 
         if let existing = try articleRepo.fetchByServerID(dto.id) {
+            let dirtyFields = existing.pendingDirtyFields
             existing.updateFromDTO(
                 dto,
-                preservePendingLocalChanges: existing.syncState == .pendingUpdate
+                preserving: dirtyFields
             )
             article = existing
         } else if let url = dto.url, let byURL = try articleRepo.fetchByURL(url) {
@@ -52,9 +53,10 @@ struct ArticleMerger {
                 byURL.syncState = .synced
                 article = byURL
             } else {
+                let dirtyFields = byURL.pendingDirtyFields
                 byURL.updateFromDTO(
                     dto,
-                    preservePendingLocalChanges: byURL.syncState == .pendingUpdate
+                    preserving: dirtyFields
                 )
                 article = byURL
             }

@@ -88,6 +88,7 @@ services:
       - ./migrations/011_devices.up.sql:/docker-entrypoint-initdb.d/012_devices.sql
       - ./migrations/012_smart_retrieval.up.sql:/docker-entrypoint-initdb.d/013_smart_retrieval.sql
       - ./migrations/013_bugfix_auth_stats.up.sql:/docker-entrypoint-initdb.d/014_bugfix_auth_stats.sql
+      - ./migrations/014_article_field_versions.up.sql:/docker-entrypoint-initdb.d/015_article_field_versions.sql
     command: >
       postgres
         -c shared_buffers=64MB

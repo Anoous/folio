@@ -66,7 +66,20 @@ final class SyncService {
                     response = try await apiClient.submitArticle(url: article.url)
                 }
                 article.serverID = response.articleId
+                article.dirtyFields = []
                 article.syncState = .synced
+                if article.isFavorite {
+                    article.markPendingUpdateIfNeeded(for: .favorite)
+                }
+                if article.isArchived {
+                    article.markPendingUpdateIfNeeded(for: .archived)
+                }
+                if article.readProgress > 0 {
+                    article.markPendingUpdateIfNeeded(
+                        for: .readProgress,
+                        at: article.lastReadAt ?? article.updatedAt
+                    )
+                }
                 results[article.id] = true
                 FolioLogger.sync.info("article submitted: \(article.url ?? "manual")")
 
@@ -535,17 +548,43 @@ final class SyncService {
         FolioLogger.sync.info("syncing \(articles.count) pending update(s)")
         for article in articles {
             guard let serverID = article.serverID else { continue }
-            do {
-                try await apiClient.updateArticle(id: serverID, request: UpdateArticleRequest(
-                    isFavorite: article.isFavorite,
-                    isArchived: article.isArchived,
-                    readProgress: article.readProgress
-                ))
+            let dirtyFields = article.pendingDirtyFields
+            guard !dirtyFields.isEmpty else {
                 article.syncState = .synced
+                continue
+            }
+
+            var request = UpdateArticleRequest()
+            if dirtyFields.contains(.favorite) {
+                request.isFavorite = article.isFavorite
+                request.favoriteUpdatedAt = article.effectiveFieldUpdatedAt(for: .favorite)
+            }
+            if dirtyFields.contains(.archived) {
+                request.isArchived = article.isArchived
+                request.archivedUpdatedAt = article.effectiveFieldUpdatedAt(for: .archived)
+            }
+            if dirtyFields.contains(.readProgress) {
+                request.readProgress = article.readProgress
+                request.readProgressUpdatedAt = article.effectiveFieldUpdatedAt(for: .readProgress)
+            }
+
+            do {
+                try await apiClient.updateArticle(id: serverID, request: request)
+
+                if let sentFavorite = request.isFavorite, article.isFavorite == sentFavorite {
+                    article.clearPendingUpdateIfNeeded(for: .favorite)
+                }
+                if let sentArchived = request.isArchived, article.isArchived == sentArchived {
+                    article.clearPendingUpdateIfNeeded(for: .archived)
+                }
+                if let sentReadProgress = request.readProgress, article.readProgress <= sentReadProgress {
+                    article.clearPendingUpdateIfNeeded(for: .readProgress)
+                }
             } catch let error as APIError where error == .notFound {
                 // Server deleted this article. Accept the server's state — do not re-upload.
                 FolioLogger.sync.info("article deleted on server, accepting: \(serverID)")
                 article.syncState = .synced
+                article.dirtyFields = []
             } catch {
                 FolioLogger.sync.error("update sync failed: \(serverID) — \(error)")
             }

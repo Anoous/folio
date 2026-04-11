@@ -56,7 +56,10 @@ final class DTOMappingTests: XCTestCase {
             keyPoints: nil, aiConfidence: nil,
             status: dto.status, sourceType: dto.sourceType, fetchError: dto.fetchError,
             retryCount: dto.retryCount, isFavorite: dto.isFavorite, isArchived: dto.isArchived,
-            readProgress: dto.readProgress, lastReadAt: dto.lastReadAt, publishedAt: dto.publishedAt,
+            readProgress: dto.readProgress, favoriteUpdatedAt: dto.favoriteUpdatedAt,
+            archivedUpdatedAt: dto.archivedUpdatedAt,
+            readProgressUpdatedAt: dto.readProgressUpdatedAt,
+            lastReadAt: dto.lastReadAt, publishedAt: dto.publishedAt,
             createdAt: dto.createdAt, updatedAt: dto.updatedAt, deletedAt: dto.deletedAt,
             category: dto.category, tags: dto.tags
         )
@@ -301,23 +304,89 @@ final class DTOMappingTests: XCTestCase {
     @MainActor
     func testUpdateFromDTO_preservesPendingLocalChangesWhenRequested() {
         let article = Article(url: "https://example.com/article")
+        let localFavoriteDate = Date(timeIntervalSince1970: 2_000)
         article.serverID = "server-123"
         article.syncState = .pendingUpdate
         article.isFavorite = true
         article.isArchived = true
-        article.readProgress = 0.7
-        article.lastReadAt = Date(timeIntervalSince1970: 3000)
+        article.readProgress = 0.4
+        article.lastReadAt = Date(timeIntervalSince1970: 1000)
+        article.favoriteUpdatedAt = localFavoriteDate
+        article.dirtyFields = [.favorite]
         context.insert(article)
 
-        let dto = makeArticleDTO(readProgress: 0.4, lastReadAt: Date(timeIntervalSince1970: 2000))
-        article.updateFromDTO(dto, preservePendingLocalChanges: true)
+        let dto = makeArticleDTO(
+            readProgress: 0.8,
+            lastReadAt: Date(timeIntervalSince1970: 2000),
+            isFavorite: false,
+            favoriteUpdatedAt: Date(timeIntervalSince1970: 1500)
+        )
+        article.updateFromDTO(dto, preserving: [.favorite])
+
+        XCTAssertTrue(article.isFavorite)
+        XCTAssertFalse(article.isArchived)
+        XCTAssertEqual(article.readProgress, 0.8)
+        XCTAssertEqual(article.lastReadAt, Date(timeIntervalSince1970: 2000))
+        XCTAssertEqual(article.syncState, .pendingUpdate)
+        XCTAssertEqual(article.title, "Test Article")
+    }
+
+    @MainActor
+    func testUpdateFromDTO_preservesDirtyArchivedWithoutBlockingFavorite() {
+        let article = Article(url: "https://example.com/article")
+        let localArchivedDate = Date(timeIntervalSince1970: 2_000)
+        article.serverID = "server-123"
+        article.syncState = .pendingUpdate
+        article.isFavorite = false
+        article.isArchived = true
+        article.archivedUpdatedAt = localArchivedDate
+        article.dirtyFields = [.archived]
+        context.insert(article)
+
+        let dto = makeArticleDTO(archivedUpdatedAt: Date(timeIntervalSince1970: 1_500))
+        article.updateFromDTO(dto, preserving: [.archived])
 
         XCTAssertTrue(article.isFavorite)
         XCTAssertTrue(article.isArchived)
-        XCTAssertEqual(article.readProgress, 0.7)
-        XCTAssertEqual(article.lastReadAt, Date(timeIntervalSince1970: 3000))
         XCTAssertEqual(article.syncState, .pendingUpdate)
-        XCTAssertEqual(article.title, "Test Article")
+    }
+
+    @MainActor
+    func testUpdateFromDTO_appliesNewerServerFavoriteVersion() {
+        let article = Article(url: "https://example.com/article")
+        article.serverID = "server-123"
+        article.syncState = .pendingUpdate
+        article.isFavorite = false
+        article.favoriteUpdatedAt = Date(timeIntervalSince1970: 1_000)
+        article.dirtyFields = [.favorite]
+        context.insert(article)
+
+        let dto = makeArticleDTO(favoriteUpdatedAt: Date(timeIntervalSince1970: 2_000))
+        article.updateFromDTO(dto, preserving: [.favorite])
+
+        XCTAssertTrue(article.isFavorite)
+        XCTAssertEqual(article.favoriteUpdatedAt, Date(timeIntervalSince1970: 2_000))
+        XCTAssertFalse(article.dirtyFields.contains(.favorite))
+        XCTAssertEqual(article.syncState, .synced)
+    }
+
+    @MainActor
+    func testUpdateFromDTO_keepsNewerLocalFavoriteVersion() {
+        let article = Article(url: "https://example.com/article")
+        article.serverID = "server-123"
+        article.syncState = .pendingUpdate
+        article.isFavorite = false
+        article.favoriteUpdatedAt = Date(timeIntervalSince1970: 2_000)
+        article.dirtyFields = [.favorite]
+        context.insert(article)
+
+        let dto = makeArticleDTO(favoriteUpdatedAt: Date(timeIntervalSince1970: 1_000))
+        article.updateFromDTO(dto, preserving: [.favorite])
+
+        XCTAssertFalse(article.isFavorite)
+        XCTAssertEqual(article.favoriteUpdatedAt, Date(timeIntervalSince1970: 2_000))
+        XCTAssertTrue(article.dirtyFields.contains(.favorite))
+        XCTAssertEqual(article.syncState, .pendingUpdate)
     }
 
     @MainActor
@@ -350,6 +419,11 @@ final class DTOMappingTests: XCTestCase {
         markdownContent: String? = "# Hello World",
         readProgress: Double = 0.5,
         lastReadAt: Date? = nil,
+        isFavorite: Bool = true,
+        isArchived: Bool = false,
+        favoriteUpdatedAt: Date? = Date(timeIntervalSince1970: 1_000),
+        archivedUpdatedAt: Date? = Date(timeIntervalSince1970: 1_000),
+        readProgressUpdatedAt: Date? = Date(timeIntervalSince1970: 1_000),
         keyPoints: [String]? = ["point1", "point2"],
         aiConfidence: Double? = 0.85
     ) -> ArticleDTO {
@@ -372,9 +446,12 @@ final class DTOMappingTests: XCTestCase {
             sourceType: "web",
             fetchError: nil,
             retryCount: 0,
-            isFavorite: true,
-            isArchived: false,
+            isFavorite: isFavorite,
+            isArchived: isArchived,
             readProgress: readProgress,
+            favoriteUpdatedAt: favoriteUpdatedAt,
+            archivedUpdatedAt: archivedUpdatedAt,
+            readProgressUpdatedAt: readProgressUpdatedAt,
             lastReadAt: lastReadAt,
             publishedAt: nil,
             createdAt: Date(),
@@ -418,6 +495,9 @@ final class DTOMappingTests: XCTestCase {
             isFavorite: true,
             isArchived: false,
             readProgress: 0.5,
+            favoriteUpdatedAt: Date(timeIntervalSince1970: 1_000),
+            archivedUpdatedAt: Date(timeIntervalSince1970: 1_000),
+            readProgressUpdatedAt: Date(timeIntervalSince1970: 1_000),
             lastReadAt: nil,
             publishedAt: nil,
             createdAt: Date(),

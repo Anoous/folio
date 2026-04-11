@@ -2,19 +2,32 @@ import Foundation
 import SwiftData
 
 extension Article {
-    /// Marks this article as having local changes that still need server sync.
-    func markPendingUpdateIfNeeded() {
+    func markPendingUpdateIfNeeded(for field: ArticleDirtyField, at timestamp: Date = .now) {
         guard serverID != nil else { return }
         guard syncState != .pendingUpload else { return }
+
+        var fields = dirtyFields
+        fields.insert(field)
+        dirtyFields = fields
+        setFieldUpdatedAt(timestamp, for: field)
         syncState = .pendingUpdate
-        updatedAt = Date()
+        updatedAt = timestamp
     }
 
-    /// Mark this article as read with minimal progress.
+    func clearPendingUpdateIfNeeded(for field: ArticleDirtyField) {
+        var fields = dirtyFields
+        fields.remove(field)
+        dirtyFields = fields
+
+        guard syncState != .pendingUpload else { return }
+        syncState = fields.isEmpty ? .synced : .pendingUpdate
+    }
+
+    /// Marks this article as having local changes that still need server sync.
     func markAsRead(in context: ModelContext) {
         if readProgress == 0 { readProgress = 0.01 }
         lastReadAt = Date()
-        markPendingUpdateIfNeeded()
+        markPendingUpdateIfNeeded(for: .readProgress)
         ModelContext.safeSave(context)
     }
 
@@ -40,18 +53,19 @@ extension Article {
     /// Generic optimistic toggle + server sync pattern.
     @MainActor
     private func toggleBoolWithSync(
+        dirtyField: ArticleDirtyField,
         toggle: () -> Void,
         makeRequest: @escaping () -> UpdateArticleRequest,
         toastOn: (String, String),
         toastOff: (String, String),
-        getValue: () -> Bool,
+        getValue: @escaping () -> Bool,
         context: ModelContext,
         apiClient: APIClient,
         isAuthenticated: Bool,
         showToast: @escaping (String, String?) -> Void
     ) {
         toggle()
-        markPendingUpdateIfNeeded()
+        markPendingUpdateIfNeeded(for: dirtyField)
         ModelContext.safeSave(context)
 
         let value = getValue()
@@ -62,10 +76,14 @@ extension Article {
         Task {
             do {
                 try await apiClient.updateArticle(id: serverID, request: makeRequest())
-                syncState = .synced
+                if getValue() == value {
+                    clearPendingUpdateIfNeeded(for: dirtyField)
+                } else {
+                    markPendingUpdateIfNeeded(for: dirtyField)
+                }
                 ModelContext.safeSave(context)
             } catch {
-                syncState = .pendingUpdate
+                markPendingUpdateIfNeeded(for: dirtyField)
                 ModelContext.safeSave(context)
                 showToast(
                     String(localized: "home.article.syncFailed", defaultValue: "Sync failed, will retry"),
@@ -84,8 +102,14 @@ extension Article {
         showToast: @escaping (String, String?) -> Void
     ) {
         toggleBoolWithSync(
+            dirtyField: .favorite,
             toggle: { isFavorite.toggle() },
-            makeRequest: { [self] in UpdateArticleRequest(isFavorite: isFavorite) },
+            makeRequest: { [self] in
+                UpdateArticleRequest(
+                    isFavorite: isFavorite,
+                    favoriteUpdatedAt: favoriteUpdatedAt
+                )
+            },
             toastOn: (
                 String(localized: "home.article.favorited", defaultValue: "Added to favorites"),
                 "heart.fill"
@@ -94,7 +118,7 @@ extension Article {
                 String(localized: "home.article.unfavorited", defaultValue: "Removed from favorites"),
                 "heart"
             ),
-            getValue: { isFavorite },
+            getValue: { [self] in isFavorite },
             context: context,
             apiClient: apiClient,
             isAuthenticated: isAuthenticated,
@@ -111,8 +135,14 @@ extension Article {
         showToast: @escaping (String, String?) -> Void
     ) {
         toggleBoolWithSync(
+            dirtyField: .archived,
             toggle: { isArchived.toggle() },
-            makeRequest: { [self] in UpdateArticleRequest(isArchived: isArchived) },
+            makeRequest: { [self] in
+                UpdateArticleRequest(
+                    isArchived: isArchived,
+                    archivedUpdatedAt: archivedUpdatedAt
+                )
+            },
             toastOn: (
                 String(localized: "home.article.archived", defaultValue: "Archived"),
                 "archivebox.fill"
@@ -121,7 +151,7 @@ extension Article {
                 String(localized: "home.article.unarchived", defaultValue: "Unarchived"),
                 "archivebox"
             ),
-            getValue: { isArchived },
+            getValue: { [self] in isArchived },
             context: context,
             apiClient: apiClient,
             isAuthenticated: isAuthenticated,

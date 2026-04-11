@@ -68,6 +68,12 @@ enum SyncState: String, Codable {
     case conflict
 }
 
+enum ArticleDirtyField: String, Codable, CaseIterable {
+    case favorite
+    case archived
+    case readProgress
+}
+
 // MARK: - Article Model
 
 @Model
@@ -88,6 +94,9 @@ final class Article {
     var isFavorite: Bool
     var isArchived: Bool
     var readProgress: Double
+    var favoriteUpdatedAt: Date?
+    var archivedUpdatedAt: Date?
+    var readProgressUpdatedAt: Date?
     var createdAt: Date
     var updatedAt: Date
     var publishedAt: Date?
@@ -99,6 +108,7 @@ final class Article {
     var retryCount: Int
     var sourceTypeRaw: String
     var syncStateRaw: String
+    var dirtyFieldsRaw: [String]
     var serverID: String?
     var extractionSourceRaw: String = ExtractionSource.none.rawValue
     var clientExtractedAt: Date?
@@ -117,6 +127,59 @@ final class Article {
     var syncState: SyncState {
         get { SyncState(rawValue: syncStateRaw) ?? .pendingUpload }
         set { syncStateRaw = newValue.rawValue }
+    }
+
+    var dirtyFields: Set<ArticleDirtyField> {
+        get { Set(dirtyFieldsRaw.compactMap(ArticleDirtyField.init(rawValue:))) }
+        set { dirtyFieldsRaw = newValue.map(\.rawValue).sorted() }
+    }
+
+    func fieldUpdatedAt(for field: ArticleDirtyField) -> Date? {
+        switch field {
+        case .favorite:
+            return favoriteUpdatedAt
+        case .archived:
+            return archivedUpdatedAt
+        case .readProgress:
+            return readProgressUpdatedAt
+        }
+    }
+
+    func setFieldUpdatedAt(_ date: Date?, for field: ArticleDirtyField) {
+        switch field {
+        case .favorite:
+            favoriteUpdatedAt = date
+        case .archived:
+            archivedUpdatedAt = date
+        case .readProgress:
+            readProgressUpdatedAt = date
+        }
+    }
+
+    func effectiveFieldUpdatedAt(for field: ArticleDirtyField) -> Date {
+        if let stored = fieldUpdatedAt(for: field) {
+            return stored
+        }
+        if field == .readProgress, let lastReadAt {
+            return lastReadAt
+        }
+        if pendingDirtyFields.contains(field) {
+            return updatedAt
+        }
+        return createdAt
+    }
+
+    /// Older builds only stored a coarse pendingUpdate bit.
+    /// Treat that legacy state as read-progress-only to avoid replaying stale booleans.
+    var pendingDirtyFields: Set<ArticleDirtyField> {
+        let fields = dirtyFields
+        if !fields.isEmpty {
+            return fields
+        }
+        if syncState == .pendingUpdate {
+            return [.readProgress]
+        }
+        return []
     }
 
     var extractionSource: ExtractionSource {
@@ -253,6 +316,9 @@ final class Article {
         self.isFavorite = false
         self.isArchived = false
         self.readProgress = 0
+        self.favoriteUpdatedAt = nil
+        self.archivedUpdatedAt = nil
+        self.readProgressUpdatedAt = nil
         self.createdAt = .now
         self.updatedAt = .now
         self.publishedAt = nil
@@ -264,6 +330,7 @@ final class Article {
         self.retryCount = 0
         self.sourceTypeRaw = sourceType.rawValue
         self.syncStateRaw = SyncState.pendingUpload.rawValue
+        self.dirtyFieldsRaw = []
         self.serverID = nil
         self.extractionSourceRaw = ExtractionSource.none.rawValue
         self.clientExtractedAt = nil

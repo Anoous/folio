@@ -487,5 +487,8 @@ final class APIClientTests: XCTestCase {
         XCTAssertNotNil(body?["is_favorite"])
         XCTAssertNil(body?["is_archived"])
         XCTAssertNil(body?["read_progress"])
+        XCTAssertNil(body?["favorite_updated_at"])
+        XCTAssertNil(body?["archived_updated_at"])
+        XCTAssertNil(body?["read_progress_updated_at"])
     }
 }

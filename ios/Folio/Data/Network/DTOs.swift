@@ -107,6 +107,9 @@ struct ArticleDTO: Decodable {
     let isFavorite: Bool
     let isArchived: Bool
     let readProgress: Double
+    let favoriteUpdatedAt: Date?
+    let archivedUpdatedAt: Date?
+    let readProgressUpdatedAt: Date?
     let lastReadAt: Date?
     let publishedAt: Date?
     let createdAt: Date
@@ -117,9 +120,12 @@ struct ArticleDTO: Decodable {
 }
 
 struct UpdateArticleRequest: Encodable {
-    var isFavorite: Bool?
-    var isArchived: Bool?
-    var readProgress: Double?
+    var isFavorite: Bool? = nil
+    var isArchived: Bool? = nil
+    var readProgress: Double? = nil
+    var favoriteUpdatedAt: Date? = nil
+    var archivedUpdatedAt: Date? = nil
+    var readProgressUpdatedAt: Date? = nil
 }
 
 // MARK: Tasks
