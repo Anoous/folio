@@ -9,6 +9,12 @@ import Combine
 @Observable
 final class OfflineQueueManager {
     static let backgroundTaskIdentifier = "com.folio.article-processing"
+    static var backgroundTaskSubmitter: (BGProcessingTaskRequest) throws -> Void = { request in
+        try BGTaskScheduler.shared.submit(request)
+    }
+    static var backgroundSyncAction: @Sendable () async -> Bool = {
+        await BackgroundSyncCoordinator.runPendingSyncIfNeeded()
+    }
 
     var pendingCount: Int = 0
     var isNetworkAvailable: Bool = true
@@ -65,14 +71,29 @@ final class OfflineQueueManager {
             using: nil
         ) { task in
             guard let bgTask = task as? BGProcessingTask else { return }
-            bgTask.setTaskCompleted(success: true)
+            let workerTask = Task {
+                await handleBackgroundTask(bgTask)
+            }
+            bgTask.expirationHandler = {
+                workerTask.cancel()
+            }
         }
+    }
+
+    private static func handleBackgroundTask(_ task: BGProcessingTask) async {
+        scheduleBackgroundProcessing()
+        let success = await backgroundSyncAction()
+        task.setTaskCompleted(success: success)
     }
 
     static func scheduleBackgroundProcessing() {
         let request = BGProcessingTaskRequest(identifier: backgroundTaskIdentifier)
         request.requiresNetworkConnectivity = true
         request.requiresExternalPower = false
-        try? BGTaskScheduler.shared.submit(request)
+        do {
+            try backgroundTaskSubmitter(request)
+        } catch {
+            FolioLogger.network.debug("background task scheduling skipped: \(error)")
+        }
     }
 }

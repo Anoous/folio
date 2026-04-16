@@ -8,8 +8,12 @@ Replaces the old dev_login endpoint with a self-contained approach:
 
 from __future__ import annotations
 
+__test__ = False
+
 import os
 import uuid
+import base64
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -61,6 +65,30 @@ def _make_token(user_id: str, token_type: str = "access", hours: int = 2) -> str
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
+def _make_refresh_token(user_id: str) -> str:
+    """Create an opaque refresh token + backing DB session."""
+    now = datetime.now(timezone.utc)
+    session_id = str(uuid.uuid4())
+    secret_bytes = os.urandom(32)
+    secret = base64.urlsafe_b64encode(secret_bytes).rstrip(b"=").decode()
+    token_hash = hashlib.sha256(secret_bytes).hexdigest()
+    expires_at = now + timedelta(days=90)
+
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO refresh_sessions (id, user_id, token_hash, expires_at)
+                   VALUES (%s, %s, %s, %s)""",
+                (session_id, user_id, token_hash, expires_at),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+    return f"{session_id}.{secret}"
+
+
 def test_login(client, alias: str | None = None) -> dict:
     """Create a test user + JWT token pair, set token on client.
 
@@ -74,7 +102,7 @@ def test_login(client, alias: str | None = None) -> dict:
 
     user_id = _ensure_user(apple_id, email, nickname)
     access_token = _make_token(user_id, "access", hours=2)
-    refresh_token = _make_token(user_id, "refresh", hours=2160)  # 90 days
+    refresh_token = _make_refresh_token(user_id)
 
     client.set_token(access_token)
 
@@ -89,3 +117,6 @@ def test_login(client, alias: str | None = None) -> dict:
             "apple_id": apple_id,
         },
     }
+
+
+test_login.__test__ = False

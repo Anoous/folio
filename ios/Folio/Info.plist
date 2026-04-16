@@ -29,6 +29,14 @@
 	<string>Folio uses microphone to capture your voice notes</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Folio uses speech recognition to transcribe your voice notes</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.folio.article-processing</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+	</array>
 	<key>UIAppFonts</key>
 	<array>
 		<string>LXGWWenKaiTC-Regular.ttf</string>

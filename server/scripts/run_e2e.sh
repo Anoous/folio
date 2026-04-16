@@ -35,11 +35,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 E2E_DIR="tests/e2e"
-REPORT_DIR="${E2E_DIR}/reports"
+REPORT_DIR="${SERVER_DIR}/${E2E_DIR}/reports"
+LOG_DIR="${REPORT_DIR}/logs"
 COMPOSE_FILE="docker-compose.test.yml"
 
 # PID tracking for cleanup
 PIDS=()
+READER_LOG=""
+API_LOG=""
 
 # ---------- colours ----------
 RED='\033[0;31m'
@@ -53,18 +56,44 @@ error() { echo -e "${RED}[e2e]${NC} $*"; }
 
 # ---------- cleanup ----------
 cleanup() {
+  trap - EXIT INT TERM
   info "Cleaning up ..."
   for pid in "${PIDS[@]}"; do
-    if kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-      wait "$pid" 2>/dev/null || true
-    fi
+    stop_pid "$pid"
   done
   if $USE_DOCKER; then
     docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
   fi
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
+
+stop_pid() {
+  local pid="$1"
+  if [[ -z "${pid:-}" ]] || ! kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+
+  kill "$pid" 2>/dev/null || true
+  for _ in {1..20}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      wait "$pid" 2>/dev/null || true
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  warn "Process $pid did not exit after SIGTERM, sending SIGKILL"
+  kill -9 "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
+show_log_tail() {
+  local label="$1" log_file="$2"
+  if [[ -n "${log_file:-}" && -f "$log_file" ]]; then
+    warn "Last logs from ${label}:"
+    tail -40 "$log_file" | sed 's/^/  /'
+  fi
+}
 
 # ---------- docker (postgres + redis only) ----------
 start_docker() {
@@ -76,12 +105,13 @@ start_docker() {
 
 # ---------- wait for a URL to respond ----------
 wait_for() {
-  local url="$1" label="$2" max="${3:-60}"
+  local url="$1" label="$2" max="${3:-60}" log_file="${4:-}"
   local i=0
   while ! curl -sf "$url" > /dev/null 2>&1; do
     i=$((i + 1))
     if [[ $i -ge $max ]]; then
       error "$label did not become healthy at $url within ${max}s"
+      show_log_tail "$label" "$log_file"
       exit 1
     fi
     sleep 1
@@ -94,10 +124,15 @@ start_reader() {
   info "Installing reader-service dependencies ..."
   (cd "$READER_DIR" && npm install --silent 2>&1 | tail -3)
 
+  READER_LOG="${LOG_DIR}/reader.log"
+  : > "$READER_LOG"
   info "Starting reader-service on port 13000 ..."
-  (cd "$READER_DIR" && PORT=13000 npx tsx src/index.ts 2>&1 | sed 's/^/  [reader] /') &
+  (
+    cd "$READER_DIR"
+    exec env PORT=13000 npx tsx src/index.ts >>"$READER_LOG" 2>&1
+  ) &
   PIDS+=($!)
-  wait_for "$READER_URL/health" "Reader service" 30
+  wait_for "$READER_URL/health" "Reader service" 30 "$READER_LOG"
 }
 
 # ---------- build & start Go API server locally ----------
@@ -105,15 +140,21 @@ start_api() {
   info "Building Go API server ..."
   (cd "$SERVER_DIR" && go build -o /tmp/folio-e2e-server ./cmd/server)
 
+  API_LOG="${LOG_DIR}/api.log"
+  : > "$API_LOG"
   info "Starting API server on port 18080 ..."
-  DATABASE_URL="postgresql://folio:folio_test@localhost:15432/folio_test" \
-  REDIS_ADDR="localhost:16379" \
-  READER_URL="$READER_URL" \
-  JWT_SECRET="e2e-test-secret-key-not-for-production" \
-  PORT="18080" \
-  /tmp/folio-e2e-server 2>&1 | sed 's/^/  [api] /' &
+  (
+    cd "$SERVER_DIR"
+    exec env \
+      DATABASE_URL="postgresql://folio:folio_test@localhost:15432/folio_test" \
+      REDIS_ADDR="localhost:16379" \
+      READER_URL="$READER_URL" \
+      JWT_SECRET="e2e-test-secret-key-not-for-production" \
+      PORT="18080" \
+      /tmp/folio-e2e-server >>"$API_LOG" 2>&1
+  ) &
   PIDS+=($!)
-  wait_for "$BASE_URL/health" "API server" 30
+  wait_for "$BASE_URL/health" "API server" 30 "$API_LOG"
 }
 
 # ---------- python venv ----------
@@ -128,7 +169,7 @@ ensure_venv() {
 }
 
 # ---------- main ----------
-mkdir -p "$REPORT_DIR"
+mkdir -p "$REPORT_DIR" "$LOG_DIR"
 ensure_venv
 
 # Load .env if present (for secrets like DEEPSEEK_API_KEY)

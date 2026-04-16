@@ -11,6 +11,7 @@ import (
 
 	"folio-server/internal/client"
 	"folio-server/internal/domain"
+	"folio-server/internal/pipeline"
 	"folio-server/internal/repository"
 )
 
@@ -81,6 +82,8 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("set ai started: %w", err)
 	}
 
+	logPipelineStarted(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, p.TaskID, p.ArticleID, p.UserID, "")
+
 	// Analyze
 	result, err := h.aiClient.Analyze(ctx, client.AnalyzeRequest{
 		Title:   p.Title,
@@ -89,12 +92,10 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		Author:  p.Author,
 	})
 	if err != nil {
-		slog.Error("ai task failed",
-			"article_id", p.ArticleID,
-			"error", err,
-		)
-		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
-		h.articleRepo.SetError(ctx, p.ArticleID, err.Error())
+		failureErr := ensurePipelineErr(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, false, "analyze article", err)
+		logPipelineFailed(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, p.TaskID, p.ArticleID, p.UserID, "", time.Since(start), failureErr)
+		h.taskRepo.SetFailed(ctx, p.TaskID, buildTaskFailure(failureErr, time.Since(start)))
+		h.articleRepo.SetError(ctx, p.ArticleID, failureErr.Error())
 		// Content was already crawled successfully — mark as ready so the
 		// article remains readable.  Only the AI enrichment (summary, tags,
 		// category) is missing.
@@ -114,7 +115,9 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		if err != nil {
 			// Both primary and fallback category creation failed.
 			// Mark task failed AND article as ready (content is still readable).
-			h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
+			failureErr := ensurePipelineErr(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, true, "persist ai category", err)
+			logPipelineFailed(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, p.TaskID, p.ArticleID, p.UserID, "", time.Since(start), failureErr)
+			h.taskRepo.SetFailed(ctx, p.TaskID, buildTaskFailure(failureErr, time.Since(start)))
 			h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusReady)
 			return fmt.Errorf("create fallback category: %w", err)
 		}
@@ -129,11 +132,9 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		Language:         result.Language,
 		SemanticKeywords: result.SemanticKeywords,
 	}); err != nil {
-		slog.Error("ai task failed to persist result",
-			"article_id", p.ArticleID,
-			"error", err,
-		)
-		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
+		failureErr := ensurePipelineErr(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, true, "persist ai result", err)
+		logPipelineFailed(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, p.TaskID, p.ArticleID, p.UserID, "", time.Since(start), failureErr)
+		h.taskRepo.SetFailed(ctx, p.TaskID, buildTaskFailure(failureErr, time.Since(start)))
 		return fmt.Errorf("update ai result: %w", err)
 	}
 
@@ -172,10 +173,7 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("set ai finished: %w", err)
 	}
 
-	slog.Info("ai task completed",
-		"article_id", p.ArticleID,
-		"duration_ms", time.Since(start).Milliseconds(),
-	)
+	logPipelineSucceeded(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, p.TaskID, p.ArticleID, p.UserID, "", time.Since(start))
 
 	// Write to content cache for cross-user reuse
 	if h.cacheRepo != nil {

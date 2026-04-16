@@ -19,6 +19,25 @@ final class DataManager {
 
     static let schema = Schema(modelTypes)
 
+    static func sharedModelConfiguration() -> ModelConfiguration {
+        if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) != nil {
+            return ModelConfiguration(
+                "Folio",
+                schema: schema,
+                groupContainer: .identifier(AppConstants.appGroupIdentifier)
+            )
+        }
+
+        return ModelConfiguration("Folio", schema: schema)
+    }
+
+    @MainActor
+    static func createSharedContainer() throws -> ModelContainer {
+        let container = try ModelContainer(for: schema, configurations: [sharedModelConfiguration()])
+        shared.preloadCategories(in: container.mainContext)
+        return container
+    }
+
     /// Create an in-memory ModelContainer for previews and testing
     @MainActor
     static func createInMemoryContainer() throws -> ModelContainer {

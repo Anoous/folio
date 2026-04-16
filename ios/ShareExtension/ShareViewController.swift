@@ -10,11 +10,7 @@ class ShareViewController: UIViewController {
     private var dismissWorkItem: DispatchWorkItem?
 
     private lazy var modelContainer: ModelContainer? = {
-        let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier)
-        let config = groupURL != nil
-            ? ModelConfiguration("Folio", schema: DataManager.schema, groupContainer: .identifier(AppConstants.appGroupIdentifier))
-            : ModelConfiguration("Folio", schema: DataManager.schema)
-        return try? ModelContainer(for: DataManager.schema, configurations: [config])
+        try? DataManager.createSharedContainer()
     }()
 
     override func viewDidLoad() {

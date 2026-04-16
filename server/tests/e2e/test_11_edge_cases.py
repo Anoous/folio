@@ -36,9 +36,24 @@ class TestEdgeCases:
         assert resp.status_code in (202, 400, 414)
 
     def test_invalid_uuid_article(self, api):
-        """GET /articles/not-a-uuid returns 404 or 400."""
+        """GET /articles/not-a-uuid returns 400."""
         resp = api.get_article("not-a-uuid")
-        assert resp.status_code in (400, 404, 500)
+        assert resp.status_code == 400
+
+    def test_invalid_uuid_task(self, api):
+        """GET /tasks/not-a-uuid returns 400."""
+        resp = api.get_task("not-a-uuid")
+        assert resp.status_code == 400
+
+    def test_invalid_uuid_related_articles(self, api):
+        """GET /articles/not-a-uuid/related returns 400."""
+        resp = api.get_related("not-a-uuid")
+        assert resp.status_code == 400
+
+    def test_invalid_uuid_tag_delete(self, api):
+        """DELETE /tags/not-a-uuid returns 400."""
+        resp = api.delete_tag("not-a-uuid")
+        assert resp.status_code == 400
 
     def test_empty_body_post(self, api):
         """POST /articles with no body returns 400."""

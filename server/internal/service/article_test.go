@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/hibiken/asynq"
 
@@ -963,14 +964,14 @@ func TestCreateArticleParams_AllNilOptionalFields(t *testing.T) {
 	// Verify the CreateArticleParams struct accepts all nil optional fields
 	// and applying the repository's default logic produces sensible values
 	p := repository.CreateArticleParams{
-		UserID:     "user-1",
-		URL:        strPtr("https://example.com/nil-everything"),
-		SourceType: domain.SourceWeb,
-		Title:      nil,
-		Author:     nil,
-		SiteName:   nil,
+		UserID:          "user-1",
+		URL:             strPtr("https://example.com/nil-everything"),
+		SourceType:      domain.SourceWeb,
+		Title:           nil,
+		Author:          nil,
+		SiteName:        nil,
 		MarkdownContent: nil,
-		WordCount:  nil,
+		WordCount:       nil,
 	}
 
 	// These nil values should be safe to pass to SQL (PostgreSQL NULL)
@@ -1040,5 +1041,100 @@ func TestSubmitURL_CrawlTaskAlwaysEnqueued_WithoutContent(t *testing.T) {
 	}
 	if crawlPayload.URL != "https://example.com/article-url-only" {
 		t.Errorf("crawl payload URL = %q, want %q", crawlPayload.URL, "https://example.com/article-url-only")
+	}
+}
+
+func TestGetByID_DeletedArticleReturnsNotFound(t *testing.T) {
+	now := time.Now()
+	artRepo := &mockArticleRepo{
+		getByIDFn: func(ctx context.Context, id string) (*domain.Article, error) {
+			return &domain.Article{
+				ID:        id,
+				UserID:    "user-1",
+				DeletedAt: &now,
+				KeyPoints: []string{},
+			}, nil
+		},
+	}
+
+	svc := newTestArticleService(
+		artRepo,
+		&mockTaskRepo{},
+		&mockTagRepo{},
+		&mockCategoryRepo{},
+		&mockQuotaService{},
+		&mockEnqueuer{},
+	)
+
+	article, err := svc.GetByID(context.Background(), "user-1", "article-1")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetByID error = %v, want ErrNotFound", err)
+	}
+	if article != nil {
+		t.Fatalf("GetByID article = %#v, want nil", article)
+	}
+}
+
+func TestDelete_DeletedArticleReturnsNotFound(t *testing.T) {
+	now := time.Now()
+	artRepo := &mockArticleRepo{
+		getByIDFn: func(ctx context.Context, id string) (*domain.Article, error) {
+			return &domain.Article{
+				ID:        id,
+				UserID:    "user-1",
+				DeletedAt: &now,
+				KeyPoints: []string{},
+			}, nil
+		},
+		deleteFn: func(ctx context.Context, id string, userID string) error {
+			t.Fatalf("Delete should not be called for already deleted article")
+			return nil
+		},
+	}
+
+	svc := newTestArticleService(
+		artRepo,
+		&mockTaskRepo{},
+		&mockTagRepo{},
+		&mockCategoryRepo{},
+		&mockQuotaService{},
+		&mockEnqueuer{},
+	)
+
+	err := svc.Delete(context.Background(), "user-1", "article-1")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Delete error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestRetryArticle_DeletedArticleReturnsNotFound(t *testing.T) {
+	now := time.Now()
+	artRepo := &mockArticleRepo{
+		getByIDFn: func(ctx context.Context, id string) (*domain.Article, error) {
+			return &domain.Article{
+				ID:        id,
+				UserID:    "user-1",
+				Status:    domain.ArticleStatusFailed,
+				DeletedAt: &now,
+				KeyPoints: []string{},
+			}, nil
+		},
+	}
+
+	svc := newTestArticleService(
+		artRepo,
+		&mockTaskRepo{},
+		&mockTagRepo{},
+		&mockCategoryRepo{},
+		&mockQuotaService{},
+		&mockEnqueuer{},
+	)
+
+	resp, err := svc.RetryArticle(context.Background(), "user-1", "article-1")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("RetryArticle error = %v, want ErrNotFound", err)
+	}
+	if resp != nil {
+		t.Fatalf("RetryArticle response = %#v, want nil", resp)
 	}
 }

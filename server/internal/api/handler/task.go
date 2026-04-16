@@ -3,8 +3,6 @@ package handler
 import (
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-
 	"folio-server/internal/api/middleware"
 	"folio-server/internal/repository"
 )
@@ -19,7 +17,10 @@ func NewTaskHandler(taskRepo *repository.TaskRepo) *TaskHandler {
 
 func (h *TaskHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
-	taskID := chi.URLParam(r, "id")
+	taskID, ok := requireUUIDParam(w, r, "id", "task id")
+	if !ok {
+		return
+	}
 
 	task, err := h.taskRepo.GetByID(r.Context(), taskID)
 	if err != nil {

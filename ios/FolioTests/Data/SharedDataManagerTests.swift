@@ -7,17 +7,28 @@ final class SharedDataManagerTests: XCTestCase {
     private var container: ModelContainer!
     private var context: ModelContext!
     private var manager: SharedDataManager!
+    private var searchIndexer: SearchIndexCoordinator!
 
     @MainActor
     override func setUp() {
         super.setUp()
         container = try! DataManager.createInMemoryContainer()
         context = container.mainContext
-        manager = SharedDataManager(context: context)
+        searchIndexer = SearchIndexCoordinator(searchManager: try! FTS5SearchManager(inMemory: true))
+        manager = SharedDataManager(
+            context: context,
+            onArticleIndexed: { [searchIndexer] article in
+                searchIndexer?.index(article)
+            },
+            onArticleUpdated: { [searchIndexer] article in
+                searchIndexer?.update(article)
+            }
+        )
     }
 
     override func tearDown() {
         manager = nil
+        searchIndexer = nil
         container = nil
         context = nil
         super.tearDown()
@@ -28,6 +39,12 @@ final class SharedDataManagerTests: XCTestCase {
         let article = try manager.saveArticle(url: "https://example.com/test")
         XCTAssertEqual(article.url, "https://example.com/test")
         XCTAssertEqual(article.status, .pending)
+    }
+
+    @MainActor
+    func testSaveArticle_indexesSavedRow() throws {
+        _ = try manager.saveArticle(url: "https://example.com/indexed")
+        XCTAssertEqual(try searchIndexer.searchManager.rowCount(), 1)
     }
 
     @MainActor
@@ -80,6 +97,14 @@ final class SharedDataManagerTests: XCTestCase {
         // Empty string is technically accepted (no crash)
         let article = try manager.saveArticle(url: "")
         XCTAssertEqual(article.url, "")
+    }
+
+    @MainActor
+    func testSaveManualContent_indexesManualContent() throws {
+        _ = try manager.saveManualContent(content: "Manual note about backpressure and queues.")
+
+        let results = try searchIndexer.searchManager.search(query: "backpressure")
+        XCTAssertEqual(results.count, 1)
     }
 
     // MARK: - Quota Sync Tests

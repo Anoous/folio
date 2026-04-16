@@ -108,7 +108,8 @@ final class Article {
     var retryCount: Int
     var sourceTypeRaw: String
     var syncStateRaw: String
-    var dirtyFieldsRaw: [String]
+    // Optional for backward-compatible migration from older stores that don't have this column yet.
+    var dirtyFieldsRaw: [String]?
     var serverID: String?
     var extractionSourceRaw: String = ExtractionSource.none.rawValue
     var clientExtractedAt: Date?
@@ -130,7 +131,7 @@ final class Article {
     }
 
     var dirtyFields: Set<ArticleDirtyField> {
-        get { Set(dirtyFieldsRaw.compactMap(ArticleDirtyField.init(rawValue:))) }
+        get { Set((dirtyFieldsRaw ?? []).compactMap(ArticleDirtyField.init(rawValue:))) }
         set { dirtyFieldsRaw = newValue.map(\.rawValue).sorted() }
     }
 

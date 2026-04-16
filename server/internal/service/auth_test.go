@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"net"
 	"strings"
@@ -12,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"folio-server/internal/client"
+	"folio-server/internal/domain"
 )
 
 func TestSendEmailCode_ReturnsErrorWhenRedisPersistFails(t *testing.T) {
@@ -83,4 +87,230 @@ func unavailableTCPAddr(t *testing.T) string {
 		t.Fatalf("close listener: %v", err)
 	}
 	return addr
+}
+
+func TestIssueTokenPair_PersistsRefreshSession(t *testing.T) {
+	userRepo := &fakeAuthUserRepo{}
+	sessionRepo := newFakeRefreshSessionRepo()
+	svc := &AuthService{
+		userRepo:     userRepo,
+		sessionRepo:  sessionRepo,
+		jwtSecret:    []byte("01234567890123456789012345678901"),
+		resend:       client.NewResendClient("", "noreply@example.com"),
+	}
+
+	user := &domain.User{ID: "user-1"}
+
+	resp, err := svc.issueTokenPair(context.Background(), user)
+	if err != nil {
+		t.Fatalf("issueTokenPair() error = %v", err)
+	}
+
+	if resp.RefreshToken == "" {
+		t.Fatal("issueTokenPair() returned empty refresh token")
+	}
+
+	sessionID, tokenHash := mustParseRefreshToken(t, resp.RefreshToken)
+	session, ok := sessionRepo.sessions[sessionID]
+	if !ok {
+		t.Fatalf("session %q not persisted", sessionID)
+	}
+
+	if session.UserID != user.ID {
+		t.Fatalf("session user_id = %q, want %q", session.UserID, user.ID)
+	}
+	if session.TokenHash != tokenHash {
+		t.Fatalf("session token_hash = %q, want %q", session.TokenHash, tokenHash)
+	}
+	if _, err := svc.ValidateAccessToken(resp.AccessToken); err != nil {
+		t.Fatalf("ValidateAccessToken() error = %v", err)
+	}
+}
+
+func TestRefreshToken_RotatesSessionAndRevokesOnReuse(t *testing.T) {
+	userRepo := &fakeAuthUserRepo{
+		users: map[string]*domain.User{
+			"user-1": {ID: "user-1"},
+		},
+	}
+	sessionRepo := newFakeRefreshSessionRepo()
+	svc := &AuthService{
+		userRepo:    userRepo,
+		sessionRepo: sessionRepo,
+		jwtSecret:   []byte("01234567890123456789012345678901"),
+	}
+
+	initial, err := svc.issueTokenPair(context.Background(), userRepo.users["user-1"])
+	if err != nil {
+		t.Fatalf("issueTokenPair() error = %v", err)
+	}
+
+	rotated, err := svc.RefreshToken(context.Background(), initial.RefreshToken)
+	if err != nil {
+		t.Fatalf("RefreshToken() first error = %v", err)
+	}
+	if rotated.RefreshToken == initial.RefreshToken {
+		t.Fatal("RefreshToken() did not rotate refresh token")
+	}
+
+	if _, err := svc.RefreshToken(context.Background(), initial.RefreshToken); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("RefreshToken() with stale token error = %v, want %v", err, ErrForbidden)
+	}
+
+	if _, err := svc.RefreshToken(context.Background(), rotated.RefreshToken); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("RefreshToken() after reuse revoke error = %v, want %v", err, ErrForbidden)
+	}
+}
+
+func TestRefreshToken_RejectsExpiredSession(t *testing.T) {
+	userRepo := &fakeAuthUserRepo{
+		users: map[string]*domain.User{
+			"user-1": {ID: "user-1"},
+		},
+	}
+	sessionRepo := newFakeRefreshSessionRepo()
+	svc := &AuthService{
+		userRepo:    userRepo,
+		sessionRepo: sessionRepo,
+		jwtSecret:   []byte("01234567890123456789012345678901"),
+	}
+
+	initial, err := svc.issueTokenPair(context.Background(), userRepo.users["user-1"])
+	if err != nil {
+		t.Fatalf("issueTokenPair() error = %v", err)
+	}
+
+	sessionID, _ := mustParseRefreshToken(t, initial.RefreshToken)
+	session := sessionRepo.sessions[sessionID]
+	expiredAt := time.Now().Add(-time.Minute)
+	session.ExpiresAt = expiredAt
+	sessionRepo.sessions[sessionID] = session
+
+	if _, err := svc.RefreshToken(context.Background(), initial.RefreshToken); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("RefreshToken() error = %v, want %v", err, ErrForbidden)
+	}
+}
+
+func TestLogout_RevokesRefreshSession(t *testing.T) {
+	userRepo := &fakeAuthUserRepo{
+		users: map[string]*domain.User{
+			"user-1": {ID: "user-1"},
+		},
+	}
+	sessionRepo := newFakeRefreshSessionRepo()
+	svc := &AuthService{
+		userRepo:    userRepo,
+		sessionRepo: sessionRepo,
+		jwtSecret:   []byte("01234567890123456789012345678901"),
+	}
+
+	initial, err := svc.issueTokenPair(context.Background(), userRepo.users["user-1"])
+	if err != nil {
+		t.Fatalf("issueTokenPair() error = %v", err)
+	}
+
+	if err := svc.Logout(context.Background(), initial.RefreshToken); err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+
+	if _, err := svc.RefreshToken(context.Background(), initial.RefreshToken); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("RefreshToken() after logout error = %v, want %v", err, ErrForbidden)
+	}
+}
+
+func mustParseRefreshToken(t *testing.T, token string) (string, string) {
+	t.Helper()
+
+	parts := strings.Split(token, ".")
+	if len(parts) != 2 {
+		t.Fatalf("refresh token format = %q, want <session>.<secret>", token)
+	}
+
+	secretBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatalf("decode refresh secret: %v", err)
+	}
+
+	sum := sha256.Sum256(secretBytes)
+	return parts[0], hex.EncodeToString(sum[:])
+}
+
+type fakeAuthUserRepo struct {
+	users map[string]*domain.User
+}
+
+func (r *fakeAuthUserRepo) GetByID(_ context.Context, id string) (*domain.User, error) {
+	if r.users == nil {
+		return nil, nil
+	}
+	return r.users[id], nil
+}
+
+func (r *fakeAuthUserRepo) UpsertByAppleID(_ context.Context, appleID string, email *string, nickname *string) (*domain.User, error) {
+	if r.users == nil {
+		r.users = make(map[string]*domain.User)
+	}
+	user := &domain.User{ID: "user-" + appleID, AppleID: &appleID, Email: email, Nickname: nickname}
+	r.users[user.ID] = user
+	return user, nil
+}
+
+func (r *fakeAuthUserRepo) UpsertByEmail(_ context.Context, email string) (*domain.User, error) {
+	if r.users == nil {
+		r.users = make(map[string]*domain.User)
+	}
+	user := &domain.User{ID: "user-" + email, Email: &email}
+	r.users[user.ID] = user
+	return user, nil
+}
+
+type fakeRefreshSessionRepo struct {
+	sessions map[string]*domain.RefreshSession
+}
+
+func newFakeRefreshSessionRepo() *fakeRefreshSessionRepo {
+	return &fakeRefreshSessionRepo{sessions: make(map[string]*domain.RefreshSession)}
+}
+
+func (r *fakeRefreshSessionRepo) Create(_ context.Context, session *domain.RefreshSession) error {
+	clone := *session
+	r.sessions[session.ID] = &clone
+	return nil
+}
+
+func (r *fakeRefreshSessionRepo) GetByID(_ context.Context, sessionID string) (*domain.RefreshSession, error) {
+	session, ok := r.sessions[sessionID]
+	if !ok {
+		return nil, nil
+	}
+	clone := *session
+	return &clone, nil
+}
+
+func (r *fakeRefreshSessionRepo) Rotate(_ context.Context, sessionID, currentTokenHash, newTokenHash string, expiresAt, now time.Time) (*domain.RefreshSession, error) {
+	session, ok := r.sessions[sessionID]
+	if !ok || session.RevokedAt != nil || !session.ExpiresAt.After(now) || session.TokenHash != currentTokenHash {
+		return nil, nil
+	}
+
+	session.TokenHash = newTokenHash
+	session.ExpiresAt = expiresAt
+	session.LastUsedAt = &now
+	session.RotatedAt = &now
+	session.UpdatedAt = now
+	clone := *session
+	return &clone, nil
+}
+
+func (r *fakeRefreshSessionRepo) Revoke(_ context.Context, sessionID, tokenHash string, now time.Time) error {
+	session, ok := r.sessions[sessionID]
+	if !ok || session.RevokedAt != nil {
+		return nil
+	}
+	if tokenHash != "" && session.TokenHash != tokenHash {
+		return nil
+	}
+	session.RevokedAt = &now
+	session.UpdatedAt = now
+	return nil
 }

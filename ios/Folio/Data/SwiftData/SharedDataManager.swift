@@ -11,9 +11,17 @@ enum SharedDataError: Error, Equatable {
 
 final class SharedDataManager {
     private let context: ModelContext
+    private let onArticleIndexed: (Article) -> Void
+    private let onArticleUpdated: (Article) -> Void
 
-    init(context: ModelContext) {
+    init(
+        context: ModelContext,
+        onArticleIndexed: @escaping (Article) -> Void = { _ in },
+        onArticleUpdated: @escaping (Article) -> Void = { _ in }
+    ) {
         self.context = context
+        self.onArticleIndexed = onArticleIndexed
+        self.onArticleUpdated = onArticleUpdated
     }
 
     /// Save article from URL, checking for duplicates
@@ -32,6 +40,7 @@ final class SharedDataManager {
         let article = Article(url: url, sourceType: sourceType)
         context.insert(article)
         try context.save()
+        onArticleIndexed(article)
         FolioLogger.data.info("article saved: \(url)")
         return article
     }
@@ -67,6 +76,7 @@ final class SharedDataManager {
         let article = Article(content: trimmed)
         context.insert(article)
         try context.save()
+        onArticleIndexed(article)
         FolioLogger.data.info("manual content saved: \(trimmed.prefix(40))")
         return article
     }
@@ -115,6 +125,7 @@ final class SharedDataManager {
 
         article.updatedAt = .now
         try context.save()
+        onArticleUpdated(article)
         FolioLogger.data.info("extraction updated: wordCount=\(result.wordCount), title=\(result.title ?? "nil")")
     }
 

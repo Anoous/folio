@@ -25,10 +25,10 @@ func (m *mockAnalyzer) Analyze(_ context.Context, _ client.AnalyzeRequest) (*cli
 }
 
 type mockAIArticleRepo struct {
-	articles       map[string]*domain.Article
-	updatedTitles  map[string]string
-	updatedAI      map[string]repository.AIResult
-	updatedStatus  map[string]domain.ArticleStatus
+	articles      map[string]*domain.Article
+	updatedTitles map[string]string
+	updatedAI     map[string]repository.AIResult
+	updatedStatus map[string]domain.ArticleStatus
 }
 
 func newMockAIArticleRepo() *mockAIArticleRepo {
@@ -70,12 +70,14 @@ func (m *mockAIArticleRepo) SetError(_ context.Context, _ string, _ string) erro
 type mockAITaskRepo struct {
 	started  map[string]bool
 	finished map[string]bool
+	failed   map[string]domain.TaskFailure
 }
 
 func newMockAITaskRepo() *mockAITaskRepo {
 	return &mockAITaskRepo{
 		started:  make(map[string]bool),
 		finished: make(map[string]bool),
+		failed:   make(map[string]domain.TaskFailure),
 	}
 }
 
@@ -89,7 +91,8 @@ func (m *mockAITaskRepo) SetAIFinished(_ context.Context, id string) error {
 	return nil
 }
 
-func (m *mockAITaskRepo) SetFailed(_ context.Context, _ string, _ string) error {
+func (m *mockAITaskRepo) SetFailed(_ context.Context, id string, failure domain.TaskFailure) error {
+	m.failed[id] = failure
 	return nil
 }
 

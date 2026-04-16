@@ -60,6 +60,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// Public routes (rate-limited)
 		r.With(authLimiter.Middleware).Post("/auth/apple", deps.AuthHandler.HandleAppleLogin)
 		r.With(authLimiter.Middleware).Post("/auth/refresh", deps.AuthHandler.HandleRefreshToken)
+		r.With(authLimiter.Middleware).Post("/auth/logout", deps.AuthHandler.HandleLogout)
 		r.With(emailCodeLimiter.Middleware).Post("/auth/email/code", deps.AuthHandler.HandleSendCode)
 		r.With(authLimiter.Middleware).Post("/auth/email/verify", deps.AuthHandler.HandleVerifyCode)
 

@@ -57,7 +57,7 @@ type TaskAIFinisher interface {
 
 // TaskFailer marks a task as failed.
 type TaskFailer interface {
-	SetFailed(ctx context.Context, id string, errMsg string) error
+	SetFailed(ctx context.Context, id string, failure domain.TaskFailure) error
 }
 
 // --- Other shared interfaces ---

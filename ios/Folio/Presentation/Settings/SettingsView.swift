@@ -410,7 +410,7 @@ struct SettingsView: View {
     private var signOutButton: some View {
         Button {
             logoutTrigger.toggle()
-            authViewModel?.signOut()
+            Task { await authViewModel?.signOut() }
         } label: {
             Text("退出登录")
                 .font(.system(size: 16))
@@ -479,8 +479,7 @@ struct SettingsView: View {
     private var devToolsSection: some View {
         settingsSection(header: "DEV TOOLS") {
             Button {
-                try? KeyChainManager.shared.clearTokens()
-                authViewModel?.signOut()
+                Task { await authViewModel?.signOut(revokeRemoteSession: false) }
             } label: {
                 HStack {
                     Image(systemName: "key.slash")

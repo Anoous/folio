@@ -375,6 +375,52 @@ final class APIClient: @unchecked Sendable {
         return response
     }
 
+    func logout(refreshToken: String? = nil) async throws {
+        guard let refreshToken = refreshToken ?? keychainManager.refreshToken else {
+            throw APIError.unauthorized
+        }
+
+        let body = ["refresh_token": refreshToken]
+        guard let components = URLComponents(url: baseURL.appendingPathComponent("/api/v1/auth/logout"), resolvingAgainstBaseURL: true),
+              let url = components.url else {
+            throw APIError.invalidURL
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: urlRequest)
+        } catch {
+            throw APIError.networkError(error.localizedDescription)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError("Invalid response")
+        }
+
+        switch httpResponse.statusCode {
+        case 200...299:
+            return
+        case 401:
+            throw APIError.unauthorized
+        case 403:
+            throw APIError.forbidden
+        default:
+            if httpResponse.statusCode >= 500 {
+                throw APIError.serverError(httpResponse.statusCode)
+            }
+            if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
+                throw APIError.serverMessage(errorResponse.error)
+            }
+            throw APIError.serverError(httpResponse.statusCode)
+        }
+    }
+
     // MARK: - Email Auth
 
     func sendEmailCode(email: String) async throws {

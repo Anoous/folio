@@ -39,6 +39,14 @@ final class ArticleModelTests: XCTestCase {
         XCTAssertTrue(article.keyPoints.isEmpty)
         XCTAssertTrue(article.tags.isEmpty)
         XCTAssertNil(article.category)
+
+        article.dirtyFieldsRaw = nil
+        XCTAssertTrue(article.dirtyFields.isEmpty)
+        XCTAssertTrue(article.pendingDirtyFields.isEmpty)
+
+        article.dirtyFields = [.favorite, .readProgress]
+        XCTAssertEqual(article.dirtyFields, [.favorite, .readProgress])
+        XCTAssertEqual(article.dirtyFieldsRaw ?? [], ["favorite", "readProgress"])
     }
 
     func testSourceTypeDetection_wechat() {

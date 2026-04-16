@@ -24,6 +24,12 @@ def unique_url(prefix: str = "test") -> str:
     return f"https://example.com/{prefix}-{ts}"
 
 
+def unique_content_url(prefix: str = "content") -> str:
+    """Generate a unique, syntactically valid URL for client-provided content tests."""
+    ts = int(time.time() * 1000)
+    return f"https://content.folio.test/{prefix}-{ts}"
+
+
 def unique_urls(n: int, prefix: str = "test") -> list[str]:
     """Generate *n* unique URLs."""
     ts = int(time.time() * 1000)

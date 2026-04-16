@@ -6,6 +6,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         OfflineQueueManager.registerBackgroundTask()
+        OfflineQueueManager.scheduleBackgroundProcessing()
         return true
     }
 

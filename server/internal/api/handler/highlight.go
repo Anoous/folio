@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-
 	"folio-server/internal/api/middleware"
 	"folio-server/internal/service"
 )
@@ -38,7 +36,10 @@ type highlightResponse struct {
 // HandleCreateHighlight handles POST /api/v1/articles/{id}/highlights
 func (h *HighlightHandler) HandleCreateHighlight(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
-	articleID := chi.URLParam(r, "id")
+	articleID, ok := requireUUIDParam(w, r, "id", "article id")
+	if !ok {
+		return
+	}
 
 	var req createHighlightRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -75,7 +76,10 @@ func (h *HighlightHandler) HandleCreateHighlight(w http.ResponseWriter, r *http.
 // HandleGetHighlights handles GET /api/v1/articles/{id}/highlights
 func (h *HighlightHandler) HandleGetHighlights(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
-	articleID := chi.URLParam(r, "id")
+	articleID, ok := requireUUIDParam(w, r, "id", "article id")
+	if !ok {
+		return
+	}
 
 	highlights, err := h.highlightService.GetArticleHighlights(r.Context(), userID, articleID)
 	if err != nil {
@@ -103,7 +107,10 @@ func (h *HighlightHandler) HandleGetHighlights(w http.ResponseWriter, r *http.Re
 // HandleDeleteHighlight handles DELETE /api/v1/highlights/{id}
 func (h *HighlightHandler) HandleDeleteHighlight(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
-	highlightID := chi.URLParam(r, "id")
+	highlightID, ok := requireUUIDParam(w, r, "id", "highlight id")
+	if !ok {
+		return
+	}
 
 	if err := h.highlightService.DeleteHighlight(r.Context(), userID, highlightID); err != nil {
 		handleServiceError(w, r, err)

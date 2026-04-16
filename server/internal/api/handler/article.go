@@ -10,8 +10,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/go-chi/chi/v5"
-
 	"folio-server/internal/api/middleware"
 	"folio-server/internal/domain"
 	"folio-server/internal/repository"
@@ -209,7 +207,10 @@ func (h *ArticleHandler) HandleListArticles(w http.ResponseWriter, r *http.Reque
 
 func (h *ArticleHandler) HandleGetArticle(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
-	articleID := chi.URLParam(r, "id")
+	articleID, ok := requireUUIDParam(w, r, "id", "article id")
+	if !ok {
+		return
+	}
 
 	article, err := h.articleService.GetByID(r.Context(), userID, articleID)
 	if err != nil {
@@ -222,7 +223,10 @@ func (h *ArticleHandler) HandleGetArticle(w http.ResponseWriter, r *http.Request
 
 func (h *ArticleHandler) HandleUpdateArticle(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
-	articleID := chi.URLParam(r, "id")
+	articleID, ok := requireUUIDParam(w, r, "id", "article id")
+	if !ok {
+		return
+	}
 
 	var params repository.UpdateArticleParams
 	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
@@ -248,7 +252,10 @@ func (h *ArticleHandler) HandleUpdateArticle(w http.ResponseWriter, r *http.Requ
 
 func (h *ArticleHandler) HandleDeleteArticle(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
-	articleID := chi.URLParam(r, "id")
+	articleID, ok := requireUUIDParam(w, r, "id", "article id")
+	if !ok {
+		return
+	}
 
 	if err := h.articleService.Delete(r.Context(), userID, articleID); err != nil {
 		handleServiceError(w, r, err)
@@ -260,7 +267,10 @@ func (h *ArticleHandler) HandleDeleteArticle(w http.ResponseWriter, r *http.Requ
 
 func (h *ArticleHandler) HandleRetryArticle(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
-	articleID := chi.URLParam(r, "id")
+	articleID, ok := requireUUIDParam(w, r, "id", "article id")
+	if !ok {
+		return
+	}
 
 	resp, err := h.articleService.RetryArticle(r.Context(), userID, articleID)
 	if err != nil {

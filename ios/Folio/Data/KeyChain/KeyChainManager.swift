@@ -44,6 +44,10 @@ final class KeyChainManager {
         try? keychain.get(Keys.refreshToken)
     }
 
+    var hasStoredSession: Bool {
+        accessToken != nil || refreshToken != nil
+    }
+
     func clearTokens() throws {
         do {
             try keychain.remove(Keys.accessToken)

@@ -100,3 +100,25 @@ func (h *AuthHandler) HandleRefreshToken(w http.ResponseWriter, r *http.Request)
 
 	writeJSON(w, http.StatusOK, resp)
 }
+
+func (h *AuthHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.RefreshToken == "" {
+		writeError(w, http.StatusBadRequest, "refresh_token is required")
+		return
+	}
+
+	if err := h.authService.Logout(r.Context(), req.RefreshToken); err != nil {
+		handleServiceError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

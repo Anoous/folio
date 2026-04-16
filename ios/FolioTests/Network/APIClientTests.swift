@@ -431,6 +431,34 @@ final class APIClientTests: XCTestCase {
         }
     }
 
+    func testLogout_postsRefreshTokenWithoutAuthorizationHeader() async throws {
+        try keychainManager.saveTokens(access: "token", refresh: "refresh-123")
+
+        var capturedRequest: URLRequest?
+        MockURLProtocol.requestHandler = { request in
+            capturedRequest = request
+            return (Data(), self.makeResponse(statusCode: 204))
+        }
+
+        try await client.logout()
+
+        XCTAssertEqual(capturedRequest?.url?.path, "/api/v1/auth/logout")
+        XCTAssertNil(capturedRequest?.value(forHTTPHeaderField: "Authorization"))
+        let body = MockURLProtocol.lastRequestBody.flatMap {
+            try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+        }
+        XCTAssertEqual(body?["refresh_token"] as? String, "refresh-123")
+    }
+
+    func testLogout_withoutRefreshToken_throwsUnauthorized() async {
+        do {
+            try await client.logout()
+            XCTFail("Should throw")
+        } catch {
+            XCTAssertEqual(error as? APIError, .unauthorized)
+        }
+    }
+
     // MARK: - Void Responses (204 No Content)
 
     func testDeleteHighlight_204NoContent_succeeds() async throws {

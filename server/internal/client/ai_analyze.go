@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
+
+	"folio-server/internal/pipeline"
 )
 
 // categoryEntry holds a slug→name pair for the 9 predefined categories.
@@ -43,14 +46,87 @@ func (d *DeepSeekAnalyzer) Analyze(ctx context.Context, req AnalyzeRequest) (*An
 		ResponseFormat: &respFormat{Type: "json_object"},
 	}
 
-	respBody, err := d.doRequest(ctx, chatReq)
+	respBody, statusCode, err := d.doChatRequest(ctx, chatReq)
 	if err != nil {
-		return nil, fmt.Errorf("analyze: %w", err)
+		if isTimeoutError(err) {
+			return nil, pipeline.Wrap(
+				pipeline.StageAIAnalyze,
+				pipeline.ProviderDeepSeek,
+				pipeline.CodeTimeout,
+				true,
+				http.StatusGatewayTimeout,
+				"deepseek analyze request timed out",
+				err,
+			)
+		}
+		return nil, pipeline.Wrap(
+			pipeline.StageAIAnalyze,
+			pipeline.ProviderDeepSeek,
+			pipeline.CodeNetwork,
+			true,
+			http.StatusBadGateway,
+			"deepseek analyze request failed",
+			err,
+		)
+	}
+	if statusCode != http.StatusOK {
+		return nil, pipeline.Wrap(
+			pipeline.StageAIAnalyze,
+			pipeline.ProviderDeepSeek,
+			classifyDeepSeekStatus(statusCode),
+			deepSeekRetryable(statusCode),
+			statusCode,
+			fmt.Sprintf("deepseek returned status %d", statusCode),
+			nil,
+		)
+	}
+
+	var chatResp chatResponse
+	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		return nil, pipeline.Wrap(
+			pipeline.StageAIAnalyze,
+			pipeline.ProviderDeepSeek,
+			pipeline.CodeInvalidResponse,
+			false,
+			http.StatusOK,
+			"decode analyze response",
+			err,
+		)
+	}
+	if chatResp.Error != nil {
+		return nil, pipeline.Wrap(
+			pipeline.StageAIAnalyze,
+			pipeline.ProviderDeepSeek,
+			pipeline.CodeInvalidResponse,
+			false,
+			http.StatusOK,
+			chatResp.Error.Message,
+			nil,
+		)
+	}
+	if len(chatResp.Choices) == 0 {
+		return nil, pipeline.Wrap(
+			pipeline.StageAIAnalyze,
+			pipeline.ProviderDeepSeek,
+			pipeline.CodeInvalidResponse,
+			false,
+			http.StatusOK,
+			"deepseek returned no choices",
+			nil,
+		)
 	}
 
 	var result AnalyzeResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("decode analysis json: %w (raw: %s)", err, string(respBody))
+	if err := json.Unmarshal([]byte(chatResp.Choices[0].Message.Content), &result); err != nil {
+		return nil, pipeline.Wrap(
+			pipeline.StageAIAnalyze,
+			pipeline.ProviderDeepSeek,
+			pipeline.CodeInvalidResponse,
+			false,
+			http.StatusOK,
+			"decode analysis json",
+			err,
+		)
 	}
 
 	validateResponse(&result)

@@ -11,6 +11,7 @@ import (
 
 	"folio-server/internal/client"
 	"folio-server/internal/domain"
+	"folio-server/internal/pipeline"
 	"folio-server/internal/repository"
 )
 
@@ -441,7 +442,10 @@ type mockCrawlArticleRepo struct {
 	updateCrawlCalls    []repository.CrawlResult
 	updateAIResultCalls []repository.AIResult
 	setErrorCalls       []struct{ ID, ErrMsg string }
-	updateStatusCalls   []struct{ ID string; Status domain.ArticleStatus }
+	updateStatusCalls   []struct {
+		ID     string
+		Status domain.ArticleStatus
+	}
 }
 
 func (m *mockCrawlArticleRepo) GetByID(ctx context.Context, id string) (*domain.Article, error) {
@@ -465,7 +469,10 @@ func (m *mockCrawlArticleRepo) UpdateAIResult(ctx context.Context, id string, ai
 }
 
 func (m *mockCrawlArticleRepo) UpdateStatus(ctx context.Context, id string, status domain.ArticleStatus) error {
-	m.updateStatusCalls = append(m.updateStatusCalls, struct{ ID string; Status domain.ArticleStatus }{id, status})
+	m.updateStatusCalls = append(m.updateStatusCalls, struct {
+		ID     string
+		Status domain.ArticleStatus
+	}{id, status})
 	return nil
 }
 
@@ -481,8 +488,11 @@ type mockCrawlTaskRepo struct {
 	setCrawlStartedCalls  []string
 	setCrawlFinishedCalls []string
 	setAIFinishedCalls    []string
-	setFailedCalls        []struct{ ID, ErrMsg string }
-	setCrawlStartedFn     func(ctx context.Context, id string) error
+	setFailedCalls        []struct {
+		ID      string
+		Failure domain.TaskFailure
+	}
+	setCrawlStartedFn func(ctx context.Context, id string) error
 }
 
 func (m *mockCrawlTaskRepo) SetCrawlStarted(ctx context.Context, id string) error {
@@ -503,8 +513,11 @@ func (m *mockCrawlTaskRepo) SetAIFinished(ctx context.Context, id string) error 
 	return nil
 }
 
-func (m *mockCrawlTaskRepo) SetFailed(ctx context.Context, id string, errMsg string) error {
-	m.setFailedCalls = append(m.setFailedCalls, struct{ ID, ErrMsg string }{id, errMsg})
+func (m *mockCrawlTaskRepo) SetFailed(ctx context.Context, id string, failure domain.TaskFailure) error {
+	m.setFailedCalls = append(m.setFailedCalls, struct {
+		ID      string
+		Failure domain.TaskFailure
+	}{id, failure})
 	return nil
 }
 
@@ -756,7 +769,15 @@ func TestProcessTask_ScrapeFail_NoClientContent_Fails(t *testing.T) {
 	// Scrape fails and article has no client-provided content
 	mockReader := &mockScraper{
 		scrapeFn: func(ctx context.Context, url string) (*client.ScrapeResponse, error) {
-			return nil, errors.New("scrape failed: 404")
+			return nil, pipeline.Wrap(
+				pipeline.StageCrawlReader,
+				pipeline.ProviderReader,
+				pipeline.CodeBlockedTarget,
+				false,
+				400,
+				"reader blocked target URL",
+				errors.New("scrape failed: 404"),
+			)
 		},
 	}
 	mockArtRepo := &mockCrawlArticleRepo{
@@ -787,6 +808,18 @@ func TestProcessTask_ScrapeFail_NoClientContent_Fails(t *testing.T) {
 	if mockTaskRepo.setFailedCalls[0].ID != "task-1" {
 		t.Errorf("SetFailed task ID = %q, want %q", mockTaskRepo.setFailedCalls[0].ID, "task-1")
 	}
+	if mockTaskRepo.setFailedCalls[0].Failure.Code == nil || *mockTaskRepo.setFailedCalls[0].Failure.Code != "blocked_target" {
+		t.Fatalf("Failure.Code = %v, want blocked_target", mockTaskRepo.setFailedCalls[0].Failure.Code)
+	}
+	if mockTaskRepo.setFailedCalls[0].Failure.Provider == nil || *mockTaskRepo.setFailedCalls[0].Failure.Provider != "reader" {
+		t.Fatalf("Failure.Provider = %v, want reader", mockTaskRepo.setFailedCalls[0].Failure.Provider)
+	}
+	if mockTaskRepo.setFailedCalls[0].Failure.Retryable == nil || *mockTaskRepo.setFailedCalls[0].Failure.Retryable {
+		t.Fatalf("Failure.Retryable = %v, want false", mockTaskRepo.setFailedCalls[0].Failure.Retryable)
+	}
+	if mockTaskRepo.setFailedCalls[0].Failure.DurationMs == nil {
+		t.Fatal("Failure.DurationMs should be recorded")
+	}
 
 	// Verify article was marked with error
 	if len(mockArtRepo.setErrorCalls) != 1 {
@@ -811,7 +844,15 @@ func TestProcessTask_ScrapeFail_GetByIDError_Fails(t *testing.T) {
 	// Scrape fails and GetByID also returns an error
 	mockReader := &mockScraper{
 		scrapeFn: func(ctx context.Context, url string) (*client.ScrapeResponse, error) {
-			return nil, errors.New("connection refused")
+			return nil, pipeline.Wrap(
+				pipeline.StageCrawlReader,
+				pipeline.ProviderReader,
+				pipeline.CodeNetwork,
+				true,
+				502,
+				"reader request failed",
+				errors.New("connection refused"),
+			)
 		},
 	}
 	mockArtRepo := &mockCrawlArticleRepo{
@@ -835,6 +876,12 @@ func TestProcessTask_ScrapeFail_GetByIDError_Fails(t *testing.T) {
 	if len(mockTaskRepo.setFailedCalls) != 1 {
 		t.Fatalf("SetFailed calls = %d, want 1", len(mockTaskRepo.setFailedCalls))
 	}
+	if mockTaskRepo.setFailedCalls[0].Failure.Code == nil || *mockTaskRepo.setFailedCalls[0].Failure.Code != "network" {
+		t.Fatalf("Failure.Code = %v, want network", mockTaskRepo.setFailedCalls[0].Failure.Code)
+	}
+	if mockTaskRepo.setFailedCalls[0].Failure.Retryable == nil || !*mockTaskRepo.setFailedCalls[0].Failure.Retryable {
+		t.Fatalf("Failure.Retryable = %v, want true", mockTaskRepo.setFailedCalls[0].Failure.Retryable)
+	}
 
 	// Verify article was marked with error
 	if len(mockArtRepo.setErrorCalls) != 1 {
@@ -853,7 +900,15 @@ func TestProcessTask_ScrapeFail_ArticleNotFound_Fails(t *testing.T) {
 	// condition (article != nil && article.MarkdownContent != nil && ...) is false.
 	mockReader := &mockScraper{
 		scrapeFn: func(ctx context.Context, url string) (*client.ScrapeResponse, error) {
-			return nil, errors.New("scrape connection refused")
+			return nil, pipeline.Wrap(
+				pipeline.StageCrawlReader,
+				pipeline.ProviderReader,
+				pipeline.CodeNetwork,
+				true,
+				502,
+				"reader request failed",
+				errors.New("scrape connection refused"),
+			)
 		},
 	}
 	mockArtRepo := &mockCrawlArticleRepo{

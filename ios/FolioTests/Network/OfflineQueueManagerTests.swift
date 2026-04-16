@@ -1,5 +1,6 @@
 import XCTest
 import SwiftData
+import BackgroundTasks
 @testable import Folio
 
 final class OfflineQueueManagerTests: XCTestCase {
@@ -68,5 +69,25 @@ final class OfflineQueueManagerTests: XCTestCase {
     @MainActor
     func testBackgroundTaskRegistration() {
         XCTAssertEqual(OfflineQueueManager.backgroundTaskIdentifier, "com.folio.article-processing")
+    }
+
+    @MainActor
+    func testScheduleBackgroundProcessing_submitsNetworkTaskRequest() {
+        var capturedRequest: BGProcessingTaskRequest?
+        let originalSubmitter = OfflineQueueManager.backgroundTaskSubmitter
+        OfflineQueueManager.backgroundTaskSubmitter = { request in
+            capturedRequest = request
+        }
+        defer {
+            OfflineQueueManager.backgroundTaskSubmitter = originalSubmitter
+        }
+
+        OfflineQueueManager.scheduleBackgroundProcessing()
+
+        let request = try? XCTUnwrap(capturedRequest)
+        XCTAssertNotNil(request)
+        XCTAssertEqual(request?.identifier, OfflineQueueManager.backgroundTaskIdentifier)
+        XCTAssertTrue(request?.requiresNetworkConnectivity == true)
+        XCTAssertFalse(request?.requiresExternalPower == true)
     }
 }

@@ -518,8 +518,10 @@ struct HomeView: View {
             saveService = ContentSaveService(context: modelContext, syncService: syncService)
         }
         if searchViewModel == nil {
-            guard let manager = try? FTS5SearchManager(inMemory: false) else { return }
-            let svm = SearchViewModel(searchManager: manager, context: modelContext)
+            let svm = SearchViewModel(
+                searchManager: SearchIndexCoordinator.shared.searchManager,
+                context: modelContext
+            )
             searchViewModel = svm
             svm.loadPopularTags()
             svm.refreshSyncedCount(context: modelContext)
@@ -533,6 +535,7 @@ struct HomeView: View {
             if flag {
                 UserDefaults.appGroup.set(false, forKey: AppConstants.shareExtensionDidSaveKey)
                 viewModel?.fetchArticles()
+                SearchIndexCoordinator.shared.rebuild(context: modelContext)
                 searchViewModel?.refreshSyncedCount(context: modelContext)
                 FolioLogger.data.info("home-debug: fetchArticles called, vm.articles.count=\(viewModel?.articles.count ?? -1)")
             }

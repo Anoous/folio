@@ -52,12 +52,16 @@ func (r *TaskRepo) GetByID(ctx context.Context, id string) (*domain.CrawlTask, e
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, article_id, user_id, url, source_type, status,
 		       crawl_started_at, crawl_finished_at, ai_started_at, ai_finished_at,
-		       error_message, retry_count, created_at, updated_at
+		       error_message, error_stage, error_code, error_provider,
+		       error_retryable, last_duration_ms, last_attempt_at,
+		       retry_count, created_at, updated_at
 		FROM crawl_tasks WHERE id = $1`, id,
 	).Scan(
 		&t.ID, &t.ArticleID, &t.UserID, &t.URL, &t.SourceType, &t.Status,
 		&t.CrawlStartedAt, &t.CrawlFinishedAt, &t.AIStartedAt, &t.AIFinishedAt,
-		&t.ErrorMessage, &t.RetryCount, &t.CreatedAt, &t.UpdatedAt,
+		&t.ErrorMessage, &t.ErrorStage, &t.ErrorCode, &t.ErrorProvider,
+		&t.ErrorRetryable, &t.LastDurationMs, &t.LastAttemptAt,
+		&t.RetryCount, &t.CreatedAt, &t.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -104,12 +108,51 @@ func (r *TaskRepo) SetAIFinished(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *TaskRepo) SetFailed(ctx context.Context, id string, errMsg string) error {
+func (r *TaskRepo) SetFailed(ctx context.Context, id string, failure domain.TaskFailure) error {
 	_, err := r.pool.Exec(ctx,
-		`UPDATE crawl_tasks SET status = $3, error_message = $1, retry_count = retry_count + 1 WHERE id = $2`,
-		errMsg, id, taskStatusFailed)
+		`UPDATE crawl_tasks
+		 SET status = $8,
+		     error_message = $1,
+		     error_stage = $2,
+		     error_code = $3,
+		     error_provider = $4,
+		     error_retryable = $5,
+		     last_duration_ms = $6,
+		     last_attempt_at = NOW(),
+		     retry_count = retry_count + 1
+		 WHERE id = $7`,
+		failure.Message,
+		nullableString(failure.Stage),
+		nullableString(failure.Code),
+		nullableString(failure.Provider),
+		nullableBool(failure.Retryable),
+		nullableInt64(failure.DurationMs),
+		id,
+		taskStatusFailed,
+	)
 	if err != nil {
 		return fmt.Errorf("set task failed: %w", err)
 	}
 	return nil
+}
+
+func nullableString(value *string) any {
+	if value == nil || *value == "" {
+		return nil
+	}
+	return *value
+}
+
+func nullableBool(value *bool) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func nullableInt64(value *int64) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }

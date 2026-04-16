@@ -43,6 +43,7 @@ func main() {
 
 	// Repositories
 	userRepo := repository.NewUserRepo(pool)
+	refreshSessionRepo := repository.NewRefreshSessionRepo(pool)
 	articleRepo := repository.NewArticleRepo(pool)
 	tagRepo := repository.NewTagRepo(pool)
 	categoryRepo := repository.NewCategoryRepo(pool)
@@ -94,7 +95,7 @@ func main() {
 	// Services
 	quotaService := service.NewQuotaService(userRepo)
 	resendClient := client.NewResendClient(cfg.ResendAPIKey, "EchoLore <noreply@echolore.ai>")
-	authService := service.NewAuthService(userRepo, cfg.JWTSecret, cfg.AppleBundleID, resendClient, rdb)
+	authService := service.NewAuthService(userRepo, refreshSessionRepo, cfg.JWTSecret, cfg.AppleBundleID, resendClient, rdb)
 	tagService := service.NewTagService(tagRepo)
 	articleService := service.NewArticleService(
 		articleRepo, taskRepo, tagRepo, categoryRepo,

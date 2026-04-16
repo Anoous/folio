@@ -47,10 +47,33 @@ class FolioAPIClient:
     def refresh_token(self, refresh_token: str) -> httpx.Response:
         return self.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token}, authenticated=False)
 
-    def submit_url(self, url: str, tag_ids: list[str] | None = None) -> httpx.Response:
+    def logout(self, refresh_token: str) -> httpx.Response:
+        return self.post("/api/v1/auth/logout", json={"refresh_token": refresh_token}, authenticated=False)
+
+    def submit_url(
+        self,
+        url: str,
+        tag_ids: list[str] | None = None,
+        *,
+        title: str | None = None,
+        author: str | None = None,
+        site_name: str | None = None,
+        markdown_content: str | None = None,
+        word_count: int | None = None,
+    ) -> httpx.Response:
         body: dict = {"url": url}
         if tag_ids:
             body["tag_ids"] = tag_ids
+        if title is not None:
+            body["title"] = title
+        if author is not None:
+            body["author"] = author
+        if site_name is not None:
+            body["site_name"] = site_name
+        if markdown_content is not None:
+            body["markdown_content"] = markdown_content
+        if word_count is not None:
+            body["word_count"] = word_count
         return self.post("/api/v1/articles", json=body)
 
     def submit_manual(self, content: str, title: str | None = None, tag_ids: list[str] | None = None) -> httpx.Response:

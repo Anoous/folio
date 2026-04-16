@@ -3,8 +3,6 @@ package handler
 import (
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-
 	"folio-server/internal/api/middleware"
 	"folio-server/internal/repository"
 )
@@ -20,9 +18,8 @@ func NewRelationHandler(relationRepo *repository.RelationRepo) *RelationHandler 
 func (h *RelationHandler) HandleGetRelated(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 
-	articleID := chi.URLParam(r, "id")
-	if articleID == "" {
-		writeError(w, http.StatusBadRequest, "article id required")
+	articleID, ok := requireUUIDParam(w, r, "id", "article id")
+	if !ok {
 		return
 	}
 

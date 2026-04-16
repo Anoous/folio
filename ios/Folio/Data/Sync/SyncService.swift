@@ -7,6 +7,7 @@ import SwiftData
 final class SyncService {
     private let apiClient: APIClient
     private let context: ModelContext
+    private let searchIndexCoordinator: SearchIndexCoordinator
     private var isSyncing = false
     private var pollingTasks: [UUID: Task<Void, Never>] = [:]
 
@@ -25,9 +26,14 @@ final class SyncService {
         set { UserDefaults.appGroup.set(newValue, forKey: Self.lastSyncedAtKey) }
     }
 
-    init(apiClient: APIClient = .shared, context: ModelContext) {
+    init(
+        apiClient: APIClient = .shared,
+        context: ModelContext,
+        searchIndexCoordinator: SearchIndexCoordinator? = nil
+    ) {
         self.apiClient = apiClient
         self.context = context
+        self.searchIndexCoordinator = searchIndexCoordinator ?? .shared
     }
 
     // MARK: - Article Submit
@@ -220,6 +226,7 @@ final class SyncService {
             try merger.resolveRelationships(for: article, from: dto)
 
             try context.save()
+            searchIndexCoordinator.update(article)
         } catch {
             FolioLogger.sync.error("fetch article detail failed: \(serverID) — \(error)")
         }
@@ -300,6 +307,7 @@ final class SyncService {
         await submitLocalPendingArticles()  // THEN submit remaining pending articles
         await syncUserQuota()
         cleanupOldDeletionRecords()
+        searchIndexCoordinator.rebuild(context: context)
         FolioLogger.sync.info("full sync completed")
     }
 
@@ -319,6 +327,7 @@ final class SyncService {
         await incrementalSyncArticles()     // Pull server state (including deletions)
         await submitLocalPendingArticles()  // THEN submit remaining pending articles
         await fetchProcessingArticles()
+        searchIndexCoordinator.rebuild(context: context)
     }
 
     // MARK: - Quota Sync

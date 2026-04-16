@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from helpers.api_client import FolioAPIClient
@@ -54,7 +56,7 @@ def auth_data(api) -> dict:
 def fresh_api(base_url) -> FolioAPIClient:
     """Function-scoped authenticated API client (fresh per test)."""
     client = FolioAPIClient(base_url)
-    test_login(client)
+    test_login(client, alias=f"fresh-{uuid.uuid4().hex}")
     yield client
     client.close()
 

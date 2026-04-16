@@ -13,6 +13,7 @@ import (
 
 	"folio-server/internal/client"
 	"folio-server/internal/domain"
+	"folio-server/internal/pipeline"
 	"folio-server/internal/repository"
 )
 
@@ -73,7 +74,6 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 
 	start := time.Now()
-	slog.Info("crawl task started", "article_id", p.ArticleID, "task_id", p.TaskID, "url", p.URL)
 
 	// Load article once for pre-crawl checks
 	preCheckArticle, preCheckErr := h.articleRepo.GetByID(ctx, p.ArticleID)
@@ -213,24 +213,33 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 
 	// --- Normal path: call Reader, fallback to Jina ---
 	slog.Debug("no client content, calling reader", "article_id", p.ArticleID)
+	currentStage := pipeline.StageCrawlReader
+	currentProvider := pipeline.ProviderReader
+	logPipelineStarted(currentStage, currentProvider, p.TaskID, p.ArticleID, p.UserID, p.URL)
 	result, err := h.readerClient.Scrape(ctx, p.URL)
 	if err != nil {
-		slog.Warn("reader failed, trying jina fallback",
-			"article_id", p.ArticleID,
-			"url", p.URL,
-			"error", err,
-		)
+		readerErr := ensurePipelineErr(currentStage, currentProvider, true, "reader scrape failed", err)
+		logPipelineFallbackStarted(currentStage, currentProvider, p.TaskID, p.ArticleID, p.UserID, p.URL, pipeline.ProviderJina, readerErr)
+
+		currentStage = pipeline.StageCrawlJina
+		currentProvider = pipeline.ProviderJina
 		result, err = h.jinaClient.Scrape(ctx, p.URL)
 		if err != nil {
-			slog.Error("crawl task failed (reader + jina both failed)",
-				"article_id", p.ArticleID,
-				"error", err,
-			)
-			h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
-			h.articleRepo.SetError(ctx, p.ArticleID, err.Error())
+			rawFallbackErr := err
+			failureErr := ensurePipelineErr(currentStage, currentProvider, true, "jina scrape failed", err)
+			if _, ok := clientErr(readerErr); ok {
+				if _, fallbackOK := clientErr(rawFallbackErr); !fallbackOK {
+					failureErr = readerErr
+					currentStage = pipeline.StageCrawlReader
+					currentProvider = pipeline.ProviderReader
+				}
+			}
+			logPipelineFailed(currentStage, currentProvider, p.TaskID, p.ArticleID, p.UserID, p.URL, time.Since(start), failureErr)
+			h.taskRepo.SetFailed(ctx, p.TaskID, buildTaskFailure(failureErr, time.Since(start)))
+			h.articleRepo.SetError(ctx, p.ArticleID, failureErr.Error())
 			return nil
 		}
-		slog.Info("jina fallback succeeded", "article_id", p.ArticleID, "url", p.URL, "duration_ms", time.Since(start).Milliseconds())
+		logPipelineFallbackSucceeded(currentStage, currentProvider, p.TaskID, p.ArticleID, p.UserID, p.URL, pipeline.ProviderReader, time.Since(start))
 	}
 
 	// Post-process Weibo content
@@ -254,11 +263,9 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		Language:   result.Metadata.Language,
 		FaviconURL: result.Metadata.Favicon,
 	}); err != nil {
-		slog.Error("crawl task failed to persist result",
-			"article_id", p.ArticleID,
-			"error", err,
-		)
-		h.taskRepo.SetFailed(ctx, p.TaskID, err.Error())
+		failureErr := ensurePipelineErr(currentStage, currentProvider, true, "persist crawl result", err)
+		logPipelineFailed(currentStage, currentProvider, p.TaskID, p.ArticleID, p.UserID, p.URL, time.Since(start), failureErr)
+		h.taskRepo.SetFailed(ctx, p.TaskID, buildTaskFailure(failureErr, time.Since(start)))
 		return fmt.Errorf("update crawl result: %w", err)
 	}
 
@@ -280,13 +287,7 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("set crawl finished: %w", err)
 	}
 
-	slog.Info("crawl task completed",
-		"article_id", p.ArticleID,
-		"source", source,
-		"title", title,
-		"content_len", len(markdown),
-		"duration_ms", time.Since(start).Milliseconds(),
-	)
+	logPipelineSucceeded(currentStage, currentProvider, p.TaskID, p.ArticleID, p.UserID, p.URL, time.Since(start))
 
 	// Enqueue image upload task (extract image URLs from markdown)
 	imageURLs := extractImageURLs(result.Markdown)

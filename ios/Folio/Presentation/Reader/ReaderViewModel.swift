@@ -12,6 +12,7 @@ final class ReaderViewModel {
     private let context: ModelContext
     private let apiClient: APIClient
     private let isAuthenticated: Bool
+    private let searchIndexCoordinator: SearchIndexCoordinator
 
     var wordCount: Int = 0
     var estimatedReadTimeMinutes: Int = 0
@@ -33,11 +34,18 @@ final class ReaderViewModel {
 
     // MARK: - Initialization
 
-    init(article: Article, context: ModelContext, isAuthenticated: Bool = false, apiClient: APIClient = .shared) {
+    init(
+        article: Article,
+        context: ModelContext,
+        isAuthenticated: Bool = false,
+        apiClient: APIClient = .shared,
+        searchIndexCoordinator: SearchIndexCoordinator? = nil
+    ) {
         self.article = article
         self.context = context
         self.isAuthenticated = isAuthenticated
         self.apiClient = apiClient
+        self.searchIndexCoordinator = searchIndexCoordinator ?? .shared
         self.readingProgress = article.readProgress
         self.lastPersistedProgress = article.readProgress
         calculateWordCount()
@@ -72,6 +80,7 @@ final class ReaderViewModel {
                 let dto = try await apiClient.getArticle(id: serverID)
                 article.updateFromDTO(dto)
                 ModelContext.safeSave(context)
+                searchIndexCoordinator.update(article)
                 calculateWordCount()
                 FolioLogger.network.info("reader: content fetched from server for \(serverID)")
                 isLoadingContent = false
@@ -95,6 +104,7 @@ final class ReaderViewModel {
                 article.clientExtractedAt = Date()
                 article.status = .clientReady
                 ModelContext.safeSave(context)
+                searchIndexCoordinator.update(article)
                 calculateWordCount()
                 FolioLogger.data.info("reader: client extraction succeeded for \(url.absoluteString)")
                 isLoadingContent = false
@@ -166,7 +176,7 @@ final class ReaderViewModel {
     // MARK: - Delete
 
     func deleteArticle() {
-        article.prepareForDeletion(context: context)
+        article.prepareForDeletion(context: context, searchIndexCoordinator: searchIndexCoordinator)
     }
 
     // MARK: - Copy Markdown

@@ -53,6 +53,7 @@ enum TimeGroup: String, CaseIterable {
 final class HomeViewModel {
     private let context: ModelContext
     private let apiClient: APIClient
+    private let searchIndexCoordinator: SearchIndexCoordinator
 
     var articles: [Article] = []
     var echoCards: [EchoCardDTO] = []
@@ -108,10 +109,16 @@ final class HomeViewModel {
     private let pageSize = 20
     private var hasMorePages = true
 
-    init(context: ModelContext, isAuthenticated: Bool = false, apiClient: APIClient = .shared) {
+    init(
+        context: ModelContext,
+        isAuthenticated: Bool = false,
+        apiClient: APIClient = .shared,
+        searchIndexCoordinator: SearchIndexCoordinator? = nil
+    ) {
         self.context = context
         self.isAuthenticated = isAuthenticated
         self.apiClient = apiClient
+        self.searchIndexCoordinator = searchIndexCoordinator ?? .shared
     }
 
     func fetchArticles() {
@@ -145,6 +152,7 @@ final class HomeViewModel {
             let response = try await apiClient.listArticles(page: 1, perPage: 50)
             let needsDetail = mergeServerArticles(response.data)
             await fetchMissingContent(needsDetail)
+            searchIndexCoordinator.rebuild(context: context)
         } catch {
             FolioLogger.sync.error("refreshFromServer failed: \(error)")
             syncError = (error as? UserFacingError)?.userMessage ?? error.localizedDescription
@@ -244,7 +252,7 @@ final class HomeViewModel {
     }
 
     func deleteArticle(_ article: Article) {
-        article.prepareForDeletion(context: context)
+        article.prepareForDeletion(context: context, searchIndexCoordinator: searchIndexCoordinator)
         fetchArticles()
         showToastMessage(String(localized: "home.article.deleted", defaultValue: "Article deleted"), icon: "trash")
     }
@@ -265,7 +273,8 @@ final class HomeViewModel {
             Task {
                 do {
                     let response: SubmitArticleResponse
-                    if article.sourceType == .manual {
+                    let textOnlyTypes: [SourceType] = [.manual, .screenshot, .voice]
+                    if textOnlyTypes.contains(article.sourceType) {
                         guard let content = article.markdownContent, !content.isEmpty else {
                             article.status = .failed
                             article.fetchError = "No content to submit"
@@ -276,7 +285,8 @@ final class HomeViewModel {
                         response = try await apiClient.submitManualContent(
                             content: content,
                             title: article.title,
-                            clientId: article.id.uuidString
+                            clientId: article.id.uuidString,
+                            sourceType: article.sourceType.rawValue
                         )
                     } else if article.extractionSource == .client {
                         response = try await apiClient.submitArticle(

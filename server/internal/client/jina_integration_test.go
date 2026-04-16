@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package client
 
 import (
@@ -7,7 +10,7 @@ import (
 	"time"
 )
 
-// Run: go test ./internal/client/ -run TestJinaScrapeXPost$ -v -timeout 60s
+// Run: go test -tags=integration ./internal/client/ -run TestJinaScrapeXPost$ -v -timeout 60s
 func TestJinaScrapeXPost(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -40,7 +43,7 @@ func TestJinaScrapeXPost(t *testing.T) {
 	}
 }
 
-// Run: go test ./internal/client/ -run TestJinaScrapeWechat -v -timeout 60s
+// Run: go test -tags=integration ./internal/client/ -run TestJinaScrapeWechat -v -timeout 60s
 func TestJinaScrapeWechat(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -62,7 +65,7 @@ func TestJinaScrapeWechat(t *testing.T) {
 	t.Logf("Content preview:\n%.800s", resp.Markdown)
 }
 
-// Run: go test ./internal/client/ -run TestJinaScrapeZhihu -v -timeout 60s
+// Run: go test -tags=integration ./internal/client/ -run TestJinaScrapeZhihu -v -timeout 60s
 func TestJinaScrapeZhihu(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -84,7 +87,7 @@ func TestJinaScrapeZhihu(t *testing.T) {
 	t.Logf("Content preview:\n%.800s", resp.Markdown)
 }
 
-// Run: go test ./internal/client/ -run TestJinaScrapeXiaohongshu -v -timeout 60s
+// Run: go test -tags=integration ./internal/client/ -run TestJinaScrapeXiaohongshu -v -timeout 60s
 func TestJinaScrapeXiaohongshu(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -106,7 +109,7 @@ func TestJinaScrapeXiaohongshu(t *testing.T) {
 	t.Logf("Content preview:\n%.800s", resp.Markdown)
 }
 
-// Run: go test ./internal/client/ -run TestJinaScrapeBlog -v -timeout 60s
+// Run: go test -tags=integration ./internal/client/ -run TestJinaScrapeBlog -v -timeout 60s
 func TestJinaScrapeBlog(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")

@@ -13,10 +13,28 @@ final class ContentSaveService {
 
     private let context: ModelContext
     private let syncService: SyncService?
+    private let searchIndexCoordinator: SearchIndexCoordinator
+    private let imageStorageURLProvider: () -> URL?
+    private let imageOCRExtractor: (UIImage) async throws -> String?
 
-    init(context: ModelContext, syncService: SyncService?) {
+    init(
+        context: ModelContext,
+        syncService: SyncService?,
+        searchIndexCoordinator: SearchIndexCoordinator? = nil,
+        imageStorageURLProvider: @escaping () -> URL? = {
+            FileManager.default.containerURL(
+                forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier
+            )
+        },
+        imageOCRExtractor: @escaping (UIImage) async throws -> String? = { image in
+            try await ImageOCRExtractor().extract(from: image)
+        }
+    ) {
         self.context = context
         self.syncService = syncService
+        self.searchIndexCoordinator = searchIndexCoordinator ?? .shared
+        self.imageStorageURLProvider = imageStorageURLProvider
+        self.imageOCRExtractor = imageOCRExtractor
     }
 
     // MARK: - Public API
@@ -24,7 +42,15 @@ final class ContentSaveService {
     func saveURL(_ urlString: String) -> SaveResult {
         guard checkQuota() else { return .quotaExceeded }
 
-        let manager = SharedDataManager(context: context)
+        let manager = SharedDataManager(
+            context: context,
+            onArticleIndexed: { [searchIndexCoordinator] article in
+                searchIndexCoordinator.index(article)
+            },
+            onArticleUpdated: { [searchIndexCoordinator] article in
+                searchIndexCoordinator.update(article)
+            }
+        )
         do {
             _ = try manager.saveArticleFromText(urlString)
             SharedDataManager.incrementQuota()
@@ -45,7 +71,15 @@ final class ContentSaveService {
     func saveManualContent(_ content: String) -> SaveResult {
         guard checkQuota() else { return .quotaExceeded }
 
-        let manager = SharedDataManager(context: context)
+        let manager = SharedDataManager(
+            context: context,
+            onArticleIndexed: { [searchIndexCoordinator] article in
+                searchIndexCoordinator.index(article)
+            },
+            onArticleUpdated: { [searchIndexCoordinator] article in
+                searchIndexCoordinator.update(article)
+            }
+        )
         do {
             _ = try manager.saveManualContent(content: content)
             SharedDataManager.incrementQuota()
@@ -73,7 +107,7 @@ final class ContentSaveService {
         }
 
         // Save image to App Group container Images/ directory
-        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) else {
+        guard let containerURL = imageStorageURLProvider() else {
             return .error(
                 message: String(localized: "home.screenshotError", defaultValue: "Failed to process image")
             )
@@ -105,6 +139,7 @@ final class ContentSaveService {
                 message: String(localized: "home.screenshotError", defaultValue: "Failed to process image")
             )
         }
+        searchIndexCoordinator.index(article)
         SharedDataManager.incrementQuota()
 
         // Run OCR in background — sync AFTER OCR completes to avoid uploading empty content
@@ -112,10 +147,11 @@ final class ContentSaveService {
         let articleID = article.id
         let ctx = context
         let sync = syncService
+        let searchIndexCoordinator = self.searchIndexCoordinator
+        let imageOCRExtractor = self.imageOCRExtractor
         Task {
-            let extractor = ImageOCRExtractor()
             do {
-                let text = try await extractor.extract(from: ocrImage)
+                let text = try await imageOCRExtractor(ocrImage)
                 await MainActor.run {
                     if let text, !text.isEmpty {
                         let descriptor = FetchDescriptor<Article>(predicate: #Predicate { $0.id == articleID })
@@ -125,6 +161,7 @@ final class ContentSaveService {
                         article.wordCount = Article.countWords(text)
                         article.updatedAt = .now
                         try? ctx.save()
+                        searchIndexCoordinator.update(article)
                     }
                     onOCRComplete()
                 }
@@ -160,6 +197,7 @@ final class ContentSaveService {
         context.insert(article)
         do {
             try context.save()
+            searchIndexCoordinator.index(article)
             SharedDataManager.incrementQuota()
             triggerSync()
             return .success(

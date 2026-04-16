@@ -34,6 +34,18 @@ class TestRefreshToken:
         assert resp.status_code == 403
         client.close()
 
+    def test_logout_revokes_refresh_session(self, base_url):
+        """Logout revokes the refresh session so it can no longer refresh."""
+        client = FolioAPIClient(base_url)
+        data = test_login(client, alias="logout")
+
+        logout_resp = client.logout(data["refresh_token"])
+        assert logout_resp.status_code == 204
+
+        refresh_resp = client.refresh_token(data["refresh_token"])
+        assert refresh_resp.status_code == 403
+        client.close()
+
 
 class TestUnauthorized:
 

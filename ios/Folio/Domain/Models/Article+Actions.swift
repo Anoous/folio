@@ -33,8 +33,14 @@ extension Article {
 
     /// Prepare this article for deletion: clean up local image, record sync intent,
     /// and delete from SwiftData. Callers handle post-actions (refetch, toast, dismiss).
-    func prepareForDeletion(context: ModelContext) {
+    @MainActor
+    func prepareForDeletion(
+        context: ModelContext,
+        searchIndexCoordinator: SearchIndexCoordinator? = nil
+    ) {
+        let searchIndexCoordinator = searchIndexCoordinator ?? .shared
         cleanupLocalImage()
+        searchIndexCoordinator.remove(articleID: id)
 
         if let serverID {
             context.insert(PendingDeletion(serverID: serverID))

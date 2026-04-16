@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
+
+	"folio-server/internal/pipeline"
 )
 
 type JinaClient struct {
@@ -47,8 +48,6 @@ const removeSelectors = "nav, footer, header, .cookie-banner, .ad, .ads, .advert
 	".sidebar, .social-share, .related-posts, .comments, #comments, .newsletter-signup"
 
 func (c *JinaClient) Scrape(ctx context.Context, url string) (*ScrapeResponse, error) {
-	start := time.Now()
-
 	req, err := http.NewRequestWithContext(ctx, "GET", "https://r.jina.ai/"+url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create jina request: %w", err)
@@ -67,7 +66,6 @@ func (c *JinaClient) Scrape(ctx context.Context, url string) (*ScrapeResponse, e
 		req.Header.Set("X-Engine", "cf-browser-rendering")
 		req.Header.Set("X-Wait-For-Selector", "article[data-testid='tweet']")
 		req.Header.Set("X-Timeout", "20")
-		slog.Debug("jina scrape started", "url", url, "engine", "cf-browser-rendering")
 	} else {
 		// General sites: full optimization headers
 		req.Header.Set("X-Return-Format", "markdown")
@@ -77,33 +75,69 @@ func (c *JinaClient) Scrape(ctx context.Context, url string) (*ScrapeResponse, e
 		if c.apiKey != "" {
 			req.Header.Set("X-With-Generated-Alt", "true")
 		}
-		slog.Debug("jina scrape started", "url", url, "engine", "default")
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		slog.Warn("jina scrape request failed", "url", url, "error", err, "duration_ms", time.Since(start).Milliseconds())
-		return nil, fmt.Errorf("jina request failed: %w", err)
+		if isTimeoutError(err) {
+			return nil, pipeline.Wrap(
+				pipeline.StageCrawlJina,
+				pipeline.ProviderJina,
+				pipeline.CodeTimeout,
+				true,
+				http.StatusGatewayTimeout,
+				"jina request timed out",
+				err,
+			)
+		}
+		return nil, pipeline.Wrap(
+			pipeline.StageCrawlJina,
+			pipeline.ProviderJina,
+			pipeline.CodeNetwork,
+			true,
+			http.StatusBadGateway,
+			"jina request failed",
+			err,
+		)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Warn("jina scrape non-200", "url", url, "status", resp.StatusCode, "duration_ms", time.Since(start).Milliseconds())
-		return nil, fmt.Errorf("jina error (status %d)", resp.StatusCode)
+		return nil, pipeline.Wrap(
+			pipeline.StageCrawlJina,
+			pipeline.ProviderJina,
+			classifyJinaStatus(resp.StatusCode),
+			jinaRetryable(resp.StatusCode),
+			resp.StatusCode,
+			fmt.Sprintf("jina returned status %d", resp.StatusCode),
+			nil,
+		)
 	}
 
 	var jr jinaResponse
 	if err := json.NewDecoder(resp.Body).Decode(&jr); err != nil {
-		return nil, fmt.Errorf("decode jina response: %w", err)
+		return nil, pipeline.Wrap(
+			pipeline.StageCrawlJina,
+			pipeline.ProviderJina,
+			pipeline.CodeInvalidResponse,
+			false,
+			http.StatusOK,
+			"decode jina response",
+			err,
+		)
 	}
 
 	if jr.Data.Content == "" {
-		slog.Warn("jina scrape returned empty content", "url", url, "duration_ms", time.Since(start).Milliseconds())
-		return nil, fmt.Errorf("jina returned empty content")
+		return nil, pipeline.Wrap(
+			pipeline.StageCrawlJina,
+			pipeline.ProviderJina,
+			pipeline.CodeEmptyContent,
+			false,
+			http.StatusOK,
+			"jina returned empty content",
+			nil,
+		)
 	}
-
-	contentLen := len(jr.Data.Content)
-	slog.Info("jina scrape succeeded", "url", url, "title", jr.Data.Title, "content_len", contentLen, "duration_ms", time.Since(start).Milliseconds())
 
 	return &ScrapeResponse{
 		Markdown: jr.Data.Content,
@@ -111,4 +145,23 @@ func (c *JinaClient) Scrape(ctx context.Context, url string) (*ScrapeResponse, e
 			Title: jr.Data.Title,
 		},
 	}, nil
+}
+
+func classifyJinaStatus(status int) pipeline.Code {
+	switch {
+	case status == http.StatusTooManyRequests:
+		return pipeline.CodeRateLimited
+	case status == http.StatusGatewayTimeout:
+		return pipeline.CodeTimeout
+	case status >= 500:
+		return pipeline.CodeUpstream5xx
+	case status >= 400:
+		return pipeline.CodeUpstream4xx
+	default:
+		return pipeline.CodeInternal
+	}
+}
+
+func jinaRetryable(status int) bool {
+	return status == http.StatusTooManyRequests || status >= 500
 }

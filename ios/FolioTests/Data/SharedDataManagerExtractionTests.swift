@@ -7,17 +7,28 @@ final class SharedDataManagerExtractionTests: XCTestCase {
     private var container: ModelContainer!
     private var context: ModelContext!
     private var manager: SharedDataManager!
+    private var searchIndexer: SearchIndexCoordinator!
 
     @MainActor
     override func setUp() {
         super.setUp()
         container = try! DataManager.createInMemoryContainer()
         context = container.mainContext
-        manager = SharedDataManager(context: context)
+        searchIndexer = SearchIndexCoordinator(searchManager: try! FTS5SearchManager(inMemory: true))
+        manager = SharedDataManager(
+            context: context,
+            onArticleIndexed: { [searchIndexer] article in
+                searchIndexer?.index(article)
+            },
+            onArticleUpdated: { [searchIndexer] article in
+                searchIndexer?.update(article)
+            }
+        )
     }
 
     override func tearDown() {
         manager = nil
+        searchIndexer = nil
         container = nil
         context = nil
         super.tearDown()
@@ -245,5 +256,29 @@ final class SharedDataManagerExtractionTests: XCTestCase {
         )
 
         XCTAssertTrue(article.updatedAt >= originalUpdatedAt)
+    }
+
+    @MainActor
+    func testUpdateWithExtraction_refreshesSearchIndex() throws {
+        let article = try manager.saveArticle(url: "https://example.com/search-refresh")
+
+        try manager.updateWithExtraction(
+            ExtractionResult(
+                title: "Swift Concurrency Deep Dive",
+                author: nil,
+                siteName: nil,
+                excerpt: nil,
+                markdownContent: "Actors and structured concurrency help isolate mutable state.",
+                wordCount: 9,
+                extractedAt: Date()
+            ),
+            for: article
+        )
+
+        let titleResults = try searchIndexer.searchManager.search(query: "Concurrency")
+        XCTAssertEqual(titleResults.count, 1)
+
+        let contentResults = try searchIndexer.searchManager.search(query: "structured")
+        XCTAssertEqual(contentResults.count, 1)
     }
 }

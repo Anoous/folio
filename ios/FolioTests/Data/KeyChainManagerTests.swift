@@ -31,11 +31,16 @@ final class KeyChainManagerTests: XCTestCase {
         XCTAssertNil(manager.refreshToken)
     }
 
+    func testHasStoredSession_falseWhenEmpty() {
+        XCTAssertFalse(manager.hasStoredSession)
+    }
+
     func testSaveTokens_overwritesPrevious() throws {
         try manager.saveTokens(access: "old_access", refresh: "old_refresh")
         try manager.saveTokens(access: "new_access", refresh: "new_refresh")
         XCTAssertEqual(manager.accessToken, "new_access")
         XCTAssertEqual(manager.refreshToken, "new_refresh")
+        XCTAssertTrue(manager.hasStoredSession)
     }
 
     func testClearTokens_removesBoth() throws {

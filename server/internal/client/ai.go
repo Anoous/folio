@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"folio-server/internal/pipeline"
 )
 
 // SanitizeField removes injection markers from a single field.
@@ -178,31 +180,12 @@ type streamChunk struct {
 
 // doRequest sends a chat request and returns the raw content string from the first choice.
 func (d *DeepSeekAnalyzer) doRequest(ctx context.Context, chatReq chatRequest) ([]byte, error) {
-	body, err := json.Marshal(chatReq)
-	if err != nil {
-		return nil, fmt.Errorf("marshal chat request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", d.baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+d.apiKey)
-
-	resp, err := d.httpClient.Do(httpReq)
+	respBody, statusCode, err := d.doChatRequest(ctx, chatReq)
 	if err != nil {
 		return nil, fmt.Errorf("deepseek request failed: %w", err)
 	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("deepseek api error: status %d, body: %s", resp.StatusCode, string(respBody))
+	if statusCode != http.StatusOK {
+		return nil, fmt.Errorf("deepseek api error: status %d, body: %s", statusCode, string(respBody))
 	}
 
 	var chatResp chatResponse
@@ -217,4 +200,50 @@ func (d *DeepSeekAnalyzer) doRequest(ctx context.Context, chatReq chatRequest) (
 	}
 
 	return []byte(chatResp.Choices[0].Message.Content), nil
+}
+
+func (d *DeepSeekAnalyzer) doChatRequest(ctx context.Context, chatReq chatRequest) ([]byte, int, error) {
+	body, err := json.Marshal(chatReq)
+	if err != nil {
+		return nil, 0, fmt.Errorf("marshal chat request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", d.baseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return nil, 0, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+d.apiKey)
+
+	resp, err := d.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, fmt.Errorf("read response body: %w", err)
+	}
+
+	return respBody, resp.StatusCode, nil
+}
+
+func classifyDeepSeekStatus(status int) pipeline.Code {
+	switch {
+	case status == http.StatusTooManyRequests:
+		return pipeline.CodeRateLimited
+	case status == http.StatusGatewayTimeout:
+		return pipeline.CodeTimeout
+	case status >= 500:
+		return pipeline.CodeUpstream5xx
+	case status >= 400:
+		return pipeline.CodeUpstream4xx
+	default:
+		return pipeline.CodeInternal
+	}
+}
+
+func deepSeekRetryable(status int) bool {
+	return status == http.StatusTooManyRequests || status >= 500
 }

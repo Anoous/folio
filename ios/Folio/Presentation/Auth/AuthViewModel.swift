@@ -31,7 +31,8 @@ final class AuthViewModel {
     // MARK: - Check Existing Auth
 
     func checkExistingAuth() async {
-        guard keychainManager.accessToken != nil else {
+        guard keychainManager.hasStoredSession else {
+            currentUser = nil
             authState = .signedOut
             return
         }
@@ -46,6 +47,7 @@ final class AuthViewModel {
             case .unauthorized, .forbidden:
                 FolioLogger.auth.info("existing auth rejected: \(error)")
                 try? keychainManager.clearTokens()
+                currentUser = nil
                 authState = .signedOut
             default:
                 FolioLogger.auth.debug("auth check network error, keeping signed in: \(error)")
@@ -141,10 +143,23 @@ final class AuthViewModel {
 
     // MARK: - Sign Out
 
-    func signOut() {
-        FolioLogger.auth.info("user signed out")
+    func signOut(revokeRemoteSession: Bool = true) async {
+        let refreshToken = keychainManager.refreshToken
+
+        if revokeRemoteSession, let refreshToken {
+            do {
+                try await apiClient.logout(refreshToken: refreshToken)
+                FolioLogger.auth.info("remote session revoked")
+            } catch let error as APIError {
+                FolioLogger.auth.error("remote sign-out failed: \(error)")
+            } catch {
+                FolioLogger.auth.error("remote sign-out failed: \(error)")
+            }
+        }
+
         try? keychainManager.clearTokens()
         currentUser = nil
         authState = .signedOut
+        FolioLogger.auth.info("user signed out")
     }
 }

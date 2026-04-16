@@ -19,21 +19,10 @@ struct FolioApp: App {
 
     init() {
         do {
-            let config: ModelConfiguration
-            if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) != nil {
-                config = ModelConfiguration(
-                    "Folio",
-                    schema: DataManager.schema,
-                    groupContainer: .identifier(AppConstants.appGroupIdentifier)
-                )
-            } else {
-                config = ModelConfiguration("Folio", schema: DataManager.schema)
-            }
-            let c = try ModelContainer(for: DataManager.schema, configurations: [config])
+            let c = try DataManager.createSharedContainer()
             let storeURL = c.configurations.first?.url.path ?? "unknown"
             FolioLogger.data.info("app-debug: storeURL=\(storeURL)")
             container = c
-            DataManager.shared.preloadCategories(in: container.mainContext)
             let ctx = container.mainContext
             _offlineQueueManager = State(initialValue: OfflineQueueManager(context: ctx))
             _syncService = State(initialValue: SyncService(context: ctx))
@@ -85,9 +74,21 @@ struct FolioApp: App {
             .environment(subscriptionManager)
             .task {
                 await authViewModel.checkExistingAuth()
-                await subscriptionManager.fetchProducts()
-                await subscriptionManager.checkEntitlements()
-                _ = subscriptionManager.listenForTransactions()
+                let startupCoordinator = AppStartupCoordinator(
+                    fetchProducts: {
+                        await subscriptionManager.fetchProducts()
+                    },
+                    checkEntitlements: {
+                        await subscriptionManager.checkEntitlements()
+                    },
+                    retryPendingVerifications: {
+                        await subscriptionManager.retryPendingVerifications()
+                    },
+                    listenForTransactions: {
+                        subscriptionManager.listenForTransactions()
+                    }
+                )
+                await startupCoordinator.run()
                 cleanupOrphanImages()
             }
             .onChange(of: authViewModel.authState) { _, newValue in

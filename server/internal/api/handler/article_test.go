@@ -456,8 +456,9 @@ func TestHandleUpdateArticle_ParsesFieldVersionTimestamps(t *testing.T) {
 		"read_progress_updated_at": "2026-04-10T12:05:00Z"
 	}`
 
-	req := newAuthenticatedRequest("PUT", "/api/v1/articles/art-1", body, "user-1")
-	req = withURLParam(req, "id", "art-1")
+	const articleID = "11111111-1111-4111-8111-111111111111"
+	req := newAuthenticatedRequest("PUT", "/api/v1/articles/"+articleID, body, "user-1")
+	req = withURLParam(req, "id", articleID)
 	w := httptest.NewRecorder()
 
 	h.HandleUpdateArticle(w, req)
@@ -468,8 +469,8 @@ func TestHandleUpdateArticle_ParsesFieldVersionTimestamps(t *testing.T) {
 	if mockSvc.lastUpdatedUserID != "user-1" {
 		t.Fatalf("userID = %q, want %q", mockSvc.lastUpdatedUserID, "user-1")
 	}
-	if mockSvc.lastUpdatedArticleID != "art-1" {
-		t.Fatalf("articleID = %q, want %q", mockSvc.lastUpdatedArticleID, "art-1")
+	if mockSvc.lastUpdatedArticleID != articleID {
+		t.Fatalf("articleID = %q, want %q", mockSvc.lastUpdatedArticleID, articleID)
 	}
 	if mockSvc.lastUpdateReq == nil {
 		t.Fatal("service.Update was not called")

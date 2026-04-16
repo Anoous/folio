@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,24 +19,42 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
-	"folio-server/internal/client"
 	"folio-server/internal/domain"
-	"folio-server/internal/repository"
 )
 
 type AuthService struct {
-	userRepo      *repository.UserRepo
+	userRepo      authUserStore
+	sessionRepo   refreshSessionStore
 	jwtSecret     []byte
 	appleBundleID string
-	resend        *client.ResendClient
+	resend        verificationCodeSender
 	rdb           *redis.Client
 }
 
-func NewAuthService(userRepo *repository.UserRepo, jwtSecret string, appleBundleID string, resend *client.ResendClient, rdb *redis.Client) *AuthService {
+type authUserStore interface {
+	GetByID(ctx context.Context, id string) (*domain.User, error)
+	UpsertByAppleID(ctx context.Context, appleID string, email *string, nickname *string) (*domain.User, error)
+	UpsertByEmail(ctx context.Context, email string) (*domain.User, error)
+}
+
+type refreshSessionStore interface {
+	Create(ctx context.Context, session *domain.RefreshSession) error
+	GetByID(ctx context.Context, sessionID string) (*domain.RefreshSession, error)
+	Rotate(ctx context.Context, sessionID, currentTokenHash, newTokenHash string, expiresAt, now time.Time) (*domain.RefreshSession, error)
+	Revoke(ctx context.Context, sessionID, tokenHash string, now time.Time) error
+}
+
+type verificationCodeSender interface {
+	SendVerificationCode(to, code string) error
+}
+
+func NewAuthService(userRepo authUserStore, sessionRepo refreshSessionStore, jwtSecret string, appleBundleID string, resend verificationCodeSender, rdb *redis.Client) *AuthService {
 	return &AuthService{
 		userRepo:      userRepo,
+		sessionRepo:   sessionRepo,
 		jwtSecret:     []byte(jwtSecret),
 		appleBundleID: appleBundleID,
 		resend:        resend,
@@ -45,6 +65,7 @@ func NewAuthService(userRepo *repository.UserRepo, jwtSecret string, appleBundle
 type TokenClaims struct {
 	jwt.RegisteredClaims
 	UserID    string `json:"uid"`
+	SessionID string `json:"sid,omitempty"`
 	TokenType string `json:"type"`
 }
 
@@ -79,6 +100,9 @@ const (
 	emailCodeTTL          = 5 * time.Minute
 	emailCodeCooldownTTL  = 60 * time.Second
 	emailCodeWatchRetries = 3
+	accessTokenTTL        = 2 * time.Hour
+	refreshSessionTTL     = 90 * 24 * time.Hour
+	refreshSecretBytes    = 32
 )
 
 // Apple JWKS cache
@@ -116,7 +140,7 @@ func (s *AuthService) LoginWithApple(ctx context.Context, req AppleAuthRequest) 
 	}
 
 	slog.Info("apple login succeeded", "user_id", user.ID)
-	return s.issueTokenPair(user)
+	return s.issueTokenPair(ctx, user)
 }
 
 func (s *AuthService) SendEmailCode(ctx context.Context, req SendCodeRequest) error {
@@ -210,7 +234,7 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, req VerifyCodeRequest
 	}
 
 	slog.Info("email login succeeded", "user_id", user.ID, "email", email)
-	return s.issueTokenPair(user)
+	return s.issueTokenPair(ctx, user)
 }
 
 func cryptoRandInt(max int) int {
@@ -220,33 +244,59 @@ func cryptoRandInt(max int) int {
 }
 
 func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*AuthResponse, error) {
-	claims := &TokenClaims{}
-	token, err := jwt.ParseWithClaims(refreshToken, claims, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return s.jwtSecret, nil
-	})
-	if err != nil || !token.Valid {
+	sessionID, presentedHash, err := parseRefreshToken(refreshToken)
+	if err != nil {
 		slog.Debug("token refresh: invalid token", "error", err)
 		return nil, ErrForbidden
 	}
-	if claims.TokenType != "refresh" {
-		slog.Debug("token refresh: wrong token type", "type", claims.TokenType)
+
+	now := time.Now()
+	newRefreshToken, newTokenHash, err := generateRefreshToken(sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("generate refresh token: %w", err)
+	}
+
+	session, err := s.sessionRepo.Rotate(ctx, sessionID, presentedHash, newTokenHash, now.Add(refreshSessionTTL), now)
+	if err != nil {
+		return nil, fmt.Errorf("rotate refresh session: %w", err)
+	}
+	if session == nil {
+		existing, lookupErr := s.sessionRepo.GetByID(ctx, sessionID)
+		if lookupErr != nil {
+			return nil, fmt.Errorf("lookup refresh session: %w", lookupErr)
+		}
+		if existing != nil && existing.RevokedAt == nil && existing.ExpiresAt.After(now) && existing.TokenHash != presentedHash {
+			if revokeErr := s.sessionRepo.Revoke(ctx, sessionID, "", now); revokeErr != nil {
+				slog.Error("token refresh: revoke reused session failed", "session_id", sessionID, "error", revokeErr)
+			}
+		}
+		slog.Debug("token refresh: session rejected", "session_id", sessionID)
 		return nil, ErrForbidden
 	}
 
-	user, err := s.userRepo.GetByID(ctx, claims.UserID)
+	user, err := s.userRepo.GetByID(ctx, session.UserID)
 	if err != nil {
 		return nil, err
 	}
 	if user == nil {
-		slog.Info("token refresh: user not found", "user_id", claims.UserID)
+		slog.Info("token refresh: user not found", "user_id", session.UserID)
 		return nil, ErrNotFound
 	}
 
-	slog.Debug("token refreshed", "user_id", user.ID)
-	return s.issueTokenPair(user)
+	slog.Debug("token refreshed", "user_id", user.ID, "session_id", sessionID)
+	return s.buildAuthResponse(user, sessionID, newRefreshToken, now)
+}
+
+func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
+	sessionID, tokenHash, err := parseRefreshToken(refreshToken)
+	if err != nil {
+		return ErrForbidden
+	}
+
+	if err := s.sessionRepo.Revoke(ctx, sessionID, tokenHash, time.Now()); err != nil {
+		return fmt.Errorf("revoke refresh session: %w", err)
+	}
+	return nil
 }
 
 func (s *AuthService) ValidateAccessToken(tokenString string) (string, error) {
@@ -266,43 +316,88 @@ func (s *AuthService) ValidateAccessToken(tokenString string) (string, error) {
 	return claims.UserID, nil
 }
 
-func (s *AuthService) issueTokenPair(user *domain.User) (*AuthResponse, error) {
+func (s *AuthService) issueTokenPair(ctx context.Context, user *domain.User) (*AuthResponse, error) {
 	now := time.Now()
-
-	accessClaims := TokenClaims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(2 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			Issuer:    "folio",
-		},
-		UserID:    user.ID,
-		TokenType: "access",
-	}
-	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims).SignedString(s.jwtSecret)
+	sessionID := uuid.NewString()
+	refreshTokenStr, tokenHash, err := generateRefreshToken(sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("sign access token: %w", err)
+		return nil, fmt.Errorf("generate refresh token: %w", err)
 	}
 
-	refreshClaims := TokenClaims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(90 * 24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			Issuer:    "folio",
-		},
+	if err := s.sessionRepo.Create(ctx, &domain.RefreshSession{
+		ID:        sessionID,
 		UserID:    user.ID,
-		TokenType: "refresh",
+		TokenHash: tokenHash,
+		ExpiresAt: now.Add(refreshSessionTTL),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		return nil, fmt.Errorf("create refresh session: %w", err)
 	}
-	refreshTokenStr, err := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims).SignedString(s.jwtSecret)
+
+	return s.buildAuthResponse(user, sessionID, refreshTokenStr, now)
+}
+
+func (s *AuthService) buildAuthResponse(user *domain.User, sessionID, refreshToken string, now time.Time) (*AuthResponse, error) {
+	accessToken, err := s.signAccessToken(user, sessionID, now)
 	if err != nil {
-		return nil, fmt.Errorf("sign refresh token: %w", err)
+		return nil, err
 	}
 
 	return &AuthResponse{
 		AccessToken:  accessToken,
-		RefreshToken: refreshTokenStr,
-		ExpiresIn:    7200,
+		RefreshToken: refreshToken,
+		ExpiresIn:    int(accessTokenTTL.Seconds()),
 		User:         user,
 	}, nil
+}
+
+func (s *AuthService) signAccessToken(user *domain.User, sessionID string, now time.Time) (string, error) {
+	accessClaims := TokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(accessTokenTTL)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Issuer:    "folio",
+		},
+		UserID:    user.ID,
+		SessionID: sessionID,
+		TokenType: "access",
+	}
+
+	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims).SignedString(s.jwtSecret)
+	if err != nil {
+		return "", fmt.Errorf("sign access token: %w", err)
+	}
+	return accessToken, nil
+}
+
+func generateRefreshToken(sessionID string) (string, string, error) {
+	secret := make([]byte, refreshSecretBytes)
+	if _, err := rand.Read(secret); err != nil {
+		return "", "", fmt.Errorf("read random bytes: %w", err)
+	}
+
+	encodedSecret := base64.RawURLEncoding.EncodeToString(secret)
+	sum := sha256.Sum256(secret)
+	return sessionID + "." + encodedSecret, hex.EncodeToString(sum[:]), nil
+}
+
+func parseRefreshToken(refreshToken string) (string, string, error) {
+	parts := strings.Split(refreshToken, ".")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid refresh token format")
+	}
+	if _, err := uuid.Parse(parts[0]); err != nil {
+		return "", "", fmt.Errorf("parse session id: %w", err)
+	}
+
+	secret, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", "", fmt.Errorf("decode refresh secret: %w", err)
+	}
+
+	sum := sha256.Sum256(secret)
+	return parts[0], hex.EncodeToString(sum[:]), nil
 }
 
 func (s *AuthService) verifyAppleToken(tokenString string) (string, error) {

@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-
 	"folio-server/internal/api/middleware"
 	"folio-server/internal/service"
 )
@@ -64,7 +62,10 @@ func (h *TagHandler) HandleCreateTag(w http.ResponseWriter, r *http.Request) {
 
 func (h *TagHandler) HandleDeleteTag(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
-	tagID := chi.URLParam(r, "id")
+	tagID, ok := requireUUIDParam(w, r, "id", "tag id")
+	if !ok {
+		return
+	}
 
 	if err := h.tagService.Delete(r.Context(), userID, tagID); err != nil {
 		handleServiceError(w, r, err)

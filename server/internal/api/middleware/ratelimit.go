@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"net/netip"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,6 +20,18 @@ type RateLimiter struct {
 	visitors map[string]*visitor
 	rate     float64 // tokens per second
 	burst    int
+}
+
+var trustedProxyPrefixes = []netip.Prefix{
+	mustPrefix("127.0.0.0/8"),
+	mustPrefix("10.0.0.0/8"),
+	mustPrefix("172.16.0.0/12"),
+	mustPrefix("192.168.0.0/16"),
+	mustPrefix("169.254.0.0/16"),
+	mustPrefix("100.64.0.0/10"),
+	mustPrefix("::1/128"),
+	mustPrefix("fc00::/7"),
+	mustPrefix("fe80::/10"),
 }
 
 func NewRateLimiter(requestsPerMinute int, burst int) *RateLimiter {
@@ -71,7 +85,7 @@ func (rl *RateLimiter) allow(ip string) bool {
 
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := clientIP(r.RemoteAddr)
+		ip := clientIPFromRequest(r)
 
 		if !rl.allow(ip) {
 			w.Header().Set("Content-Type", "application/json")
@@ -84,10 +98,74 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	})
 }
 
+func clientIPFromRequest(r *http.Request) string {
+	remote := clientIP(r.RemoteAddr)
+	remoteAddr, ok := parseAddr(remote)
+	if !ok || !isTrustedProxy(remoteAddr) {
+		return remote
+	}
+
+	if forwarded := forwardedClientIP(r.Header.Get("X-Forwarded-For")); forwarded != "" {
+		return forwarded
+	}
+	if realIP := forwardedClientIP(r.Header.Get("X-Real-IP")); realIP != "" {
+		return realIP
+	}
+
+	return remote
+}
+
 func clientIP(remoteAddr string) string {
 	ip, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil || ip == "" {
 		return remoteAddr
 	}
 	return ip
+}
+
+func forwardedClientIP(header string) string {
+	if header == "" {
+		return ""
+	}
+
+	parts := strings.Split(header, ",")
+	addrs := make([]netip.Addr, 0, len(parts))
+	for _, part := range parts {
+		if addr, ok := parseAddr(strings.TrimSpace(part)); ok {
+			addrs = append(addrs, addr)
+		}
+	}
+
+	for i := len(addrs) - 1; i >= 0; i-- {
+		if !isTrustedProxy(addrs[i]) {
+			return addrs[i].String()
+		}
+	}
+
+	if len(addrs) > 0 {
+		return addrs[0].String()
+	}
+
+	return ""
+}
+
+func parseAddr(raw string) (netip.Addr, bool) {
+	addr, err := netip.ParseAddr(strings.TrimSpace(raw))
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	return addr.Unmap(), true
+}
+
+func isTrustedProxy(addr netip.Addr) bool {
+	for _, prefix := range trustedProxyPrefixes {
+		if prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+func mustPrefix(raw string) netip.Prefix {
+	return netip.MustParsePrefix(raw)
 }

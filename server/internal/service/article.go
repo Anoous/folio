@@ -230,7 +230,7 @@ func (s *ArticleService) GetByID(ctx context.Context, userID, articleID string) 
 	if err != nil {
 		return nil, err
 	}
-	if article == nil {
+	if article == nil || article.DeletedAt != nil {
 		return nil, ErrNotFound
 	}
 	if article.UserID != userID {
@@ -263,7 +263,7 @@ func (s *ArticleService) Update(ctx context.Context, userID, articleID string, p
 	if err != nil {
 		return err
 	}
-	if article == nil {
+	if article == nil || article.DeletedAt != nil {
 		return ErrNotFound
 	}
 	if article.UserID != userID {
@@ -277,7 +277,7 @@ func (s *ArticleService) Delete(ctx context.Context, userID, articleID string) e
 	if err != nil {
 		return err
 	}
-	if article == nil {
+	if article == nil || article.DeletedAt != nil {
 		return ErrNotFound
 	}
 	if article.UserID != userID {
@@ -296,7 +296,7 @@ func (s *ArticleService) RetryArticle(ctx context.Context, userID, articleID str
 	if err != nil {
 		return nil, fmt.Errorf("get article: %w", err)
 	}
-	if article == nil {
+	if article == nil || article.DeletedAt != nil {
 		return nil, ErrNotFound
 	}
 	if article.UserID != userID {

@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
-
 	"folio-server/internal/api/middleware"
 	"folio-server/internal/domain"
 	"folio-server/internal/service"
@@ -101,7 +99,10 @@ type submitReviewResponse struct {
 
 func (h *EchoHandler) HandleSubmitReview(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
-	cardID := chi.URLParam(r, "id")
+	cardID, ok := requireUUIDParam(w, r, "id", "card id")
+	if !ok {
+		return
+	}
 
 	var req submitReviewRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
