@@ -476,57 +476,8 @@ final class SyncService {
 
     /// Retry syncing articles that have local changes not yet sent to server.
     private func syncPendingUpdates() async {
-        let pendingUpdateRaw = SyncState.pendingUpdate.rawValue
-        let descriptor = FetchDescriptor<Article>(
-            predicate: #Predicate<Article> { $0.syncStateRaw == pendingUpdateRaw }
-        )
-        guard let articles = try? context.fetch(descriptor), !articles.isEmpty else { return }
-
-        FolioLogger.sync.info("syncing \(articles.count) pending update(s)")
-        for article in articles {
-            guard let serverID = article.serverID else { continue }
-            let dirtyFields = article.pendingDirtyFields
-            guard !dirtyFields.isEmpty else {
-                article.syncState = .synced
-                continue
-            }
-
-            var request = UpdateArticleRequest()
-            if dirtyFields.contains(.favorite) {
-                request.isFavorite = article.isFavorite
-                request.favoriteUpdatedAt = article.effectiveFieldUpdatedAt(for: .favorite)
-            }
-            if dirtyFields.contains(.archived) {
-                request.isArchived = article.isArchived
-                request.archivedUpdatedAt = article.effectiveFieldUpdatedAt(for: .archived)
-            }
-            if dirtyFields.contains(.readProgress) {
-                request.readProgress = article.readProgress
-                request.readProgressUpdatedAt = article.effectiveFieldUpdatedAt(for: .readProgress)
-            }
-
-            do {
-                try await apiClient.updateArticle(id: serverID, request: request)
-
-                if let sentFavorite = request.isFavorite, article.isFavorite == sentFavorite {
-                    article.clearPendingUpdateIfNeeded(for: .favorite)
-                }
-                if let sentArchived = request.isArchived, article.isArchived == sentArchived {
-                    article.clearPendingUpdateIfNeeded(for: .archived)
-                }
-                if let sentReadProgress = request.readProgress, article.readProgress <= sentReadProgress {
-                    article.clearPendingUpdateIfNeeded(for: .readProgress)
-                }
-            } catch let error as APIError where error == .notFound {
-                // Server deleted this article. Accept the server's state — do not re-upload.
-                FolioLogger.sync.info("article deleted on server, accepting: \(serverID)")
-                article.syncState = .synced
-                article.dirtyFields = []
-            } catch {
-                FolioLogger.sync.error("update sync failed: \(serverID) — \(error)")
-            }
-        }
-        try? context.save()
+        let workflow = ArticleUpdateSyncWorkflow(apiClient: apiClient, context: context)
+        await workflow.syncPendingUpdates()
     }
 
     // MARK: - Deletion Record Cleanup
