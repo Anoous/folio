@@ -8,32 +8,23 @@ final class SyncService {
     private let apiClient: APIClient
     private let context: ModelContext
     private let searchIndexCoordinator: SearchIndexCoordinator
+    private let cursorStore: ArticleSyncCursorStore
     private var isSyncing = false
     private var pollingTasks: [UUID: Task<Void, Never>] = [:]
 
     private static let pollMaxAttempts = 10
     private static let pollInterval: Duration = .seconds(5)
-    private static let lastSyncedAtKey = "com.folio.lastSyncedAt"
-    private static let lastEpochKey = "com.folio.lastSyncEpoch"
-
-    private var lastEpoch: Int {
-        get { UserDefaults.appGroup.integer(forKey: Self.lastEpochKey) }
-        set { UserDefaults.appGroup.set(newValue, forKey: Self.lastEpochKey) }
-    }
-
-    private var lastSyncedAt: Date? {
-        get { UserDefaults.appGroup.object(forKey: Self.lastSyncedAtKey) as? Date }
-        set { UserDefaults.appGroup.set(newValue, forKey: Self.lastSyncedAtKey) }
-    }
 
     init(
         apiClient: APIClient = .shared,
         context: ModelContext,
-        searchIndexCoordinator: SearchIndexCoordinator? = nil
+        searchIndexCoordinator: SearchIndexCoordinator? = nil,
+        cursorStore: ArticleSyncCursorStore = ArticleSyncCursorStore()
     ) {
         self.apiClient = apiClient
         self.context = context
         self.searchIndexCoordinator = searchIndexCoordinator ?? .shared
+        self.cursorStore = cursorStore
     }
 
     // MARK: - Article Submit
@@ -272,179 +263,25 @@ final class SyncService {
             )
             // Check epoch from auth response
             if let epoch = user.syncEpoch {
-                _ = checkEpoch(epoch)
+                _ = makeArticlePullSyncWorkflow().checkEpoch(epoch)
             }
         } catch {
             FolioLogger.sync.error("quota sync failed: \(error)")
         }
     }
 
-    // MARK: - Epoch Check
-
-    /// Purge all locally-synced articles (preserving pending/clientReady that haven't been uploaded).
-    private func purgeLocalSyncedArticles() {
-        let syncedRaw = SyncState.synced.rawValue
-        let descriptor = FetchDescriptor<Article>(
-            predicate: #Predicate<Article> { $0.syncStateRaw == syncedRaw }
-        )
-        guard let articles = try? context.fetch(descriptor) else { return }
-        for article in articles {
-            context.delete(article)
-        }
-
-        // Also clear deletion records since they reference a previous epoch
-        let deletionDescriptor = FetchDescriptor<DeletionRecord>()
-        if let records = try? context.fetch(deletionDescriptor) {
-            for record in records {
-                context.delete(record)
-            }
-        }
-
-        try? context.save()
-        FolioLogger.sync.info("purged \(articles.count) synced article(s) due to epoch change")
-    }
-
-    /// Check the server epoch from a list response. Returns true if epoch is OK (no reset needed).
-    private func checkEpoch(_ serverEpoch: Int?) -> Bool {
-        guard let serverEpoch, serverEpoch > 0 else { return true }
-        let local = lastEpoch
-        if local == 0 {
-            // First sync ever — just record the epoch
-            lastEpoch = serverEpoch
-            return true
-        }
-        if local == serverEpoch {
-            return true
-        }
-        // Epoch mismatch — server data was reset
-        FolioLogger.sync.info("epoch mismatch: local=\(local) server=\(serverEpoch), purging")
-        purgeLocalSyncedArticles()
-        lastSyncedAt = nil
-        lastEpoch = serverEpoch
-        return false
-    }
-
     // MARK: - Article Sync
 
-    private func syncArticles() async {
-        if lastSyncedAt == nil {
-            await fullSyncArticles()
-        } else {
-            await incrementalSyncArticles()
-        }
+    private func makeArticlePullSyncWorkflow() -> ArticlePullSyncWorkflow {
+        ArticlePullSyncWorkflow(apiClient: apiClient, context: context, cursorStore: cursorStore)
     }
 
     private func fullSyncArticles() async {
-        FolioLogger.sync.info("starting full article sync")
-        let merger = ArticleMerger(context: context)
-        var page = 1
-        let perPage = 50
-        var latestServerTime: String?
-        var serverIDs: Set<String> = []
-
-        do {
-            while true {
-                let response = try await apiClient.listArticles(page: page, perPage: perPage)
-                if let serverTime = response.serverTime {
-                    latestServerTime = serverTime
-                }
-                // Epoch check on first page
-                if page == 1 {
-                    _ = checkEpoch(response.syncEpoch)
-                }
-                for dto in response.data {
-                    serverIDs.insert(dto.id)
-                    _ = try? merger.merge(dto: dto)
-                }
-                try? context.save()
-
-                let fetched = (page - 1) * perPage + response.data.count
-                if fetched >= response.pagination.total {
-                    break
-                }
-                page += 1
-            }
-            reconcileLocalArticles(serverIDs: serverIDs)
-            lastSyncedAt = parseServerTime(latestServerTime) ?? Date()
-            FolioLogger.sync.info("full article sync completed")
-        } catch {
-            FolioLogger.sync.error("full article sync failed: \(error)")
-        }
-    }
-
-    /// Delete local synced articles whose serverID is not in the server's full article set.
-    private func reconcileLocalArticles(serverIDs: Set<String>) {
-        let syncedRaw = SyncState.synced.rawValue
-        let descriptor = FetchDescriptor<Article>(
-            predicate: #Predicate<Article> { $0.syncStateRaw == syncedRaw && $0.serverID != nil }
-        )
-        guard let localArticles = try? context.fetch(descriptor) else { return }
-
-        var removedCount = 0
-        for article in localArticles {
-            guard let sid = article.serverID else { continue }
-            if !serverIDs.contains(sid) {
-                context.delete(article)
-                removedCount += 1
-            }
-        }
-        if removedCount > 0 {
-            try? context.save()
-            FolioLogger.sync.info("reconciliation: removed \(removedCount) orphaned article(s)")
-        }
+        await makeArticlePullSyncWorkflow().fullSync()
     }
 
     private func incrementalSyncArticles() async {
-        guard let since = lastSyncedAt else {
-            await fullSyncArticles()
-            return
-        }
-        FolioLogger.sync.debug("incremental sync since \(since)")
-        let merger = ArticleMerger(context: context)
-        var page = 1
-        let perPage = 50
-        var latestServerTime: String?
-
-        do {
-            while true {
-                let response = try await apiClient.listArticles(
-                    page: page, perPage: perPage, updatedSince: since
-                )
-                if let serverTime = response.serverTime {
-                    latestServerTime = serverTime
-                }
-                // Epoch check on first page
-                if page == 1 && !checkEpoch(response.syncEpoch) {
-                    // Epoch changed — checkEpoch already purged and reset lastSyncedAt
-                    await fullSyncArticles()
-                    return
-                }
-                for dto in response.data {
-                    _ = try? merger.merge(dto: dto)
-                }
-                try? context.save()
-
-                let fetched = (page - 1) * perPage + response.data.count
-                if fetched >= response.pagination.total {
-                    break
-                }
-                page += 1
-            }
-            lastSyncedAt = parseServerTime(latestServerTime) ?? Date()
-        } catch {
-            FolioLogger.sync.error("incremental sync failed: \(error)")
-        }
-    }
-
-    private static let serverTimeFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
-
-    private func parseServerTime(_ timeString: String?) -> Date? {
-        guard let timeString else { return nil }
-        return Self.serverTimeFormatter.date(from: timeString)
+        await makeArticlePullSyncWorkflow().incrementalSync()
     }
 
     // MARK: - Deletion Sync

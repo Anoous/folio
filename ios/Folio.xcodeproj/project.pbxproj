@@ -18,6 +18,9 @@
 		073D9155046C152B31925F92 /* Article.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF1772655ED28449F93C0F22 /* Article.swift */; };
 		0A9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflow.swift */; };
 		0C9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflowTests.swift */; };
+		70B8779F56BB7499EC955F5B /* ArticleSyncCursorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A306433A403FD052AF903F2 /* ArticleSyncCursorStore.swift */; };
+		8BFC3D346EE4EB64215065D5 /* ArticlePullSyncWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2593D1E362791FF38E9B4686 /* ArticlePullSyncWorkflow.swift */; };
+		6CBC497B59DC77BECE3FF0BB /* ArticlePullSyncWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A973C135B3649A01597A4B1 /* ArticlePullSyncWorkflowTests.swift */; };
 		08FD0FFA5E94D6EE8DBA8619 /* FTS5SearchManagerQueryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2B9FA9B03C15A89D34F796 /* FTS5SearchManagerQueryTests.swift */; };
 		0934A246EE8C385420BE7F4D /* MockDataFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B684C5506B2386577EBB864 /* MockDataFactoryTests.swift */; };
 		0D55DE5292B112620F6B22E3 /* HomeSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9222608BDEF0C61D04599C21 /* HomeSearchView.swift */; };
@@ -254,6 +257,9 @@
 		0EE692E348F73CFF5A586D19 /* PendingDeletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingDeletion.swift; sourceTree = "<group>"; };
 		0B9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleUpdateSyncWorkflow.swift; sourceTree = "<group>"; };
 		0D9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleUpdateSyncWorkflowTests.swift; sourceTree = "<group>"; };
+		1A306433A403FD052AF903F2 /* ArticleSyncCursorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleSyncCursorStore.swift; sourceTree = "<group>"; };
+		2593D1E362791FF38E9B4686 /* ArticlePullSyncWorkflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticlePullSyncWorkflow.swift; sourceTree = "<group>"; };
+		9A973C135B3649A01597A4B1 /* ArticlePullSyncWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticlePullSyncWorkflowTests.swift; sourceTree = "<group>"; };
 		102CBA1FA053F5BE0660B9BC /* MilestoneCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MilestoneCardView.swift; sourceTree = "<group>"; };
 		117C69065C4BFC1C68EB1C00 /* CategoryRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryRepositoryTests.swift; sourceTree = "<group>"; };
 		169A0B494F30137A1EB80458 /* Color+Folio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Folio.swift"; sourceTree = "<group>"; };
@@ -489,6 +495,7 @@
 			isa = PBXGroup;
 			children = (
 				4850A28FF6AF926B9C1E85ED /* AppStartupCoordinatorTests.swift */,
+				9A973C135B3649A01597A4B1 /* ArticlePullSyncWorkflowTests.swift */,
 				5F7DD506603F5ED3FC6A79B5 /* ArticleSyncWorkflowTests.swift */,
 				0D9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflowTests.swift */,
 				7FBA195DA2748AB48F243215 /* ContentSaveServiceTests.swift */,
@@ -844,6 +851,8 @@
 			isa = PBXGroup;
 			children = (
 				474CF0D33CFF4F03AAAC3443 /* ArticleMerger.swift */,
+				2593D1E362791FF38E9B4686 /* ArticlePullSyncWorkflow.swift */,
+				1A306433A403FD052AF903F2 /* ArticleSyncCursorStore.swift */,
 				40EB2A11DB065AD3B9267325 /* ArticleSyncWorkflow.swift */,
 				0B9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflow.swift */,
 				7FBB0F672281E4BABB92998A /* BackgroundSyncCoordinator.swift */,
@@ -1145,6 +1154,7 @@
 				3C6C21CF9FD05E60442EB8ED /* ArticleExtractionTests.swift in Sources */,
 				AE71CDA974E9564AE40D425F /* ArticleModelTests.swift in Sources */,
 				D1616228CC0A5A3B07FEFD58 /* ArticleRepositoryTests.swift in Sources */,
+				6CBC497B59DC77BECE3FF0BB /* ArticlePullSyncWorkflowTests.swift in Sources */,
 				06821AC7B597EC68142C49B1 /* ArticleSyncWorkflowTests.swift in Sources */,
 				0C9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflowTests.swift in Sources */,
 				042465DE3C3FD2D537E0020B /* AuthViewModelTests.swift in Sources */,
@@ -1199,8 +1209,10 @@
 				06562C0449E24B52CC26DA06 /* Article.swift in Sources */,
 				AF496B39DFC8253B5A33DD31 /* ArticleCardView.swift in Sources */,
 				881BB78B428B2D07461619DD /* ArticleMerger.swift in Sources */,
+				8BFC3D346EE4EB64215065D5 /* ArticlePullSyncWorkflow.swift in Sources */,
 				F5BE0ECDAAACF5B2E049067E /* ArticleMetaInfoView.swift in Sources */,
 				700EBAE0A4FF2CEB48DAEC19 /* ArticleRepository.swift in Sources */,
+				70B8779F56BB7499EC955F5B /* ArticleSyncCursorStore.swift in Sources */,
 				CBA2A30F8E577C63D5E53C34 /* ArticleSyncWorkflow.swift in Sources */,
 				0A9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflow.swift in Sources */,
 				3BC4EE64CB4E1E192A8FDAC2 /* ArticleWebView.swift in Sources */,
