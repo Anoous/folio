@@ -4,7 +4,7 @@ import { ReaderClient } from "@vakra-dev/reader";
 import {
   UnsafeScrapeTargetError,
   validateAndResolveScrapeURL,
-} from "./security";
+} from "./security.js";
 
 export const MAX_TIMEOUT_MS = 120_000; // 2 minutes cap
 const READER_PROVIDER = "reader";
@@ -12,7 +12,7 @@ const READER_PROVIDER = "reader";
 type ScrapePage = {
   markdown?: string;
   metadata?: {
-    website?: Record<string, unknown>;
+    website?: object;
     duration?: number;
   };
 };
@@ -21,10 +21,12 @@ type ScrapeResult = {
   data: ScrapePage[];
 };
 
+type ScrapeFormat = "markdown" | "html";
+
 type ScrapeReader = {
   scrape(options: {
     urls: string[];
-    formats: string[];
+    formats: ScrapeFormat[];
     onlyMainContent: boolean;
     removeAds: boolean;
     timeoutMs: number;
@@ -49,16 +51,20 @@ type ScrapeErrorBody = {
   retryable: boolean;
 };
 
+export type ProcessFaultDisposition = "recover" | "terminate";
+
 let sharedReader: ScrapeReader | null = null;
 
 function getReader(): ScrapeReader {
-  if (!sharedReader) {
-    sharedReader = new ReaderClient({
-      verbose: process.env.NODE_ENV !== "production",
-    });
+  if (sharedReader) {
+    return sharedReader;
   }
 
-  return sharedReader;
+  const reader: ScrapeReader = new ReaderClient({
+    verbose: process.env.NODE_ENV !== "production",
+  });
+  sharedReader = reader;
+  return reader;
 }
 
 export function createApp({
@@ -134,6 +140,64 @@ export function createApp({
   });
 
   return app;
+}
+
+export function classifyProcessFault(err: unknown): ProcessFaultDisposition {
+  const code = errorCode(err);
+  if (
+    code === "ECONNRESET" ||
+    code === "EPIPE" ||
+    code === "ECONNABORTED" ||
+    code === "ETIMEDOUT"
+  ) {
+    return "recover";
+  }
+
+  if (err instanceof Error) {
+    const message = err.message.toLowerCase();
+    if (
+      message.includes("read econnreset") ||
+      message.includes("socket hang up") ||
+      message.includes("connection reset")
+    ) {
+      return "recover";
+    }
+  }
+
+  return "terminate";
+}
+
+export function installProcessErrorGuards() {
+  process.on("uncaughtException", (err, origin) => {
+    handleProcessFault("uncaughtException", err, origin);
+  });
+
+  process.on("unhandledRejection", (reason) => {
+    handleProcessFault("unhandledRejection", reason);
+  });
+}
+
+function handleProcessFault(source: string, err: unknown, origin?: string) {
+  const summary = processFaultSummary(err);
+  if (classifyProcessFault(err) === "recover") {
+    console.warn("Reader service recovered from transient process fault", {
+      source,
+      origin,
+      ...summary,
+    });
+    return;
+  }
+
+  console.error("Reader service terminating after process fault", {
+    source,
+    origin,
+    ...summary,
+  });
+  process.exit(1);
+}
+
+if (process.env.NODE_ENV !== "test") {
+  installProcessErrorGuards();
 }
 
 const app = createApp();
@@ -218,4 +282,27 @@ function isNetworkError(err: unknown): boolean {
     message.includes("dial tcp") ||
     message.includes("connect")
   );
+}
+
+function errorCode(err: unknown): string | undefined {
+  if (typeof err !== "object" || err === null) {
+    return undefined;
+  }
+
+  const code = (err as { code?: unknown }).code;
+  return typeof code === "string" ? code.toUpperCase() : undefined;
+}
+
+function processFaultSummary(err: unknown): { name?: string; code?: string; message: string } {
+  if (err instanceof Error) {
+    return {
+      name: err.name,
+      code: errorCode(err),
+      message: err.message,
+    };
+  }
+
+  return {
+    message: String(err),
+  };
 }

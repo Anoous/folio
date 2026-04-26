@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
-import { createApp, MAX_TIMEOUT_MS } from "../src/index";
+import { classifyProcessFault, createApp, MAX_TIMEOUT_MS } from "../src/index";
 import { validateAndResolveScrapeURL } from "../src/security";
 
 const scrapeMock = vi.fn();
@@ -40,6 +40,20 @@ describe("GET /health", () => {
     const res = await request(app).get("/health");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: "ok" });
+  });
+});
+
+describe("process fault classification", () => {
+  it("recovers known transient socket faults", () => {
+    const err = Object.assign(new Error("read ECONNRESET"), {
+      code: "ECONNRESET",
+    });
+
+    expect(classifyProcessFault(err)).toBe("recover");
+  });
+
+  it("terminates on ordinary uncaught exceptions", () => {
+    expect(classifyProcessFault(new Error("programmer error"))).toBe("terminate");
   });
 });
 
