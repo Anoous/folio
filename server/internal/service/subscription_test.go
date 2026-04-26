@@ -204,9 +204,119 @@ func TestValidateSubscriptionActivation(t *testing.T) {
 	}
 }
 
+func TestHandleWebhookEvent_RenewalUpdatesExpiry(t *testing.T) {
+	expires := time.Now().Add(48 * time.Hour).Truncate(time.Millisecond)
+	apple := &fakeAppleStoreClient{
+		webhookEvent: &client.WebhookEvent{
+			NotificationType: "DID_RENEW",
+			Data:             client.WebhookData{SignedTransactionInfo: "signed-txn"},
+		},
+		signedTransaction: &client.TransactionInfo{
+			TransactionID:         "txn-2",
+			OriginalTransactionID: "orig-1",
+			ProductID:             "com.folio.app.pro.yearly",
+			BundleID:              "com.folio.app",
+			ExpiresDate:           &expires,
+		},
+	}
+	users := &fakeSubscriptionUserRepo{
+		usersByOriginalTxnID: map[string]*domain.User{
+			"orig-1": {ID: "user-1"},
+		},
+	}
+	svc := NewSubscriptionService(apple, users, "com.folio.app")
+
+	if err := svc.HandleWebhookEvent(context.Background(), "signed-payload"); err != nil {
+		t.Fatalf("HandleWebhookEvent() error = %v", err)
+	}
+
+	if len(users.updates) != 1 {
+		t.Fatalf("updates = %d, want 1", len(users.updates))
+	}
+	update := users.updates[0]
+	if update.subscription != domain.SubscriptionPro {
+		t.Fatalf("subscription = %q, want pro", update.subscription)
+	}
+	if update.expiresAt == nil || !update.expiresAt.Equal(expires) {
+		t.Fatalf("expiresAt = %v, want %v", update.expiresAt, expires)
+	}
+	if update.originalTxnID != nil {
+		t.Fatalf("originalTxnID = %v, want nil", update.originalTxnID)
+	}
+}
+
+func TestHandleWebhookEvent_RefundDowngradesUser(t *testing.T) {
+	testWebhookDowngradesUser(t, "REFUND")
+}
+
+func TestHandleWebhookEvent_ExpiredDowngradesUser(t *testing.T) {
+	testWebhookDowngradesUser(t, "EXPIRED")
+}
+
+func testWebhookDowngradesUser(t *testing.T, notificationType string) {
+	t.Helper()
+
+	apple := &fakeAppleStoreClient{
+		webhookEvent: &client.WebhookEvent{
+			NotificationType: notificationType,
+			Data:             client.WebhookData{SignedTransactionInfo: "signed-txn"},
+		},
+		signedTransaction: &client.TransactionInfo{
+			TransactionID:         "txn-2",
+			OriginalTransactionID: "orig-1",
+			ProductID:             "com.folio.app.pro.yearly",
+			BundleID:              "com.folio.app",
+		},
+	}
+	users := &fakeSubscriptionUserRepo{
+		usersByOriginalTxnID: map[string]*domain.User{
+			"orig-1": {ID: "user-1"},
+		},
+	}
+	svc := NewSubscriptionService(apple, users, "com.folio.app")
+
+	if err := svc.HandleWebhookEvent(context.Background(), "signed-payload"); err != nil {
+		t.Fatalf("HandleWebhookEvent() error = %v", err)
+	}
+
+	if len(users.updates) != 1 {
+		t.Fatalf("updates = %d, want 1", len(users.updates))
+	}
+	update := users.updates[0]
+	if update.subscription != domain.SubscriptionFree {
+		t.Fatalf("subscription = %q, want free", update.subscription)
+	}
+	if update.expiresAt != nil {
+		t.Fatalf("expiresAt = %v, want nil", update.expiresAt)
+	}
+}
+
+func TestHandleWebhookEvent_SignedTransactionParseFailureIsNonFatal(t *testing.T) {
+	apple := &fakeAppleStoreClient{
+		webhookEvent: &client.WebhookEvent{
+			NotificationType: "DID_RENEW",
+			Data:             client.WebhookData{SignedTransactionInfo: "bad-signed-txn"},
+		},
+		parseSignedTransactionErr: errors.New("bad transaction signature"),
+	}
+	users := &fakeSubscriptionUserRepo{}
+	svc := NewSubscriptionService(apple, users, "com.folio.app")
+
+	if err := svc.HandleWebhookEvent(context.Background(), "signed-payload"); err != nil {
+		t.Fatalf("HandleWebhookEvent() error = %v, want nil", err)
+	}
+	if len(users.updates) != 0 {
+		t.Fatalf("updates = %d, want 0", len(users.updates))
+	}
+}
+
 type fakeAppleStoreClient struct {
-	transaction *client.TransactionInfo
-	err         error
+	transaction               *client.TransactionInfo
+	err                       error
+	webhookEvent              *client.WebhookEvent
+	signedTransaction         *client.TransactionInfo
+	parseWebhookErr           error
+	parseSignedTransactionErr error
 }
 
 func (c *fakeAppleStoreClient) VerifyTransaction(_ context.Context, _ string) (*client.TransactionInfo, error) {
@@ -217,16 +327,23 @@ func (c *fakeAppleStoreClient) VerifyTransaction(_ context.Context, _ string) (*
 }
 
 func (c *fakeAppleStoreClient) ParseWebhookPayload(_ string) (*client.WebhookEvent, error) {
-	return nil, nil
+	if c.parseWebhookErr != nil {
+		return nil, c.parseWebhookErr
+	}
+	return c.webhookEvent, nil
 }
 
 func (c *fakeAppleStoreClient) ParseSignedTransaction(_ string) (*client.TransactionInfo, error) {
-	return nil, nil
+	if c.parseSignedTransactionErr != nil {
+		return nil, c.parseSignedTransactionErr
+	}
+	return c.signedTransaction, nil
 }
 
 type fakeSubscriptionUserRepo struct {
-	users   map[string]*domain.User
-	updates []subscriptionUpdate
+	users                map[string]*domain.User
+	usersByOriginalTxnID map[string]*domain.User
+	updates              []subscriptionUpdate
 }
 
 type subscriptionUpdate struct {
@@ -253,6 +370,9 @@ func (r *fakeSubscriptionUserRepo) UpdateSubscription(_ context.Context, userID 
 	return nil
 }
 
-func (r *fakeSubscriptionUserRepo) GetByOriginalTransactionID(_ context.Context, _ string) (*domain.User, error) {
-	return nil, nil
+func (r *fakeSubscriptionUserRepo) GetByOriginalTransactionID(_ context.Context, txnID string) (*domain.User, error) {
+	if r.usersByOriginalTxnID == nil {
+		return nil, nil
+	}
+	return r.usersByOriginalTxnID[txnID], nil
 }

@@ -120,9 +120,8 @@ func validateSubscriptionActivation(txnInfo *client.TransactionInfo, requestedPr
 
 // HandleWebhookEvent processes an App Store Server notification.
 //
-// For MVP, the webhook logs all events and only acts on REFUND (downgrades the
-// user). Renewals and expirations are handled client-side via StoreKit 2
-// Transaction.currentEntitlements.
+// The webhook acknowledges Apple even when an individual notification cannot be
+// fully applied; Apple retries non-2xx responses aggressively.
 func (s *SubscriptionService) HandleWebhookEvent(ctx context.Context, signedPayload string) error {
 	event, err := s.appleClient.ParseWebhookPayload(signedPayload)
 	if err != nil {
@@ -154,7 +153,6 @@ func (s *SubscriptionService) HandleWebhookEvent(ctx context.Context, signedPayl
 	case "DID_RENEW":
 		slog.Info("webhook: subscription renewed",
 			"original_txn_id", safeOrigTxnID(txnInfo))
-		// Update expiry if we can find the user.
 		if txnInfo != nil {
 			s.tryUpdateExpiry(ctx, txnInfo)
 		}
@@ -162,7 +160,6 @@ func (s *SubscriptionService) HandleWebhookEvent(ctx context.Context, signedPayl
 	case "EXPIRED":
 		slog.Info("webhook: subscription expired",
 			"original_txn_id", safeOrigTxnID(txnInfo))
-		// Downgrade if we can find the user.
 		if txnInfo != nil {
 			s.tryDowngrade(ctx, txnInfo)
 		}
