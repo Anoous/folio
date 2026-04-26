@@ -10,15 +10,12 @@ struct CaptureBarView: View {
 
     var body: some View {
         HStack(spacing: Spacing.sm) {
-            // Mic button
-            Button(action: onMicTap) {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 17))
-                    .foregroundStyle(Color.folio.textSecondary)
-                    .frame(width: 36, height: 36)
-            }
+            Button("录音", systemImage: "mic.fill", action: onMicTap)
+                .labelStyle(.iconOnly)
+                .font(.system(size: 17))
+                .foregroundStyle(Color.folio.textSecondary)
+                .frame(width: 36, height: 36)
 
-            // Text input area (tap to expand ManualNoteSheet)
             Button(action: onTextTap) {
                 Text("记录一个想法...")
                     .font(Typography.caption)
@@ -30,9 +27,9 @@ struct CaptureBarView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
 
-            // Camera/Photo picker
             PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                Image(systemName: "camera.fill")
+                Label("保存截图", systemImage: "camera.fill")
+                    .labelStyle(.iconOnly)
                     .font(.system(size: 17))
                     .foregroundStyle(Color.folio.textSecondary)
                     .frame(width: 36, height: 36)

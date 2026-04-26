@@ -386,6 +386,71 @@ final class HomeViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkbenchReadingAndProcessingSections() throws {
+        let inProgress = Article(url: "https://example.com/progress", title: "Continue")
+        inProgress.status = .ready
+        inProgress.readProgress = 0.42
+        inProgress.lastReadAt = Date(timeIntervalSince1970: 3_000)
+        inProgress.createdAt = Date(timeIntervalSince1970: 3_000)
+
+        let unread = Article(url: "https://example.com/unread", title: "Unread")
+        unread.status = .ready
+        unread.readProgress = 0
+        unread.createdAt = Date(timeIntervalSince1970: 2_000)
+
+        let localReady = Article(content: "Local OCR content", title: "Local")
+        localReady.status = .clientReady
+        localReady.createdAt = Date(timeIntervalSince1970: 1_500)
+
+        let processing = Article(url: "https://example.com/processing", title: "Processing")
+        processing.status = .processing
+        processing.createdAt = Date(timeIntervalSince1970: 1_000)
+
+        let failed = Article(url: "https://example.com/failed", title: "Failed")
+        failed.status = .failed
+        failed.createdAt = Date(timeIntervalSince1970: 500)
+
+        [inProgress, unread, localReady, processing, failed].forEach(context.insert)
+        try context.save()
+
+        let vm = HomeViewModel(context: context)
+        vm.fetchArticles()
+
+        XCTAssertEqual(vm.readyArticleCount, 3)
+        XCTAssertEqual(vm.continueReadingArticles.map(\.displayTitle), ["Continue"])
+        XCTAssertTrue(vm.suggestedReadingArticles.contains { $0.displayTitle == "Unread" })
+        XCTAssertEqual(vm.processingArticles.map(\.displayTitle), ["Local", "Processing", "Failed"])
+    }
+
+    @MainActor
+    func testFetchEchoCardsStoresDashboardMetadata() async throws {
+        let (apiClient, keychainManager) = try makeAuthenticatedAPIClient()
+        defer { try? keychainManager.clearTokens() }
+
+        HomeViewModelMockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/echo/today")
+            let payload = """
+            {
+              "data": [],
+              "remaining_today": 2,
+              "weekly_count": 5,
+              "weekly_limit": 20
+            }
+            """.data(using: .utf8)!
+            return (payload, self.makeResponse(statusCode: 200))
+        }
+
+        let vm = HomeViewModel(context: context, isAuthenticated: true, apiClient: apiClient)
+        await vm.fetchEchoCards()
+
+        XCTAssertFalse(vm.isEchoLoading)
+        XCTAssertNil(vm.echoError)
+        XCTAssertEqual(vm.echoRemainingToday, 2)
+        XCTAssertEqual(vm.echoWeeklyCount, 5)
+        XCTAssertEqual(vm.echoWeeklyLimit, 20)
+    }
+
+    @MainActor
     func testLoadNextPage_noMorePages() throws {
         // Create fewer than page size (20) articles
         for i in 0..<5 {

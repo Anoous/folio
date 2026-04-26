@@ -188,6 +188,10 @@ final class Article {
         set { extractionSourceRaw = newValue.rawValue }
     }
 
+    var isKnowledgeReady: Bool {
+        status == .ready || status == .clientReady
+    }
+
     // MARK: - Card Tier
 
     enum CardTier {

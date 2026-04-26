@@ -19,15 +19,18 @@ struct HomeArticleRow: View {
     let onAction: (ArticleRowAction) -> Void
 
     var body: some View {
-        ArticleCardView(article: article)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if article.status == .failed {
-                    onAction(.retry)
-                } else {
-                    selectArticle(article)
-                }
+        Button {
+            if article.status == .failed {
+                onAction(.retry)
+            } else {
+                selectArticle(article)
             }
+        } label: {
+            ArticleCardView(article: article)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(article.status == .failed ? "重试处理" : "打开阅读")
         .onAppear {
             if let idx = articleIndex, idx >= articleCount - 5 {
                 onAction(.loadMore)

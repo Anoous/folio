@@ -62,6 +62,11 @@ final class HomeViewModel {
 
     var articles: [Article] = []
     var echoCards: [EchoCardDTO] = []
+    var isEchoLoading = false
+    var echoError: String?
+    var echoRemainingToday: Int?
+    var echoWeeklyCount: Int?
+    var echoWeeklyLimit: Int?
     var activeKnowledgePanel: KnowledgePanelKind?
     var isKnowledgeLoading = false
     var sparkInsights: [SparkInsightDTO] = []
@@ -71,6 +76,42 @@ final class HomeViewModel {
 
     var groupedArticles: [(group: TimeGroup, articles: [Article])] {
         TimeGroup.groupArticles(articles)
+    }
+
+    var readyArticleCount: Int {
+        articles.filter(\.isKnowledgeReady).count
+    }
+
+    var processingArticles: [Article] {
+        articles.filter { article in
+            switch article.status {
+            case .pending, .processing, .clientReady, .failed:
+                return true
+            case .ready:
+                return false
+            }
+        }
+    }
+
+    var continueReadingArticles: [Article] {
+        let candidates = articles.filter { article in
+            article.isKnowledgeReady && article.readProgress > 0 && article.readProgress < 0.98
+        }
+
+        return Array(
+            candidates
+                .sorted { left, right in
+                    (left.lastReadAt ?? left.updatedAt) > (right.lastReadAt ?? right.updatedAt)
+                }
+                .prefix(2)
+        )
+    }
+
+    var suggestedReadingArticles: [Article] {
+        let candidates = articles.filter { article in
+            article.isKnowledgeReady && !continueReadingArticles.contains(where: { $0.id == article.id })
+        }
+        return Array(candidates.prefix(2))
     }
 
     // MARK: - Feed Interleaving
@@ -177,12 +218,19 @@ final class HomeViewModel {
 
     func fetchEchoCards() async {
         guard isAuthenticated else { return }
+        isEchoLoading = true
+        echoError = nil
         do {
             let response = try await apiClient.getEchoToday()
             echoCards = response.data
+            echoRemainingToday = response.remainingToday
+            echoWeeklyCount = response.weeklyCount
+            echoWeeklyLimit = response.weeklyLimit
         } catch {
             echoCards = []
+            echoError = (error as? UserFacingError)?.userMessage ?? error.localizedDescription
         }
+        isEchoLoading = false
     }
 
     func submitEchoReview(cardID: String, result: String, completion: @escaping (EchoReviewResponse?) -> Void) {

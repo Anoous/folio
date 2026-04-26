@@ -1,10 +1,6 @@
 import SwiftData
 import SwiftUI
 
-private enum HomeDestination: Hashable {
-    case settings
-}
-
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
@@ -28,7 +24,7 @@ struct HomeView: View {
     @State private var recentSearchesVersion = 0
     @State private var showVoiceRecording = false
     @State private var saveService: ContentSaveService?
-    @Environment(\.selectArticle) private var selectArticle
+    @State private var showSettings = false
     @AppStorage(AppConstants.dismissedMilestonesKey) private var dismissedMilestonesRaw = ""
 
     // MARK: - Milestone Helpers
@@ -39,6 +35,13 @@ struct HomeView: View {
 
     private var isUserPro: Bool {
         authViewModel?.currentUser?.isPro == true
+    }
+
+    private var quotaSnapshot: HomeQuotaSnapshot {
+        HomeQuotaSnapshot(
+            user: authViewModel?.currentUser,
+            isAuthenticated: authViewModel?.isAuthenticated ?? false
+        )
     }
 
     private var activeMilestone: Milestone? {
@@ -86,11 +89,8 @@ struct HomeView: View {
             }
         }
         .navigationBarHidden(true)
-            .navigationDestination(for: HomeDestination.self) { destination in
-                switch destination {
-                case .settings:
-                    SettingsView()
-                }
+            .navigationDestination(isPresented: $showSettings) {
+                SettingsView()
             }
             .toast(isPresented: showToastBinding, message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
             .alert(
@@ -125,6 +125,11 @@ struct HomeView: View {
                 }
                 .presentationDetents([.medium])
             }
+            .sheet(isPresented: $showShareSheet) {
+                if let items = shareItems {
+                    ShareSheet(activityItems: items)
+                }
+            }
             .sensoryFeedback(.success, trigger: saveSucceeded)
             .sensoryFeedback(.error, trigger: saveFailed)
             .sensoryFeedback(.impact(weight: .medium), trigger: deleteConfirmTrigger)
@@ -150,22 +155,19 @@ struct HomeView: View {
                 .foregroundStyle(Color.folio.textPrimary)
             Spacer()
             HStack(spacing: 4) {
-                Button { isSearchActive = true } label: {
-                    Circle().fill(Color.clear).frame(width: 38, height: 38)
-                        .overlay {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(Color.folio.textSecondary)
-                        }
+                Button("搜索", systemImage: "magnifyingglass") {
+                    isSearchActive = true
                 }
-                NavigationLink(value: HomeDestination.settings) {
-                    Circle().fill(Color.clear).frame(width: 38, height: 38)
-                        .overlay {
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(Color.folio.textSecondary)
-                        }
+                .labelStyle(.iconOnly)
+                .frame(width: 38, height: 38)
+                .foregroundStyle(Color.folio.textSecondary)
+
+                Button("设置", systemImage: "gearshape") {
+                    showSettings = true
                 }
+                .labelStyle(.iconOnly)
+                .frame(width: 38, height: 38)
+                .foregroundStyle(Color.folio.textSecondary)
             }
         }
         .padding(.horizontal, Spacing.screenPadding)
@@ -196,15 +198,79 @@ struct HomeView: View {
                 onSaveRecentSearch: { query in saveRecentSearch(query) },
                 findExistingArticle: { text in findExistingArticle(for: text) }
             )
-        } else if viewModel?.articles.isEmpty ?? true {
-            VStack(spacing: 0) {
-                dateHeader
-                EmptyStateView(onPasteURL: { url in
-                    saveURL(url.absoluteString)
-                })
-            }
+        } else if let vm = viewModel {
+            workbenchView(vm)
         } else {
-            articleList
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func workbenchView(_ vm: HomeViewModel) -> some View {
+        HomeWorkbenchView(
+            viewModel: vm,
+            quotaSnapshot: quotaSnapshot,
+            isAuthenticated: authViewModel?.isAuthenticated ?? false,
+            isNetworkAvailable: offlineQueueManager?.isNetworkAvailable ?? true,
+            activeMilestone: activeMilestone,
+            onDismissMilestone: dismissMilestone,
+            onOpenSearch: {
+                searchText = ""
+                isSearchActive = true
+            },
+            onOpenSettings: {
+                showSettings = true
+            },
+            onPasteURL: { url in
+                saveURL(url.absoluteString)
+            },
+            onTextTap: {
+                noteSheetText = ""
+                showNoteSheet = true
+            },
+            onMicTap: {
+                showVoiceRecording = true
+            },
+            onPhotoSelected: { image in
+                saveScreenshot(image)
+            },
+            onArticleAction: { action, article in
+                handleArticleAction(action, article: article, vm: vm)
+            },
+            onRetrySync: {
+                Task {
+                    await syncService?.incrementalSync()
+                    vm.fetchArticles()
+                }
+            },
+            onDismissSyncError: {
+                vm.dismissSyncError()
+            },
+            onRetryEcho: {
+                Task { await vm.fetchEchoCards() }
+            }
+        )
+        .refreshable {
+            refreshTrigger.toggle()
+            if let syncService {
+                await syncService.incrementalSync()
+            }
+            vm.fetchArticles()
+            await vm.fetchEchoCards()
+        }
+        .task(id: vm.hasProcessingArticles) {
+            guard vm.hasProcessingArticles else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { break }
+                await syncService?.fetchProcessingArticles()
+                vm.fetchArticles()
+            }
+        }
+        .overlay(alignment: .top) {
+            if vm.isLoading {
+                SyncProgressBar()
+            }
         }
     }
 
@@ -229,18 +295,6 @@ struct HomeView: View {
         recentSearchesVersion += 1
     }
 
-    // MARK: - Date Header
-
-    private var dateHeader: some View {
-        Text(formattedDate())
-            .font(.system(size: 13))
-            .foregroundStyle(Color.folio.textTertiary)
-            .tracking(0.5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Spacing.screenPadding)
-            .padding(.top, 4)
-    }
-
     // MARK: - Toast Binding
 
     private var showToastBinding: Binding<Bool> {
@@ -255,166 +309,6 @@ struct HomeView: View {
     private var deleteConfirmTitle: String {
         let title = articleToDelete?.displayTitle ?? ""
         return String(localized: "reader.deleteConfirm", defaultValue: "Delete this article?") + (title.isEmpty ? "" : "\n\"\(title)\"")
-    }
-
-    // MARK: - Article List (sectioned by date)
-
-    private var articleList: some View {
-        List {
-            statusBanners
-
-            // Date header
-            dateHeader
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-
-            if let milestone = activeMilestone {
-                MilestoneCardView(
-                    milestone: milestone,
-                    articleCount: viewModel?.articles.count ?? 0,
-                    onDismiss: { dismissMilestone(milestone) }
-                )
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-            }
-
-            if let vm = viewModel {
-                ForEach(Array(vm.feedSections.enumerated()), id: \.element.group) { sectionIndex, section in
-                    Section {
-                        ForEach(section.items) { item in
-                            switch item {
-                            case .article(let article):
-                                HomeArticleRow(
-                                    article: article,
-                                    articleCount: vm.articles.count,
-                                    articleIndex: vm.articles.firstIndex(where: { $0.id == article.id })
-                                ) { action in
-                                    handleArticleAction(action, article: article, vm: vm)
-                                }
-                                .listRowInsets(EdgeInsets(top: 0, leading: Spacing.screenPadding, bottom: 0, trailing: Spacing.screenPadding))
-                                .listRowSeparator(.hidden)
-
-                            case .echo(let echoDTO):
-                                EchoCardView(
-                                    card: EchoCardData(from: echoDTO),
-                                    onReview: { result, completion in
-                                        vm.submitEchoReview(cardID: echoDTO.id, result: result, completion: completion)
-                                    }
-                                )
-                                .listRowInsets(EdgeInsets())
-                                .listRowSeparator(.hidden)
-                            }
-                        }
-                    } header: {
-                        Text(section.group.rawValue)
-                            .font(Typography.v3SectionHeader)
-                            .foregroundStyle(Color.folio.textTertiary)
-                            .tracking(0.3)
-                            .textCase(nil)
-                    }
-                    .listSectionSeparator(.hidden)
-
-                    // Echo card between sections (max 1)
-                    if sectionIndex == 0, let echoCard = vm.intersectionEchoCard {
-                        EchoCardView(
-                            card: EchoCardData(from: echoCard),
-                            onReview: { result, completion in
-                                vm.submitEchoReview(cardID: echoCard.id, result: result, completion: completion)
-                            }
-                        )
-                        .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.hidden)
-                    }
-                }
-            }
-        }
-        .listStyle(.plain)
-        .refreshable {
-            refreshTrigger.toggle()
-            if let syncService {
-                await syncService.incrementalSync()
-            }
-            viewModel?.fetchArticles()
-            await viewModel?.fetchEchoCards()
-        }
-        .task(id: viewModel?.hasProcessingArticles) {
-            guard viewModel?.hasProcessingArticles == true else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(5))
-                guard !Task.isCancelled else { break }
-                await syncService?.fetchProcessingArticles()
-                viewModel?.fetchArticles()
-            }
-        }
-        .overlay(alignment: .top) {
-            if viewModel?.isLoading == true {
-                SyncProgressBar()
-            }
-        }
-        .background(Color.folio.background)
-        .sheet(isPresented: $showShareSheet) {
-            if let items = shareItems {
-                ShareSheet(activityItems: items)
-            }
-        }
-    }
-
-    // MARK: - Date Formatting
-
-    private func formattedDate() -> String {
-        Date.now.formatted(.dateTime.month().day().weekday(.wide))
-    }
-
-    // MARK: - Status Banners
-
-    @ViewBuilder
-    private var statusBanners: some View {
-        if offlineQueueManager?.isNetworkAvailable == false {
-            HStack(spacing: Spacing.xs) {
-                Image(systemName: "wifi.slash")
-                    .foregroundStyle(Color.folio.textTertiary)
-                Text(String(localized: "home.offlineBanner", defaultValue: "You're offline. Changes will sync when connected."))
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textSecondary)
-            }
-            .padding(.vertical, Spacing.xxs)
-        }
-
-        if let syncError = viewModel?.syncError {
-            syncErrorBanner(syncError)
-        }
-    }
-
-    private func syncErrorBanner(_ syncError: String) -> some View {
-        HStack(spacing: Spacing.xs) {
-            Image(systemName: "exclamationmark.icloud.fill")
-                .foregroundStyle(Color.folio.error)
-            Text(syncError)
-                .font(Typography.caption)
-                .foregroundStyle(Color.folio.error)
-                .lineLimit(2)
-            Spacer()
-            Button {
-                Task {
-                    await syncService?.incrementalSync()
-                    viewModel?.fetchArticles()
-                }
-            } label: {
-                Text(String(localized: "home.retry", defaultValue: "Retry"))
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.accent)
-            }
-            .buttonStyle(.plain)
-            Button {
-                viewModel?.dismissSyncError()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.caption2)
-                    .foregroundStyle(Color.folio.textTertiary)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.vertical, Spacing.xxs)
     }
 
     // MARK: - Article Actions
