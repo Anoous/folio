@@ -8,12 +8,9 @@ final class SyncService {
     private let apiClient: APIClient
     private let context: ModelContext
     private let searchIndexCoordinator: SearchIndexCoordinator
+    private let articleProcessingSyncWorkflow: ArticleProcessingSyncWorkflow
     private let cursorStore: ArticleSyncCursorStore
     private var isSyncing = false
-    private var pollingTasks: [UUID: Task<Void, Never>] = [:]
-
-    private static let pollMaxAttempts = 10
-    private static let pollInterval: Duration = .seconds(5)
 
     init(
         apiClient: APIClient = .shared,
@@ -23,7 +20,13 @@ final class SyncService {
     ) {
         self.apiClient = apiClient
         self.context = context
-        self.searchIndexCoordinator = searchIndexCoordinator ?? .shared
+        let resolvedSearchIndexCoordinator = searchIndexCoordinator ?? .shared
+        self.searchIndexCoordinator = resolvedSearchIndexCoordinator
+        self.articleProcessingSyncWorkflow = ArticleProcessingSyncWorkflow(
+            apiClient: apiClient,
+            context: context,
+            searchIndexCoordinator: resolvedSearchIndexCoordinator
+        )
         self.cursorStore = cursorStore
     }
 
@@ -34,10 +37,7 @@ final class SyncService {
         let workflow = ArticleSyncWorkflow(apiClient: apiClient, context: context)
         return await workflow.submitPendingArticles(articles) { [weak self] localID, taskID in
             guard let self else { return }
-            let pollingTask = Task {
-                await self.pollTask(taskId: taskID, articleLocalId: localID)
-            }
-            self.pollingTasks[localID] = pollingTask
+            self.articleProcessingSyncWorkflow.startPolling(taskID: taskID, articleLocalID: localID)
         }
     }
 
@@ -65,99 +65,8 @@ final class SyncService {
         _ = await submitPendingArticles(pending)
     }
 
-    // MARK: - Task Polling
-
-    private func pollTask(taskId: String, articleLocalId: UUID) async {
-        defer {
-            pollingTasks.removeValue(forKey: articleLocalId)
-        }
-
-        for _ in 0..<Self.pollMaxAttempts {
-            do {
-                try await Task.sleep(for: Self.pollInterval)
-            } catch is CancellationError {
-                FolioLogger.sync.debug("task polling cancelled during sleep: \(taskId)")
-                return
-            } catch {
-                FolioLogger.sync.debug("task polling sleep failed: \(error) — task \(taskId)")
-                return
-            }
-
-            guard !Task.isCancelled else {
-                FolioLogger.sync.debug("task polling cancelled before request: \(taskId)")
-                return
-            }
-
-            do {
-                let task = try await apiClient.getTask(id: taskId)
-
-                switch task.status {
-                case AppConstants.TaskStatus.done:
-                    FolioLogger.sync.info("task done: \(taskId)")
-                    if let articleId = task.articleId {
-                        await fetchAndUpdateArticle(serverID: articleId, localID: articleLocalId)
-                    }
-                    return
-                case AppConstants.TaskStatus.failed:
-                    FolioLogger.sync.error("task failed: \(taskId) — \(task.errorMessage ?? "unknown")")
-                    updateArticleStatus(localID: articleLocalId, status: .failed, error: task.errorMessage)
-                    return
-                case AppConstants.TaskStatus.queued,
-                     AppConstants.TaskStatus.crawling,
-                     AppConstants.TaskStatus.aiProcessing:
-                    continue
-                default:
-                    continue
-                }
-            } catch {
-                guard !Task.isCancelled else {
-                    FolioLogger.sync.debug("task polling cancelled after request: \(taskId)")
-                    return
-                }
-                FolioLogger.sync.debug("poll network error: \(error) — task \(taskId)")
-                continue
-            }
-        }
-
-        FolioLogger.sync.error("task polling timed out: \(taskId)")
-        updateArticleStatus(localID: articleLocalId, status: .failed, error: "Processing timed out")
-    }
-
     private func cancelPollingTasks() {
-        for task in pollingTasks.values {
-            task.cancel()
-        }
-        pollingTasks.removeAll()
-    }
-
-    // MARK: - Fetch & Update Article
-
-    private func fetchAndUpdateArticle(serverID: String, localID: UUID) async {
-        do {
-            let dto = try await apiClient.getArticle(id: serverID)
-
-            let articleRepo = ArticleRepository(context: context)
-            guard let article = try articleRepo.fetchByID(localID) else { return }
-
-            article.updateFromDTO(dto)
-
-            let merger = ArticleMerger(context: context)
-            try merger.resolveRelationships(for: article, from: dto)
-
-            try context.save()
-            searchIndexCoordinator.sync(article)
-        } catch {
-            FolioLogger.sync.error("fetch article detail failed: \(serverID) — \(error)")
-        }
-    }
-
-    private func updateArticleStatus(localID: UUID, status: ArticleStatus, error: String?) {
-        let articleRepo = ArticleRepository(context: context)
-        guard let article = try? articleRepo.fetchByID(localID) else { return }
-        article.status = status
-        article.fetchError = error
-        article.updatedAt = Date()
-        try? context.save()
+        articleProcessingSyncWorkflow.cancelPollingTasks()
     }
 
     // MARK: - Taxonomy Sync
@@ -281,27 +190,6 @@ final class SyncService {
     // MARK: - Processing Article Polling
 
     func fetchProcessingArticles() async {
-        let processingRaw = ArticleStatus.processing.rawValue
-        let clientReadyRaw = ArticleStatus.clientReady.rawValue
-        let descriptor = FetchDescriptor<Article>(
-            predicate: #Predicate<Article> {
-                $0.statusRaw == processingRaw || $0.statusRaw == clientReadyRaw
-            }
-        )
-        guard let processing = try? context.fetch(descriptor), !processing.isEmpty else { return }
-
-        FolioLogger.sync.debug("fetching \(processing.count) processing articles")
-        let merger = ArticleMerger(context: context)
-        for article in processing {
-            guard let serverID = article.serverID else { continue }
-            do {
-                let dto = try await apiClient.getArticle(id: serverID)
-                article.updateFromDTO(dto)
-                try merger.resolveRelationships(for: article, from: dto)
-            } catch {
-                continue
-            }
-        }
-        try? context.save()
+        await articleProcessingSyncWorkflow.refreshProcessingArticles()
     }
 }

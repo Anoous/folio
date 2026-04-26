@@ -18,6 +18,8 @@
 		073D9155046C152B31925F92 /* Article.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF1772655ED28449F93C0F22 /* Article.swift */; };
 		0A9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflow.swift */; };
 		0C9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflowTests.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* ArticleProcessingSyncWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5E /* ArticleProcessingSyncWorkflow.swift */; };
+		A1B2C3D4E5F60718293A4B5D /* ArticleProcessingSyncWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5F /* ArticleProcessingSyncWorkflowTests.swift */; };
 		70B8779F56BB7499EC955F5B /* ArticleSyncCursorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A306433A403FD052AF903F2 /* ArticleSyncCursorStore.swift */; };
 		8BFC3D346EE4EB64215065D5 /* ArticlePullSyncWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2593D1E362791FF38E9B4686 /* ArticlePullSyncWorkflow.swift */; };
 		6CBC497B59DC77BECE3FF0BB /* ArticlePullSyncWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A973C135B3649A01597A4B1 /* ArticlePullSyncWorkflowTests.swift */; };
@@ -261,6 +263,8 @@
 		0EE692E348F73CFF5A586D19 /* PendingDeletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingDeletion.swift; sourceTree = "<group>"; };
 		0B9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleUpdateSyncWorkflow.swift; sourceTree = "<group>"; };
 		0D9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleUpdateSyncWorkflowTests.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B5E /* ArticleProcessingSyncWorkflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleProcessingSyncWorkflow.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B5F /* ArticleProcessingSyncWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleProcessingSyncWorkflowTests.swift; sourceTree = "<group>"; };
 		1A306433A403FD052AF903F2 /* ArticleSyncCursorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleSyncCursorStore.swift; sourceTree = "<group>"; };
 		2593D1E362791FF38E9B4686 /* ArticlePullSyncWorkflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticlePullSyncWorkflow.swift; sourceTree = "<group>"; };
 		9A973C135B3649A01597A4B1 /* ArticlePullSyncWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticlePullSyncWorkflowTests.swift; sourceTree = "<group>"; };
@@ -504,6 +508,7 @@
 			children = (
 				4850A28FF6AF926B9C1E85ED /* AppStartupCoordinatorTests.swift */,
 				84714F9D9EB2D8FD3CF4FFEF /* ArticleDeletionSyncWorkflowTests.swift */,
+				A1B2C3D4E5F60718293A4B5F /* ArticleProcessingSyncWorkflowTests.swift */,
 				9A973C135B3649A01597A4B1 /* ArticlePullSyncWorkflowTests.swift */,
 				5F7DD506603F5ED3FC6A79B5 /* ArticleSyncWorkflowTests.swift */,
 				0D9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflowTests.swift */,
@@ -862,6 +867,7 @@
 			children = (
 				28FC9F87186B2D2C7CA90B07 /* ArticleDeletionSyncWorkflow.swift */,
 				474CF0D33CFF4F03AAAC3443 /* ArticleMerger.swift */,
+				A1B2C3D4E5F60718293A4B5E /* ArticleProcessingSyncWorkflow.swift */,
 				2593D1E362791FF38E9B4686 /* ArticlePullSyncWorkflow.swift */,
 				1A306433A403FD052AF903F2 /* ArticleSyncCursorStore.swift */,
 				40EB2A11DB065AD3B9267325 /* ArticleSyncWorkflow.swift */,
@@ -1203,6 +1209,7 @@
 				BDDCC273C582781F7A96756D /* SharedDataManagerExtractionTests.swift in Sources */,
 				3C72E5A510580466DA7D6701 /* SharedDataManagerTests.swift in Sources */,
 				C56D1A745685B3B2C2F647C6 /* SpacingTests.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5D /* ArticleProcessingSyncWorkflowTests.swift in Sources */,
 				C22B5A483F07BD23C3E5FCE8 /* SyncServiceTests.swift in Sources */,
 				2047E4EFF6DEE16C5C918168 /* TagRepositoryTests.swift in Sources */,
 				705A5FD0CC1A935F2A683DA2 /* TaxonomySyncWorkflowTests.swift in Sources */,
@@ -1314,6 +1321,7 @@
 				19354F549EAB77483542F264 /* Spacing.swift in Sources */,
 				85ADE7E4EC78686FA9481AE8 /* SubscriptionManager.swift in Sources */,
 				A95781A16054B0E872585C43 /* SyncProgressBar.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* ArticleProcessingSyncWorkflow.swift in Sources */,
 				DF4E707DA562FA1AE4722F8D /* SyncService.swift in Sources */,
 				BDE983A32BBE0E7A9A63B61A /* TaxonomySyncWorkflow.swift in Sources */,
 				86C97AE5DD0FE6C736226A7D /* TableView.swift in Sources */,
