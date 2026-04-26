@@ -13,9 +13,19 @@ import (
 )
 
 type HighlightService struct {
-	highlightRepo *repository.HighlightRepo
-	articleRepo   *repository.ArticleRepo
-	asynqClient   *asynq.Client
+	highlightRepo highlightStore
+	articleRepo   highlightArticleStore
+	asynqClient   taskEnqueuer
+}
+
+type highlightStore interface {
+	CreateHighlight(ctx context.Context, h *domain.Highlight) error
+	GetByArticle(ctx context.Context, articleID, userID string) ([]domain.Highlight, error)
+	DeleteHighlight(ctx context.Context, id, userID string) (articleID string, err error)
+}
+
+type highlightArticleStore interface {
+	GetByID(ctx context.Context, id string) (*domain.Article, error)
 }
 
 func NewHighlightService(
@@ -30,8 +40,7 @@ func NewHighlightService(
 	}
 }
 
-// CreateHighlight creates a highlight, increments the article's highlight count,
-// and enqueues an echo:generate task for the highlight.
+// CreateHighlight creates a highlight and enqueues an echo:generate task for it.
 func (s *HighlightService) CreateHighlight(
 	ctx context.Context,
 	userID, articleID, text string,
@@ -60,15 +69,6 @@ func (s *HighlightService) CreateHighlight(
 	}
 	if err := s.highlightRepo.CreateHighlight(ctx, h); err != nil {
 		return nil, fmt.Errorf("create highlight: %w", err)
-	}
-
-	// Increment article highlight count
-	if err := s.highlightRepo.IncrementArticleHighlightCount(ctx, articleID); err != nil {
-		slog.Error("failed to increment highlight count",
-			"article_id", articleID,
-			"error", err,
-		)
-		// Non-fatal: highlight was created successfully
 	}
 
 	// Enqueue echo:generate with highlight_id
@@ -107,7 +107,7 @@ func (s *HighlightService) GetArticleHighlights(
 	return s.highlightRepo.GetByArticle(ctx, articleID, userID)
 }
 
-// DeleteHighlight deletes a highlight and decrements the article's highlight count.
+// DeleteHighlight deletes a highlight owned by the user.
 func (s *HighlightService) DeleteHighlight(
 	ctx context.Context,
 	userID, highlightID string,
@@ -118,15 +118,6 @@ func (s *HighlightService) DeleteHighlight(
 	}
 	if articleID == "" {
 		return ErrNotFound
-	}
-
-	// Decrement article highlight count
-	if err := s.highlightRepo.DecrementArticleHighlightCount(ctx, articleID); err != nil {
-		slog.Error("failed to decrement highlight count",
-			"article_id", articleID,
-			"error", err,
-		)
-		// Non-fatal: highlight was already deleted
 	}
 
 	return nil
