@@ -11,64 +11,51 @@ struct EmailAuthCodeStepView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            EmailAuthMessageView(
-                kind: .success,
-                message: "验证码已发送到 \(form.normalizedEmail)。如果没有收到，请检查垃圾邮件或稍后重发。"
-            )
-
-            VStack(alignment: .leading, spacing: Spacing.xs) {
-                Label("6 位验证码", systemImage: "number")
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textSecondary)
-
-                ZStack {
-                    if form.code.isEmpty {
-                        Text(verbatim: "000000")
-                            .font(.system(.title3, design: .monospaced, weight: .semibold))
-                            .foregroundStyle(Color.folio.textTertiary)
-                            .allowsHitTesting(false)
-                    }
-
-                    TextField("", text: $form.code)
+            ZStack {
+                if form.code.isEmpty {
+                    Text(verbatim: "000000")
                         .font(.system(.title3, design: .monospaced, weight: .semibold))
-                        .foregroundStyle(Color.folio.textPrimary)
-                        .keyboardType(.numberPad)
-                        .textContentType(.oneTimeCode)
-                        .multilineTextAlignment(.center)
-                        .submitLabel(.done)
-                        .focused($isCodeFocused)
-                        .padding(.horizontal, Spacing.md)
-                        .onChange(of: form.code) {
-                            form.sanitizeCode()
-                        }
-                        .onSubmit(onVerify)
-                        .disabled(isLoading)
-                        .accessibilityLabel("邮箱验证码")
-                        .accessibilityValue("\(form.code.count) 位，需 6 位")
+                        .foregroundStyle(Color.folio.textTertiary)
+                        .allowsHitTesting(false)
                 }
-                .frame(minHeight: 56)
-                .background(Color.folio.background)
-                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
-                .overlay {
-                    RoundedRectangle(cornerRadius: CornerRadius.medium)
-                        .stroke(isCodeFocused ? Color.folio.accent : Color.folio.separator, lineWidth: 1)
-                }
+
+                TextField("", text: $form.code)
+                    .font(.system(.title3, design: .monospaced, weight: .semibold))
+                    .foregroundStyle(Color.folio.textPrimary)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .multilineTextAlignment(.center)
+                    .submitLabel(.done)
+                    .focused($isCodeFocused)
+                    .padding(.horizontal, Spacing.md)
+                    .onChange(of: form.code) {
+                        form.sanitizeCode()
+                    }
+                    .onSubmit(onVerify)
+                    .disabled(isLoading)
+                    .accessibilityLabel("邮箱验证码")
+                    .accessibilityValue("\(form.code.count) 位，需 6 位")
+            }
+            .frame(minHeight: 56)
+            .background(Color.folio.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
+            .overlay {
+                RoundedRectangle(cornerRadius: CornerRadius.medium)
+                    .stroke(isCodeFocused ? Color.folio.accent : Color.folio.separator, lineWidth: 1)
             }
 
             EmailAuthActionButton(
-                title: isLoading ? "正在验证" : "验证并进入 Folio",
-                systemImage: "checkmark.circle.fill",
+                title: isLoading ? "正在验证" : "登录",
                 isLoading: isLoading,
                 isDisabled: !form.canVerifyCode,
                 action: onVerify
             )
 
-            HStack(spacing: Spacing.md) {
+            HStack(spacing: Spacing.sm) {
                 Button(action: onResend) {
-                    Label(resendTitle, systemImage: "arrow.clockwise")
-                        .font(Typography.caption)
-                        .lineLimit(1)
+                    Text(resendTitle)
                 }
+                .font(Typography.caption)
                 .disabled(form.cooldownRemaining > 0 || isLoading)
 
                 Spacer(minLength: Spacing.sm)
@@ -77,14 +64,7 @@ struct EmailAuthCodeStepView: View {
                     .font(Typography.caption)
                     .disabled(isLoading)
             }
-            .foregroundStyle(Color.folio.link)
-        }
-        .padding(Spacing.md)
-        .background(Color.folio.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.large))
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.large)
-                .stroke(Color.folio.separator.opacity(0.7), lineWidth: 1)
+            .foregroundStyle(Color.folio.textSecondary)
         }
     }
 

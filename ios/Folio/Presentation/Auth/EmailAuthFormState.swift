@@ -22,13 +22,9 @@ struct EmailAuthFormState: Equatable {
         code.count == 6
     }
 
-    var emailFieldMessage: String {
-        if normalizedEmail.isEmpty {
-            return "用于同步资料库、Ask Folio 和 Echo 复习。"
-        }
-
-        if isEmailValid {
-            return "验证码会发送到这个邮箱。"
+    var emailValidationMessage: String? {
+        guard !normalizedEmail.isEmpty, !isEmailValid else {
+            return nil
         }
 
         return "请输入有效的邮箱地址。"

@@ -129,7 +129,6 @@
 		85ADE7E4EC78686FA9481AE8 /* SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63B04EEF0B4754156969DC4E /* SubscriptionManager.swift */; };
 		860A1F57BC5A89FA11024E6E /* CompactShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A188A06C3CDE3BAF608F9539 /* CompactShareView.swift */; };
 		86C97AE5DD0FE6C736226A7D /* TableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F053C691B9E245B268D15251 /* TableView.swift */; };
-		86DEE3BCB32E5A0278F2258F /* EmailAuthMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED6DDC1B11CF2CBAFD628BE /* EmailAuthMessageView.swift */; };
 		876B322D5D1053732BA55B2C /* RelatedArticlesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8827319A2476B5F764B9379 /* RelatedArticlesSection.swift */; };
 		8785B19FCABF8BD95A4B311A /* HTMLToMarkdownConverterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37A8DD2A2736DB0444C229C4 /* HTMLToMarkdownConverterTests.swift */; };
 		8817BACFBAA7F7878DBE8234 /* BackgroundSyncCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D2AF02132694EB817C73FB3 /* BackgroundSyncCoordinatorTests.swift */; };
@@ -174,7 +173,6 @@
 		B6277342ECA7718F9BF64446 /* PermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B003CD5B3B9D3B96662F2542 /* PermissionView.swift */; };
 		B681F903988FEF3F2266BFC9 /* UIImage+Compression.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7327CD017A7BDD753C1A522 /* UIImage+Compression.swift */; };
 		B6ADB5796E64EF2F629B917F /* FolioApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED4556A712E7A2B56DE80CBD /* FolioApp.swift */; };
-		B71C9CE4940968255569FA4C /* EmailAuthHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3810387AA49204C854BB15C /* EmailAuthHeaderView.swift */; };
 		B78BB948FAE128379413D974 /* OfflineQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D5FD400A66F26A1CB323587 /* OfflineQueueManager.swift */; };
 		B7FCAE315DE73FA1107D6AB1 /* KnowledgeLearnView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 257F2882F36235E9B5408288 /* KnowledgeLearnView.swift */; };
 		B9B58FA5003BFB6B76FD96AF /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B03A2CB21E64374769E892C7 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -186,7 +184,6 @@
 		BDDCC273C582781F7A96756D /* SharedDataManagerExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC77732E6F5B6BCD75CF4E6 /* SharedDataManagerExtractionTests.swift */; };
 		C058757AB17029DF56962AF5 /* EchoCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D21E4439C61C02697D0C054 /* EchoCardView.swift */; };
 		C0DFDA2CC8FA8FF36F2C5065 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7848623895B7F57C8EE0147E /* AppConstants.swift */; };
-		C12998300D00C022955059B0 /* EmailAuthProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BF0A1C99282D450CEE36788 /* EmailAuthProgressView.swift */; };
 		C22B5A483F07BD23C3E5FCE8 /* SyncServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA20DC780693B28FCC8A1D33 /* SyncServiceTests.swift */; };
 		C2995487D4A798E25FCC9F4D /* MilestoneCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 102CBA1FA053F5BE0660B9BC /* MilestoneCardView.swift */; };
 		C3B203174071C80D02740DD2 /* HomeViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E016EA57FC3158AFDE32DF30 /* HomeViewModelTests.swift */; };
@@ -287,7 +284,6 @@
 		07E52114D51C3A692D2C8E2D /* FTS5SearchManagerIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FTS5SearchManagerIndexTests.swift; sourceTree = "<group>"; };
 		093066FDA4B62ED98824E50B /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
 		0B9E43A1615B68C4D7E7AE12 /* AppStartupCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStartupCoordinator.swift; sourceTree = "<group>"; };
-		0BF0A1C99282D450CEE36788 /* EmailAuthProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailAuthProgressView.swift; sourceTree = "<group>"; };
 		0C717CA8AAEB7479E6E52A73 /* TagChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagChip.swift; sourceTree = "<group>"; };
 		0D21E4439C61C02697D0C054 /* EchoCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoCardView.swift; sourceTree = "<group>"; };
 		0E012CBB7734D7150DE83121 /* SharedDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDataManager.swift; sourceTree = "<group>"; };
@@ -391,7 +387,6 @@
 		7D2984F5A4CD88647D15D56D /* TagRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagRepositoryTests.swift; sourceTree = "<group>"; };
 		7E5600F3DD868B1C6B4542E6 /* DTOMappingExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DTOMappingExtractionTests.swift; sourceTree = "<group>"; };
 		7E6B21FF6A92607035852417 /* SearchSuggestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchSuggestionsView.swift; sourceTree = "<group>"; };
-		7ED6DDC1B11CF2CBAFD628BE /* EmailAuthMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailAuthMessageView.swift; sourceTree = "<group>"; };
 		7F3F4AEB604527646C17E523 /* ManualNoteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualNoteSheet.swift; sourceTree = "<group>"; };
 		7FBA195DA2748AB48F243215 /* ContentSaveServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSaveServiceTests.swift; sourceTree = "<group>"; };
 		7FBB0F672281E4BABB92998A /* BackgroundSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundSyncCoordinator.swift; sourceTree = "<group>"; };
@@ -440,7 +435,6 @@
 		B02BE72DAA744F47AC32AEB7 /* EmailAuthFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailAuthFormView.swift; sourceTree = "<group>"; };
 		B03A2CB21E64374769E892C7 /* ShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B2075F1EB1B542E31ACDC680 /* DTOMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DTOMappingTests.swift; sourceTree = "<group>"; };
-		B3810387AA49204C854BB15C /* EmailAuthHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailAuthHeaderView.swift; sourceTree = "<group>"; };
 		B46793218388A61EFF700607 /* ScaleButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScaleButtonStyle.swift; sourceTree = "<group>"; };
 		B5041624FC6579F84D2F415B /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 		B5ADE29C550B453BA853DDFD /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
@@ -833,9 +827,6 @@
 				851DD1E7F2887BFE3FD7E21D /* EmailAuthEmailStepView.swift */,
 				179F70C88E9A98444A12CBCE /* EmailAuthFormState.swift */,
 				B02BE72DAA744F47AC32AEB7 /* EmailAuthFormView.swift */,
-				B3810387AA49204C854BB15C /* EmailAuthHeaderView.swift */,
-				7ED6DDC1B11CF2CBAFD628BE /* EmailAuthMessageView.swift */,
-				0BF0A1C99282D450CEE36788 /* EmailAuthProgressView.swift */,
 				8F29FECE6F22E531A625587B /* EmailAuthStep.swift */,
 				28C3323D40B921D2359AD392 /* EmailAuthView.swift */,
 			);
@@ -1364,9 +1355,6 @@
 				1BAF1656481CFB3E98E46A40 /* EmailAuthEmailStepView.swift in Sources */,
 				94F6792CB55AA7E5C8256921 /* EmailAuthFormState.swift in Sources */,
 				1EA61F0865FE5EDA49E39213 /* EmailAuthFormView.swift in Sources */,
-				B71C9CE4940968255569FA4C /* EmailAuthHeaderView.swift in Sources */,
-				86DEE3BCB32E5A0278F2258F /* EmailAuthMessageView.swift in Sources */,
-				C12998300D00C022955059B0 /* EmailAuthProgressView.swift in Sources */,
 				6D688D1E2D4DB748E25F538E /* EmailAuthStep.swift in Sources */,
 				CC96FDB10C58020522FD4412 /* EmailAuthView.swift in Sources */,
 				88244A394FF61FC79EB30654 /* EmptyStateView.swift in Sources */,

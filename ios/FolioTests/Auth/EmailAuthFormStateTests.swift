@@ -9,7 +9,7 @@ final class EmailAuthFormStateTests: XCTestCase {
         XCTAssertEqual(form.normalizedEmail, "reader@example.com")
         XCTAssertTrue(form.isEmailValid)
         XCTAssertTrue(form.canSendCode)
-        XCTAssertEqual(form.emailFieldMessage, "验证码会发送到这个邮箱。")
+        XCTAssertNil(form.emailValidationMessage)
     }
 
     func testEmailValidation_rejectsMalformedEmail() {
@@ -31,6 +31,14 @@ final class EmailAuthFormStateTests: XCTestCase {
             XCTAssertFalse(form.isEmailValid, "\(email) should be invalid")
             XCTAssertFalse(form.canSendCode, "\(email) should not be sendable")
         }
+    }
+
+    func testEmailValidationMessage_onlyShowsForNonEmptyInvalidEmail() {
+        var form = EmailAuthFormState()
+        XCTAssertNil(form.emailValidationMessage)
+
+        form.email = "reader"
+        XCTAssertEqual(form.emailValidationMessage, "请输入有效的邮箱地址。")
     }
 
     func testSanitizedCode_keepsOnlyFirstSixDigits() {

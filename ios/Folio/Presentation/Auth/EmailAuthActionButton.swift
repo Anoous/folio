@@ -2,21 +2,17 @@ import SwiftUI
 
 struct EmailAuthActionButton: View {
     let title: String
-    let systemImage: String
     let isLoading: Bool
     let isDisabled: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: Spacing.xs) {
+            HStack(spacing: Spacing.sm) {
                 if isLoading {
                     ProgressView()
                         .controlSize(.small)
                         .tint(Color.white)
-                } else {
-                    Image(systemName: systemImage)
-                        .accessibilityHidden(true)
                 }
 
                 Text(title)
@@ -38,9 +34,9 @@ struct EmailAuthActionButton: View {
 
 #Preview {
     VStack {
-        EmailAuthActionButton(title: "发送验证码", systemImage: "paperplane.fill", isLoading: false, isDisabled: false) {}
-        EmailAuthActionButton(title: "正在发送", systemImage: "paperplane.fill", isLoading: true, isDisabled: false) {}
-        EmailAuthActionButton(title: "发送验证码", systemImage: "paperplane.fill", isLoading: false, isDisabled: true) {}
+        EmailAuthActionButton(title: "继续", isLoading: false, isDisabled: false) {}
+        EmailAuthActionButton(title: "正在发送", isLoading: true, isDisabled: false) {}
+        EmailAuthActionButton(title: "继续", isLoading: false, isDisabled: true) {}
     }
     .padding()
 }

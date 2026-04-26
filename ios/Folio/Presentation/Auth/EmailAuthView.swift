@@ -9,37 +9,50 @@ struct EmailAuthView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.lg) {
-                EmailAuthHeaderView(step: form.step)
-                    .padding(.top, Spacing.lg)
+            VStack(alignment: .leading, spacing: Spacing.xl) {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    Text(title)
+                        .font(Typography.pageTitle)
+                        .foregroundStyle(Color.folio.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                EmailAuthProgressView(step: form.step)
+                    Text(subtitle)
+                        .font(Typography.body)
+                        .foregroundStyle(Color.folio.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, Spacing.xl)
 
-                EmailAuthFormView(
-                    form: $form,
-                    isLoading: isLoading,
-                    onSendCode: sendCode,
-                    onVerify: verifyCode,
-                    onResend: resendCode,
-                    onChangeEmail: changeEmail
-                )
+                VStack(alignment: .leading, spacing: Spacing.md) {
+                    EmailAuthFormView(
+                        form: $form,
+                        isLoading: isLoading,
+                        onSendCode: sendCode,
+                        onVerify: verifyCode,
+                        onResend: resendCode,
+                        onChangeEmail: changeEmail
+                    )
 
-                if let errorMessage = authViewModel?.errorMessage {
-                    EmailAuthMessageView(kind: .error, message: errorMessage)
+                    if let errorMessage = authViewModel?.errorMessage {
+                        Text(errorMessage)
+                            .font(Typography.caption)
+                            .foregroundStyle(Color.folio.error)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
-                EmailAuthMessageView(
-                    kind: .note,
-                    message: "我们只用邮箱确认账号身份。免费额度、Pro 状态和同步记录会跟随这个账号。"
-                )
-
                 Spacer(minLength: Spacing.xl)
+
+                Text("继续即表示使用此邮箱登录或创建账号。")
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.folio.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
             .padding(.horizontal, Spacing.screenPadding)
         }
         .background(Color.folio.background.ignoresSafeArea())
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle("邮箱验证")
+        .navigationTitle("邮箱登录")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
             cooldownTask?.cancel()
@@ -48,6 +61,24 @@ struct EmailAuthView: View {
 
     private var isLoading: Bool {
         authViewModel?.isLoading == true
+    }
+
+    private var title: String {
+        switch form.step {
+        case .email:
+            "邮箱登录"
+        case .code:
+            "输入验证码"
+        }
+    }
+
+    private var subtitle: String {
+        switch form.step {
+        case .email:
+            "输入邮箱，我们会发送 6 位验证码。"
+        case .code:
+            "验证码已发送至 \(form.normalizedEmail)。"
+        }
     }
 
     private func sendCode() {
