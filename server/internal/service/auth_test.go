@@ -77,6 +77,72 @@ func TestSendEmailCode_RateLimitsSecondRequestForSameEmail(t *testing.T) {
 	}
 }
 
+func TestVerifyEmailCode_KeepsCodeWhenUserUpsertFails(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+
+	userRepo := &fakeAuthUserRepo{upsertByEmailErr: errors.New("database unavailable")}
+	svc := &AuthService{
+		rdb:         rdb,
+		userRepo:    userRepo,
+		sessionRepo: newFakeRefreshSessionRepo(),
+		jwtSecret:   []byte("01234567890123456789012345678901"),
+	}
+	ctx := context.Background()
+	email := "reader@example.com"
+
+	if err := rdb.Set(ctx, codeKey(email), "123456", emailCodeTTL).Err(); err != nil {
+		t.Fatalf("seed code: %v", err)
+	}
+
+	_, err := svc.VerifyEmailCode(ctx, VerifyCodeRequest{Email: email, Code: "123456"})
+	if err == nil {
+		t.Fatal("VerifyEmailCode() error = nil, want user upsert failure")
+	}
+
+	got, err := rdb.Get(ctx, codeKey(email)).Result()
+	if err != nil {
+		t.Fatalf("stored code was deleted after failed login: %v", err)
+	}
+	if got != "123456" {
+		t.Fatalf("stored code = %q, want 123456", got)
+	}
+}
+
+func TestVerifyEmailCode_ConsumesCodeAfterSuccessfulLogin(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+
+	svc := &AuthService{
+		rdb:         rdb,
+		userRepo:    &fakeAuthUserRepo{},
+		sessionRepo: newFakeRefreshSessionRepo(),
+		jwtSecret:   []byte("01234567890123456789012345678901"),
+	}
+	ctx := context.Background()
+	email := "reader@example.com"
+
+	if err := rdb.Set(ctx, codeKey(email), "123456", emailCodeTTL).Err(); err != nil {
+		t.Fatalf("seed code: %v", err)
+	}
+	if err := rdb.Set(ctx, cooldownKey(email), "1", emailCodeCooldownTTL).Err(); err != nil {
+		t.Fatalf("seed cooldown: %v", err)
+	}
+
+	resp, err := svc.VerifyEmailCode(ctx, VerifyCodeRequest{Email: email, Code: "123456"})
+	if err != nil {
+		t.Fatalf("VerifyEmailCode() error = %v", err)
+	}
+	if resp.AccessToken == "" || resp.RefreshToken == "" {
+		t.Fatal("VerifyEmailCode() returned empty tokens")
+	}
+	if rdb.Exists(ctx, codeKey(email), attemptsKey(email), cooldownKey(email)).Val() != 0 {
+		t.Fatal("VerifyEmailCode() did not consume Redis auth keys")
+	}
+}
+
 func TestGenerateEmailCode_FormatsSixDigits(t *testing.T) {
 	code, err := generateEmailCode(bytes.NewReader([]byte{0, 0, 42}))
 	if err != nil {
@@ -357,7 +423,8 @@ func mustParseRefreshToken(t *testing.T, token string) (string, string) {
 }
 
 type fakeAuthUserRepo struct {
-	users map[string]*domain.User
+	users            map[string]*domain.User
+	upsertByEmailErr error
 }
 
 func (r *fakeAuthUserRepo) GetByID(_ context.Context, id string) (*domain.User, error) {
@@ -377,6 +444,9 @@ func (r *fakeAuthUserRepo) UpsertByAppleID(_ context.Context, appleID string, em
 }
 
 func (r *fakeAuthUserRepo) UpsertByEmail(_ context.Context, email string) (*domain.User, error) {
+	if r.upsertByEmailErr != nil {
+		return nil, r.upsertByEmailErr
+	}
 	if r.users == nil {
 		r.users = make(map[string]*domain.User)
 	}

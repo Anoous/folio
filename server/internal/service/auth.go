@@ -227,9 +227,6 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, req VerifyCodeRequest
 		return nil, ErrInvalidCode
 	}
 
-	// Success — delete code and attempts
-	s.rdb.Del(ctx, codeKey(email), attemptsKey(email), cooldownKey(email))
-
 	// Atomically find-or-create user
 	user, err := s.userRepo.UpsertByEmail(ctx, email)
 	if err != nil {
@@ -237,7 +234,14 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, req VerifyCodeRequest
 	}
 
 	slog.Info("email login succeeded", "user_id", user.ID, "email", email)
-	return s.issueTokenPair(ctx, user)
+	resp, err := s.issueTokenPair(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+
+	// Consume the code only after login state has been persisted.
+	s.rdb.Del(ctx, codeKey(email), attemptsKey(email), cooldownKey(email))
+	return resp, nil
 }
 
 func generateEmailCode(reader io.Reader) (string, error) {
