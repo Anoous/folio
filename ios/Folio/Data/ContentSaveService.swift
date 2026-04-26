@@ -178,39 +178,6 @@ final class ContentSaveService {
         )
     }
 
-    func saveVoiceNote(_ transcribedText: String) -> SaveResult {
-        let trimmed = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return .error(message: String(localized: "home.voiceEmpty", defaultValue: "No speech detected"))
-        }
-
-        guard checkQuota() else { return .quotaExceeded }
-
-        let article = Article(url: nil, sourceType: .voice)
-        article.markdownContent = trimmed
-        // Title = first sentence, truncated to 40 chars
-        let firstSentence = trimmed.components(separatedBy: CharacterSet(charactersIn: ".!?\u{3002}\u{FF01}\u{FF1F}")).first ?? trimmed
-        let titleCandidate = String(firstSentence.prefix(40))
-        article.title = titleCandidate.count < firstSentence.count ? titleCandidate + "..." : titleCandidate
-        article.status = .clientReady
-        article.wordCount = Article.countWords(trimmed)
-        context.insert(article)
-        do {
-            try context.save()
-            searchIndexCoordinator.sync(article)
-            SharedDataManager.incrementQuota()
-            triggerSync()
-            return .success(
-                message: String(localized: "home.voiceSaved", defaultValue: "Voice note saved"),
-                icon: "checkmark.circle.fill"
-            )
-        } catch {
-            return .error(
-                message: String(localized: "home.voiceSaveError", defaultValue: "Failed to save")
-            )
-        }
-    }
-
     // MARK: - Private Helpers
 
     private func checkQuota() -> Bool {

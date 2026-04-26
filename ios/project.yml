@@ -51,8 +51,6 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoads: true
-        NSMicrophoneUsageDescription: "Folio uses microphone to capture your voice notes"
-        NSSpeechRecognitionUsageDescription: "Folio uses speech recognition to transcribe your voice notes"
         BGTaskSchedulerPermittedIdentifiers:
           - com.folio.article-processing
         UIBackgroundModes:
@@ -79,8 +77,6 @@ targets:
       - package: KeychainAccess
       - package: SwiftSoup
       - sdk: Vision.framework
-      - sdk: Speech.framework
-      - sdk: AVFoundation.framework
 
   ShareExtension:
     type: app-extension

@@ -22,7 +22,6 @@ struct HomeView: View {
     @State private var deleteConfirmTrigger = false
     @State private var refreshTrigger = false
     @State private var recentSearchesVersion = 0
-    @State private var showVoiceRecording = false
     @State private var saveService: ContentSaveService?
     @State private var showSettings = false
     @AppStorage(AppConstants.dismissedMilestonesKey) private var dismissedMilestonesRaw = ""
@@ -104,12 +103,6 @@ struct HomeView: View {
                 }
                 searchText = ""
             }
-        }
-        .sheet(isPresented: $showVoiceRecording) {
-            VoiceRecordingView { transcribedText in
-                saveVoiceNote(transcribedText)
-            }
-            .presentationDetents([.medium])
         }
         .sheet(isPresented: $showShareSheet) {
             if let items = shareItems {
@@ -213,9 +206,6 @@ struct HomeView: View {
             onTextTap: {
                 noteSheetText = ""
                 showNoteSheet = true
-            },
-            onMicTap: {
-                showVoiceRecording = true
             },
             onPhotoSelected: { image in
                 saveScreenshot(image)
@@ -350,12 +340,6 @@ struct HomeView: View {
         guard let result = saveService?.saveScreenshot(image, onOCRComplete: {
             viewModel?.fetchArticles()
         }) else { return }
-        handleSaveResult(result)
-        if case .success = result { viewModel?.fetchArticles() }
-    }
-
-    private func saveVoiceNote(_ transcribedText: String) {
-        guard let result = saveService?.saveVoiceNote(transcribedText) else { return }
         handleSaveResult(result)
         if case .success = result { viewModel?.fetchArticles() }
     }

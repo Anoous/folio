@@ -25,23 +25,6 @@ final class ContentSaveServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testSaveVoiceNote_indexesSavedArticle() throws {
-        let service = ContentSaveService(
-            context: context,
-            syncService: nil,
-            searchIndexCoordinator: searchIndexer
-        )
-
-        let result = service.saveVoiceNote("Distributed systems need backpressure control.")
-        guard case .success = result else {
-            return XCTFail("Expected voice save to succeed")
-        }
-
-        let results = try searchIndexer.searchManager.search(query: "backpressure")
-        XCTAssertEqual(results.count, 1)
-    }
-
-    @MainActor
     func testSaveScreenshot_updatesSearchIndexAfterOCR() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)

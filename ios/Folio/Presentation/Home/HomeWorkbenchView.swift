@@ -11,7 +11,6 @@ struct HomeWorkbenchView: View {
     let onOpenSettings: () -> Void
     let onPasteURL: (URL) -> Void
     let onTextTap: () -> Void
-    let onMicTap: () -> Void
     let onPhotoSelected: (UIImage) -> Void
     let onArticleAction: (ArticleRowAction, Article) -> Void
     let onRetrySync: () -> Void
@@ -58,7 +57,6 @@ struct HomeWorkbenchView: View {
         HomeQuickCaptureView(
             onPasteURL: onPasteURL,
             onTextTap: onTextTap,
-            onMicTap: onMicTap,
             onPhotoSelected: onPhotoSelected
         )
         .plainWorkbenchRow()
