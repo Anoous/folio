@@ -138,26 +138,7 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("update ai result: %w", err)
 	}
 
-	// Backfill title for manual entries that have no user-provided title
-	article, err = h.articleRepo.GetByID(ctx, p.ArticleID)
-	if err == nil && article != nil && article.SourceType == domain.SourceManual && (article.Title == nil || *article.Title == "") {
-		var generatedTitle string
-		if len(result.KeyPoints) > 0 {
-			generatedTitle = result.KeyPoints[0]
-		} else if result.Summary != "" {
-			runes := []rune(result.Summary)
-			if len(runes) > 50 {
-				generatedTitle = string(runes[:50])
-			} else {
-				generatedTitle = result.Summary
-			}
-		}
-		if generatedTitle != "" {
-			if err := h.articleRepo.UpdateTitle(ctx, p.ArticleID, generatedTitle); err != nil {
-				slog.Error("failed to backfill title", "article_id", p.ArticleID, "error", err)
-			}
-		}
-	}
+	h.titleBackfiller().backfill(ctx, p, result)
 
 	// Create AI-generated tags and attach to article
 	for _, tagName := range result.Tags {
