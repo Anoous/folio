@@ -103,24 +103,15 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return nil
 	}
 
-	// Ensure category exists (create if needed)
-	cat, err := h.categoryRepo.FindOrCreate(ctx, result.Category, result.CategoryName, result.CategoryName)
+	cat, err := h.categoryResolver().resolve(ctx, p, result)
 	if err != nil {
-		slog.Warn("ai: category creation failed, falling back to 'other'",
-			"article_id", p.ArticleID,
-			"slug", result.Category,
-			"error", err,
-		)
-		cat, err = h.categoryRepo.FindOrCreate(ctx, "other", "其他", "Other")
-		if err != nil {
-			// Both primary and fallback category creation failed.
-			// Mark task failed AND article as ready (content is still readable).
-			failureErr := ensurePipelineErr(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, true, "persist ai category", err)
-			logPipelineFailed(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, p.TaskID, p.ArticleID, p.UserID, "", time.Since(start), failureErr)
-			h.taskRepo.SetFailed(ctx, p.TaskID, buildTaskFailure(failureErr, time.Since(start)))
-			h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusReady)
-			return fmt.Errorf("create fallback category: %w", err)
-		}
+		// Both primary and fallback category creation failed.
+		// Mark task failed AND article as ready (content is still readable).
+		failureErr := ensurePipelineErr(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, true, "persist ai category", err)
+		logPipelineFailed(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, p.TaskID, p.ArticleID, p.UserID, "", time.Since(start), failureErr)
+		h.taskRepo.SetFailed(ctx, p.TaskID, buildTaskFailure(failureErr, time.Since(start)))
+		h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusReady)
+		return fmt.Errorf("create fallback category: %w", err)
 	}
 
 	// Update article with AI results
