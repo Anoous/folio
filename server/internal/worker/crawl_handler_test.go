@@ -226,6 +226,90 @@ func TestNewCrawlTask_PayloadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCrawlAIHandoff_EnqueuesBeforeFinishingWhenRequested(t *testing.T) {
+	events := []string{}
+	taskRepo := &mockCrawlTaskRepo{
+		setCrawlFinishedFn: func(ctx context.Context, id string) error {
+			events = append(events, "finish:"+id)
+			return nil
+		},
+	}
+	enqueuer := &mockCrawlEnqueuer{
+		enqueueFn: func(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
+			events = append(events, "enqueue:"+task.Type())
+			return &asynq.TaskInfo{}, nil
+		},
+	}
+	handoff := crawlAIHandoff{taskRepo: taskRepo, asynqClient: enqueuer}
+
+	err := handoff.enqueue(context.Background(), crawlAIHandoffRequest{
+		payload: CrawlPayload{
+			ArticleID: "art-1",
+			TaskID:    "task-1",
+			UserID:    "user-1",
+		},
+		title:               "Title",
+		markdown:            "# Body",
+		source:              "web",
+		author:              "Author",
+		finishBeforeEnqueue: false,
+		setFinishedLabel:    "set crawl finished",
+		enqueueLabel:        "enqueue ai task",
+	})
+	if err != nil {
+		t.Fatalf("handoff.enqueue() error = %v", err)
+	}
+
+	if len(events) != 2 || events[0] != "enqueue:"+TypeAIProcess || events[1] != "finish:task-1" {
+		t.Fatalf("events = %v, want enqueue before finish", events)
+	}
+	if len(enqueuer.enqueuedTasks) != 1 {
+		t.Fatalf("enqueued tasks = %d, want 1", len(enqueuer.enqueuedTasks))
+	}
+}
+
+func TestCrawlAIHandoff_FinishesBeforeEnqueueWhenRequested(t *testing.T) {
+	events := []string{}
+	taskRepo := &mockCrawlTaskRepo{
+		setCrawlFinishedFn: func(ctx context.Context, id string) error {
+			events = append(events, "finish:"+id)
+			return nil
+		},
+	}
+	enqueuer := &mockCrawlEnqueuer{
+		enqueueFn: func(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
+			events = append(events, "enqueue:"+task.Type())
+			return &asynq.TaskInfo{}, nil
+		},
+	}
+	handoff := crawlAIHandoff{taskRepo: taskRepo, asynqClient: enqueuer}
+
+	err := handoff.enqueue(context.Background(), crawlAIHandoffRequest{
+		payload: CrawlPayload{
+			ArticleID: "art-1",
+			TaskID:    "task-1",
+			UserID:    "user-1",
+		},
+		title:               "Title",
+		markdown:            "# Body",
+		source:              "web",
+		author:              "Author",
+		finishBeforeEnqueue: true,
+		setFinishedLabel:    "set crawl finished",
+		enqueueLabel:        "enqueue ai task",
+	})
+	if err != nil {
+		t.Fatalf("handoff.enqueue() error = %v", err)
+	}
+
+	if len(events) != 2 || events[0] != "finish:task-1" || events[1] != "enqueue:"+TypeAIProcess {
+		t.Fatalf("events = %v, want finish before enqueue", events)
+	}
+	if len(enqueuer.enqueuedTasks) != 1 {
+		t.Fatalf("enqueued tasks = %d, want 1", len(enqueuer.enqueuedTasks))
+	}
+}
+
 // --- Weibo content cleaning tests ---
 
 func TestIsWeiboURL(t *testing.T) {
@@ -492,7 +576,8 @@ type mockCrawlTaskRepo struct {
 		ID      string
 		Failure domain.TaskFailure
 	}
-	setCrawlStartedFn func(ctx context.Context, id string) error
+	setCrawlStartedFn  func(ctx context.Context, id string) error
+	setCrawlFinishedFn func(ctx context.Context, id string) error
 }
 
 func (m *mockCrawlTaskRepo) SetCrawlStarted(ctx context.Context, id string) error {
@@ -505,6 +590,9 @@ func (m *mockCrawlTaskRepo) SetCrawlStarted(ctx context.Context, id string) erro
 
 func (m *mockCrawlTaskRepo) SetCrawlFinished(ctx context.Context, id string) error {
 	m.setCrawlFinishedCalls = append(m.setCrawlFinishedCalls, id)
+	if m.setCrawlFinishedFn != nil {
+		return m.setCrawlFinishedFn(ctx, id)
+	}
 	return nil
 }
 
@@ -523,10 +611,14 @@ func (m *mockCrawlTaskRepo) SetFailed(ctx context.Context, id string, failure do
 
 type mockCrawlEnqueuer struct {
 	enqueuedTasks []*asynq.Task
+	enqueueFn     func(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
 }
 
 func (m *mockCrawlEnqueuer) EnqueueContext(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
 	m.enqueuedTasks = append(m.enqueuedTasks, task)
+	if m.enqueueFn != nil {
+		return m.enqueueFn(ctx, task, opts...)
+	}
 	return &asynq.TaskInfo{}, nil
 }
 

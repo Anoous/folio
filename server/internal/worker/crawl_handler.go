@@ -86,20 +86,16 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 				"article_id", p.ArticleID,
 				"highlight_count", preCheckArticle.HighlightCount,
 			)
-			if err := h.taskRepo.SetCrawlFinished(ctx, p.TaskID); err != nil {
-				return fmt.Errorf("highlights: set crawl finished: %w", err)
-			}
-			title := derefOrEmpty(preCheckArticle.Title)
-			source := derefOrDefault(preCheckArticle.SiteName, "web")
-			aiTask := NewAIProcessTask(
-				p.ArticleID, p.TaskID, p.UserID,
-				title, *preCheckArticle.MarkdownContent,
-				source, derefOrEmpty(preCheckArticle.Author),
-			)
-			if _, enqErr := h.asynqClient.EnqueueContext(ctx, aiTask); enqErr != nil {
-				return fmt.Errorf("enqueue ai task (highlights): %w", enqErr)
-			}
-			return nil
+			return h.aiHandoff().enqueue(ctx, crawlAIHandoffRequest{
+				payload:             p,
+				title:               derefOrEmpty(preCheckArticle.Title),
+				markdown:            *preCheckArticle.MarkdownContent,
+				source:              derefOrDefault(preCheckArticle.SiteName, "web"),
+				author:              derefOrEmpty(preCheckArticle.Author),
+				finishBeforeEnqueue: true,
+				setFinishedLabel:    "highlights: set crawl finished",
+				enqueueLabel:        "enqueue ai task (highlights)",
+			})
 		}
 		slog.Info("crawl proceeding: article has highlights but no content",
 			"article_id", p.ArticleID,
@@ -115,19 +111,16 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 				"article_id", p.ArticleID,
 				"source_type", preCheckArticle.SourceType,
 			)
-			if err := h.taskRepo.SetCrawlFinished(ctx, p.TaskID); err != nil {
-				return fmt.Errorf("screenshot/voice: set crawl finished: %w", err)
-			}
-			title := derefOrEmpty(preCheckArticle.Title)
-			aiTask := NewAIProcessTask(
-				p.ArticleID, p.TaskID, p.UserID,
-				title, *preCheckArticle.MarkdownContent,
-				string(preCheckArticle.SourceType), derefOrEmpty(preCheckArticle.Author),
-			)
-			if _, enqErr := h.asynqClient.EnqueueContext(ctx, aiTask); enqErr != nil {
-				return fmt.Errorf("enqueue ai task (screenshot/voice): %w", enqErr)
-			}
-			return nil
+			return h.aiHandoff().enqueue(ctx, crawlAIHandoffRequest{
+				payload:             p,
+				title:               derefOrEmpty(preCheckArticle.Title),
+				markdown:            *preCheckArticle.MarkdownContent,
+				source:              string(preCheckArticle.SourceType),
+				author:              derefOrEmpty(preCheckArticle.Author),
+				finishBeforeEnqueue: true,
+				setFinishedLabel:    "screenshot/voice: set crawl finished",
+				enqueueLabel:        "enqueue ai task (screenshot/voice)",
+			})
 		}
 		// No content — mark as ready (e.g. image-only screenshot with no extracted text)
 		slog.Info("crawl skipped: screenshot/voice article has no content, marking ready",
@@ -165,17 +158,17 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 			}); err != nil {
 				return fmt.Errorf("cache partial: update crawl result: %w", err)
 			}
-			if err := h.taskRepo.SetCrawlFinished(ctx, p.TaskID); err != nil {
-				return fmt.Errorf("cache partial: set crawl finished: %w", err)
-			}
-			source := derefOrDefault(cached.SiteName, "web")
-			aiTask := NewAIProcessTask(
-				p.ArticleID, p.TaskID, p.UserID,
-				derefOrEmpty(cached.Title), derefOrEmpty(cached.MarkdownContent),
-				source, derefOrEmpty(cached.Author),
-			)
-			if _, enqErr := h.asynqClient.EnqueueContext(ctx, aiTask); enqErr != nil {
-				return fmt.Errorf("enqueue ai task (cache partial): %w", enqErr)
+			if err := h.aiHandoff().enqueue(ctx, crawlAIHandoffRequest{
+				payload:             p,
+				title:               derefOrEmpty(cached.Title),
+				markdown:            derefOrEmpty(cached.MarkdownContent),
+				source:              derefOrDefault(cached.SiteName, "web"),
+				author:              derefOrEmpty(cached.Author),
+				finishBeforeEnqueue: true,
+				setFinishedLabel:    "cache partial: set crawl finished",
+				enqueueLabel:        "enqueue ai task (cache partial)",
+			}); err != nil {
+				return err
 			}
 			slog.Info("crawl task using cached content (partial, needs AI)",
 				"article_id", p.ArticleID,
@@ -194,21 +187,16 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 			"article_id", p.ArticleID,
 			"duration_ms", time.Since(start).Milliseconds(),
 		)
-		source := derefOrDefault(article.SiteName, "web")
-		aiTask := NewAIProcessTask(
-			p.ArticleID, p.TaskID, p.UserID,
-			derefOrEmpty(article.Title), *article.MarkdownContent,
-			source, derefOrEmpty(article.Author),
-		)
-		// Enqueue AI BEFORE marking crawl finished — if enqueue fails, task
-		// retries and re-enters this path instead of becoming an orphan.
-		if _, enqErr := h.asynqClient.EnqueueContext(ctx, aiTask); enqErr != nil {
-			return fmt.Errorf("enqueue ai task (client content): %w", enqErr)
-		}
-		if err := h.taskRepo.SetCrawlFinished(ctx, p.TaskID); err != nil {
-			return fmt.Errorf("client content: set crawl finished: %w", err)
-		}
-		return nil
+		return h.aiHandoff().enqueue(ctx, crawlAIHandoffRequest{
+			payload:             p,
+			title:               derefOrEmpty(article.Title),
+			markdown:            *article.MarkdownContent,
+			source:              derefOrDefault(article.SiteName, "web"),
+			author:              derefOrEmpty(article.Author),
+			finishBeforeEnqueue: false,
+			setFinishedLabel:    "client content: set crawl finished",
+			enqueueLabel:        "enqueue ai task (client content)",
+		})
 	}
 
 	// --- Normal path: call Reader, fallback to Jina ---
@@ -273,18 +261,17 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	if source == "" {
 		source = "web"
 	}
-	aiTask := NewAIProcessTask(
-		p.ArticleID, p.TaskID, p.UserID,
-		title, markdown,
-		source, result.Metadata.Author,
-	)
-	// Enqueue AI BEFORE marking crawl finished — prevents orphaned tasks
-	// if enqueue fails (task retries will re-enter the normal scrape path).
-	if _, err := h.asynqClient.EnqueueContext(ctx, aiTask); err != nil {
-		return fmt.Errorf("enqueue ai task: %w", err)
-	}
-	if err := h.taskRepo.SetCrawlFinished(ctx, p.TaskID); err != nil {
-		return fmt.Errorf("set crawl finished: %w", err)
+	if err := h.aiHandoff().enqueue(ctx, crawlAIHandoffRequest{
+		payload:             p,
+		title:               title,
+		markdown:            markdown,
+		source:              source,
+		author:              result.Metadata.Author,
+		finishBeforeEnqueue: false,
+		setFinishedLabel:    "set crawl finished",
+		enqueueLabel:        "enqueue ai task",
+	}); err != nil {
+		return err
 	}
 
 	logPipelineSucceeded(currentStage, currentProvider, p.TaskID, p.ArticleID, p.UserID, p.URL, time.Since(start))
