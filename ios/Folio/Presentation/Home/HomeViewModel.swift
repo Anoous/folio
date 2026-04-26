@@ -55,8 +55,19 @@ final class HomeViewModel {
     private let apiClient: APIClient
     private let searchIndexCoordinator: SearchIndexCoordinator
 
+    enum KnowledgePanelKind {
+        case spark
+        case learn
+    }
+
     var articles: [Article] = []
     var echoCards: [EchoCardDTO] = []
+    var activeKnowledgePanel: KnowledgePanelKind?
+    var isKnowledgeLoading = false
+    var sparkInsights: [SparkInsightDTO] = []
+    var learnSummary: String?
+    var learnItems: [LearnItemDTO] = []
+    var knowledgeError: String?
 
     var groupedArticles: [(group: TimeGroup, articles: [Article])] {
         TimeGroup.groupArticles(articles)
@@ -349,6 +360,7 @@ final class HomeViewModel {
     }
 
     func submitRAGQuery(_ question: String) {
+        clearKnowledge()
         ragStreamTask?.cancel()
         ragStreamTask = Task {
             try? await Task.sleep(for: .seconds(1))
@@ -430,6 +442,47 @@ final class HomeViewModel {
         ragFollowupSuggestions = []
         ragStreamTask?.cancel()
         ragStreamTask = nil
+    }
+
+    func loadSpark(prompt: String = "") async {
+        clearRAG()
+        activeKnowledgePanel = .spark
+        isKnowledgeLoading = true
+        knowledgeError = nil
+        sparkInsights = []
+        do {
+            let response = try await apiClient.knowledgeSpark(prompt: prompt)
+            sparkInsights = response.insights
+        } catch {
+            knowledgeError = (error as? UserFacingError)?.userMessage ?? error.localizedDescription
+        }
+        isKnowledgeLoading = false
+    }
+
+    func loadLearn(prompt: String = "") async {
+        clearRAG()
+        activeKnowledgePanel = .learn
+        isKnowledgeLoading = true
+        knowledgeError = nil
+        learnSummary = nil
+        learnItems = []
+        do {
+            let response = try await apiClient.knowledgeLearn(prompt: prompt)
+            learnSummary = response.summary
+            learnItems = response.items
+        } catch {
+            knowledgeError = (error as? UserFacingError)?.userMessage ?? error.localizedDescription
+        }
+        isKnowledgeLoading = false
+    }
+
+    func clearKnowledge() {
+        activeKnowledgePanel = nil
+        isKnowledgeLoading = false
+        sparkInsights = []
+        learnSummary = nil
+        learnItems = []
+        knowledgeError = nil
     }
 
     // MARK: - Private

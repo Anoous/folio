@@ -262,6 +262,68 @@ final class HomeViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testLoadSpark_storesInsights() async throws {
+        let (apiClient, keychainManager) = try makeAuthenticatedAPIClient()
+        defer { try? keychainManager.clearTokens() }
+
+        HomeViewModelMockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/knowledge/spark")
+            let payload = """
+            {
+              "insights": [
+                {
+                  "insight": "Insight one",
+                  "why_it_matters": "Why one",
+                  "source_ids": ["a1", "a2"],
+                  "followup_question": "Follow one?"
+                }
+              ]
+            }
+            """.data(using: .utf8)!
+            return (payload, self.makeResponse(statusCode: 200))
+        }
+
+        let vm = HomeViewModel(context: context, isAuthenticated: true, apiClient: apiClient)
+        await vm.loadSpark(prompt: "找连接")
+
+        XCTAssertEqual(vm.sparkInsights.count, 1)
+        XCTAssertEqual(vm.sparkInsights.first?.insight, "Insight one")
+        XCTAssertNil(vm.knowledgeError)
+    }
+
+    @MainActor
+    func testLoadLearn_storesStudyPack() async throws {
+        let (apiClient, keychainManager) = try makeAuthenticatedAPIClient()
+        defer { try? keychainManager.clearTokens() }
+
+        HomeViewModelMockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/knowledge/learn")
+            let payload = """
+            {
+              "summary": "Learn summary",
+              "items": [
+                {
+                  "type": "concept",
+                  "title": "Concept one",
+                  "content": "Content one",
+                  "source_ids": ["a1"]
+                }
+              ]
+            }
+            """.data(using: .utf8)!
+            return (payload, self.makeResponse(statusCode: 200))
+        }
+
+        let vm = HomeViewModel(context: context, isAuthenticated: true, apiClient: apiClient)
+        await vm.loadLearn(prompt: "帮我复习")
+
+        XCTAssertEqual(vm.learnSummary, "Learn summary")
+        XCTAssertEqual(vm.learnItems.count, 1)
+        XCTAssertEqual(vm.learnItems.first?.title, "Concept one")
+        XCTAssertNil(vm.knowledgeError)
+    }
+
+    @MainActor
     func testArchiveArticle_setsToast() throws {
         let a = Article(url: "https://example.com/archive-toast", title: "Archive Toast")
         context.insert(a)

@@ -50,6 +50,52 @@ def poll_until_done(
     )
 
 
+def poll_many_until_done(
+    client: FolioAPIClient,
+    task_ids: list[str],
+    *,
+    timeout: float = 180.0,
+    interval: float = 2.0,
+) -> dict[str, dict]:
+    """Poll multiple tasks until all of them reach a terminal status."""
+    pending = set(task_ids)
+    results: dict[str, dict] = {}
+    last_status: dict[str, str | None] = {task_id: None for task_id in task_ids}
+    deadline = time.monotonic() + timeout
+
+    while pending and time.monotonic() < deadline:
+        for task_id in list(pending):
+            resp = client.get_task(task_id)
+            assert resp.status_code == 200, (
+                f"GET /tasks/{task_id} returned {resp.status_code}: {resp.text}\n"
+                "Hint: is the task ID valid? Was the article submitted correctly?"
+            )
+            body = resp.json()
+            status = body.get("status")
+            last_status[task_id] = status
+
+            if status in TERMINAL_STATUSES:
+                results[task_id] = body
+                pending.remove(task_id)
+
+        if pending:
+            time.sleep(interval)
+
+    if pending:
+        remaining = {task_id: last_status[task_id] for task_id in sorted(pending)}
+        raise AssertionError(
+            f"{len(pending)} task(s) did not complete within {timeout}s. "
+            f"Last statuses: {remaining}\n"
+            "Possible causes:\n"
+            "  - AI worker throughput is lower than expected for the benchmark corpus\n"
+            "  - Redis/asynq worker is not running\n"
+            "  - AI service is down or unreachable\n"
+            "Hint: check docker compose logs for the api and worker."
+        )
+
+    return results
+
+
 def submit_and_wait(
     client: FolioAPIClient,
     url: str,

@@ -41,6 +41,7 @@ type Article struct {
 	Language          *string       `json:"language,omitempty"`
 	CategoryID        *string       `json:"category_id,omitempty"`
 	Summary           *string       `json:"summary,omitempty"`
+	SearchSnippet     *string       `json:"search_snippet,omitempty"`
 	KeyPoints         []string      `json:"key_points"`
 	AIConfidence      *float64      `json:"ai_confidence,omitempty"`
 	Status            ArticleStatus `json:"status"`

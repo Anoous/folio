@@ -26,17 +26,19 @@ const (
 
 // RAGService orchestrates question-answering over a user's saved articles.
 type RAGService struct {
-	ragRepo  *repository.RAGRepo
-	userRepo *repository.UserRepo
-	aiClient client.Analyzer
+	ragRepo          *repository.RAGRepo
+	userRepo         *repository.UserRepo
+	aiClient         client.Analyzer
+	knowledgeService *KnowledgeService
 }
 
 // NewRAGService creates a new RAGService.
-func NewRAGService(ragRepo *repository.RAGRepo, userRepo *repository.UserRepo, aiClient client.Analyzer) *RAGService {
+func NewRAGService(ragRepo *repository.RAGRepo, userRepo *repository.UserRepo, aiClient client.Analyzer, knowledgeService *KnowledgeService) *RAGService {
 	return &RAGService{
-		ragRepo:  ragRepo,
-		userRepo: userRepo,
-		aiClient: aiClient,
+		ragRepo:          ragRepo,
+		userRepo:         userRepo,
+		aiClient:         aiClient,
+		knowledgeService: knowledgeService,
 	}
 }
 
@@ -60,30 +62,10 @@ func (s *RAGService) Query(ctx context.Context, userID, question, conversationID
 		}, nil
 	}
 
-	// 3. Token budget — decide which articles to include in the prompt.
-	articles = s.applyTokenBudget(ctx, userID, question, articles)
-
-	// 4. Load conversation history (if continuing a conversation).
-	var history []domain.RAGMessage
-	if conversationID != "" {
-		history, err = s.ragRepo.GetConversationMessages(ctx, conversationID, ragHistoryLimit)
-		if err != nil {
-			slog.Warn("failed to load conversation history", "conversation_id", conversationID, "error", err)
-			history = nil
-		}
-	}
-
-	// 5. Sanitize question.
 	question = strings.TrimSpace(client.SanitizeField(question))
-
-	// 6. Build prompts.
-	systemPrompt := buildRAGSystemPrompt()
-	userPrompt := buildRAGUserPrompt(articles, history, question)
-
-	// 7. Call AI.
-	ragResult, err := s.aiClient.GenerateRAGAnswer(ctx, systemPrompt, userPrompt)
+	knowledgeAnswer, err := s.knowledgeService.Ask(ctx, userID, question)
 	if err != nil {
-		slog.Error("rag ai call failed", "user_id", userID, "error", err)
+		slog.Error("knowledge ask failed", "user_id", userID, "error", err)
 		return &domain.RAGResponse{
 			Answer:      "抱歉，回答生成失败，请重试。",
 			Sources:     nil,
@@ -91,8 +73,12 @@ func (s *RAGService) Query(ctx context.Context, userID, question, conversationID
 		}, nil
 	}
 
-	// 8. Map cited_indices to actual article sources.
-	sources := mapCitedSources(ragResult.CitedIndices, articles)
+	ragResult := &client.RAGResult{
+		Answer:              knowledgeAnswer.Answer,
+		CitedIndices:        knowledgeAnswer.CitedIndices,
+		FollowupSuggestions: knowledgeAnswer.FollowupSuggestions,
+	}
+	sources := knowledgeSourcesToRAGSources(knowledgeAnswer.Sources)
 
 	// 9. Save conversation.
 	conversationID, err = s.saveConversation(ctx, userID, conversationID, question, ragResult, sources)
@@ -107,10 +93,10 @@ func (s *RAGService) Query(ctx context.Context, userID, question, conversationID
 	}
 
 	return &domain.RAGResponse{
-		Answer:              ragResult.Answer,
+		Answer:              knowledgeAnswer.Answer,
 		Sources:             sources,
-		SourceCount:         len(articles),
-		FollowupSuggestions: ragResult.FollowupSuggestions,
+		SourceCount:         len(sources),
+		FollowupSuggestions: knowledgeAnswer.FollowupSuggestions,
 		ConversationID:      conversationID,
 	}, nil
 }
@@ -140,20 +126,13 @@ func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversa
 		return
 	}
 
-	articles = s.applyTokenBudget(ctx, userID, question, articles)
-
-	var history []domain.RAGMessage
-	if conversationID != "" {
-		history, err = s.ragRepo.GetConversationMessages(ctx, conversationID, ragHistoryLimit)
-		if err != nil {
-			slog.Warn("failed to load conversation history", "conversation_id", conversationID, "error", err)
-			history = nil
-		}
-	}
-
 	question = strings.TrimSpace(client.SanitizeField(question))
-	systemPrompt := buildRAGStreamSystemPrompt()
-	userPrompt := buildRAGUserPrompt(articles, history, question)
+	knowledgeAnswer, err := s.knowledgeService.Ask(ctx, userID, question)
+	if err != nil {
+		events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "answer generation failed"}
+		return
+	}
+	sources := knowledgeSourcesToRAGSources(knowledgeAnswer.Sources)
 
 	// Create conversation early so we can send conversation_id in sources event
 	if conversationID == "" {
@@ -171,8 +150,8 @@ func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversa
 	select {
 	case events <- domain.RAGStreamEvent{
 		Type:           "sources",
-		Sources:        articles,
-		SourceCount:    len(articles),
+		Sources:        sources,
+		SourceCount:    len(sources),
 		ConversationID: conversationID,
 	}:
 	case <-ctx.Done():
@@ -180,43 +159,19 @@ func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversa
 	}
 
 	// Phase 2: Streaming answer generation
-
-	tokens := make(chan string, 64)
-	var fullAnswer string
-	var streamErr error
-
-	go func() {
-		fullAnswer, streamErr = s.aiClient.GenerateRAGAnswerStream(ctx, systemPrompt, userPrompt, tokens)
-	}()
-
-	for token := range tokens {
+	fullAnswer := knowledgeAnswer.Answer
+	for _, r := range fullAnswer {
 		select {
-		case events <- domain.RAGStreamEvent{Type: "delta", Text: token}:
+		case events <- domain.RAGStreamEvent{Type: "delta", Text: string(r)}:
 		case <-ctx.Done():
 			return
 		}
 	}
 
-	if streamErr != nil {
-		slog.Error("rag stream failed", "user_id", userID, "error", streamErr)
-		select {
-		case events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "answer generation failed"}:
-		case <-ctx.Done():
-		}
-		return
-	}
-
 	// Phase 3: Post-processing
+	citedIndices := knowledgeAnswer.CitedIndices
+	followups := knowledgeAnswer.FollowupSuggestions
 
-	citedIndices := extractCitedIndices(fullAnswer)
-
-	followups, err := s.aiClient.GenerateFollowups(ctx, question, fullAnswer)
-	if err != nil {
-		slog.Warn("failed to generate followups", "error", err)
-		followups = []string{}
-	}
-
-	sources := mapCitedSources(citedIndices, articles)
 	if _, saveErr := s.saveConversation(ctx, userID, conversationID, question, &client.RAGResult{
 		Answer:              fullAnswer,
 		CitedIndices:        citedIndices,
@@ -237,6 +192,21 @@ func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversa
 	}:
 	case <-ctx.Done():
 	}
+}
+
+func knowledgeSourcesToRAGSources(sources []KnowledgeSource) []domain.RAGSource {
+	result := make([]domain.RAGSource, 0, len(sources))
+	for _, source := range sources {
+		result = append(result, domain.RAGSource{
+			ArticleID: source.ArticleID,
+			Title:     source.Title,
+			SiteName:  source.SiteName,
+			Summary:   source.Summary,
+			CreatedAt: source.CreatedAt,
+			Relevance: source.Relevance,
+		})
+	}
+	return result
 }
 
 // checkQuota verifies the user hasn't exceeded their monthly RAG quota.
@@ -597,4 +567,3 @@ func derefString(s *string) string {
 	}
 	return *s
 }
-

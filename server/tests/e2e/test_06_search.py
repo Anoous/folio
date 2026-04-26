@@ -3,6 +3,7 @@
 import pytest
 
 from helpers.assertions import assert_pagination, assert_error_response
+from helpers.polling import poll_until_done
 
 
 class TestSearch:
@@ -40,3 +41,22 @@ class TestSearch:
         body = resp.json()
         assert body["pagination"]["page"] == 1
         assert body["pagination"]["per_page"] == 5
+
+    def test_search_falls_back_to_evidence_retrieval(self, fresh_api):
+        """Default search should still find evidence that only exists in the body."""
+        content = (
+            "Routine operations note for the team. "
+            "The hidden anchor phrase is lunar spool latency pattern."
+        )
+        resp = fresh_api.submit_manual(content, title="Operations note")
+        assert resp.status_code == 202
+        payload = resp.json()
+        poll_until_done(fresh_api, payload["task_id"], timeout=60)
+
+        search_resp = fresh_api.search("lunar spool latency pattern")
+        assert search_resp.status_code == 200
+        body = search_resp.json()
+        assert_pagination(body)
+        hits = [article for article in body["data"] if article["id"] == payload["article_id"]]
+        assert hits
+        assert "lunar spool latency pattern" in hits[0].get("search_snippet", "")

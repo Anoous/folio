@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/hibiken/asynq"
 
+	"folio-server/internal/client"
 	"folio-server/internal/domain"
 	"folio-server/internal/repository"
 	"folio-server/internal/worker"
@@ -17,13 +19,15 @@ import (
 // --- Mock implementations ---
 
 type mockArticleRepo struct {
-	createFn     func(ctx context.Context, p repository.CreateArticleParams) (*domain.Article, error)
-	lastCreateP  *repository.CreateArticleParams // captures the last CreateArticleParams passed
-	getByIDFn    func(ctx context.Context, id string) (*domain.Article, error)
-	listByUserFn func(ctx context.Context, p repository.ListArticlesParams) (*repository.ListArticlesResult, error)
-	updateFn     func(ctx context.Context, id string, userID string, p repository.UpdateArticleParams) error
-	deleteFn     func(ctx context.Context, id string, userID string) error
-	searchFn     func(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error)
+	createFn               func(ctx context.Context, p repository.CreateArticleParams) (*domain.Article, error)
+	lastCreateP            *repository.CreateArticleParams // captures the last CreateArticleParams passed
+	getByIDFn              func(ctx context.Context, id string) (*domain.Article, error)
+	listByUserFn           func(ctx context.Context, p repository.ListArticlesParams) (*repository.ListArticlesResult, error)
+	updateFn               func(ctx context.Context, id string, userID string, p repository.UpdateArticleParams) error
+	deleteFn               func(ctx context.Context, id string, userID string) error
+	searchFn               func(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error)
+	listKnowledgeDocsFn    func(ctx context.Context, userID string) ([]domain.KnowledgeDocument, error)
+	broadRecallKnowledgeFn func(ctx context.Context, userID string, keywords []string, limit int) ([]domain.KnowledgeDocument, error)
 }
 
 func (m *mockArticleRepo) Create(ctx context.Context, p repository.CreateArticleParams) (*domain.Article, error) {
@@ -78,6 +82,20 @@ func (m *mockArticleRepo) ExistsByUserAndClientID(ctx context.Context, userID, c
 }
 
 func (m *mockArticleRepo) BroadRecallArticles(ctx context.Context, userID string, keywords []string, limit int) ([]domain.Article, error) {
+	return nil, nil
+}
+
+func (m *mockArticleRepo) ListKnowledgeDocuments(ctx context.Context, userID string) ([]domain.KnowledgeDocument, error) {
+	if m.listKnowledgeDocsFn != nil {
+		return m.listKnowledgeDocsFn(ctx, userID)
+	}
+	return nil, nil
+}
+
+func (m *mockArticleRepo) BroadRecallKnowledgeDocuments(ctx context.Context, userID string, keywords []string, limit int) ([]domain.KnowledgeDocument, error) {
+	if m.broadRecallKnowledgeFn != nil {
+		return m.broadRecallKnowledgeFn(ctx, userID, keywords, limit)
+	}
 	return nil, nil
 }
 
@@ -150,6 +168,29 @@ type mockEnqueuer struct {
 	enqueueFn     func(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
 }
 
+type mockArticleAI struct {
+	expandFn func(ctx context.Context, question string) ([]string, error)
+	rerankFn func(ctx context.Context, question string, candidates []client.RerankCandidate) ([]client.RerankResult, error)
+}
+
+func (m *mockArticleAI) ExpandQuery(ctx context.Context, question string) ([]string, error) {
+	if m.expandFn != nil {
+		return m.expandFn(ctx, question)
+	}
+	return []string{}, nil
+}
+
+func (m *mockArticleAI) RerankArticles(ctx context.Context, question string, candidates []client.RerankCandidate) ([]client.RerankResult, error) {
+	if m.rerankFn != nil {
+		return m.rerankFn(ctx, question, candidates)
+	}
+	results := make([]client.RerankResult, 0, len(candidates))
+	for idx := range candidates {
+		results = append(results, client.RerankResult{Index: idx + 1})
+	}
+	return results, nil
+}
+
 func (m *mockEnqueuer) EnqueueContext(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
 	m.enqueuedTasks = append(m.enqueuedTasks, task)
 	if m.enqueueFn != nil {
@@ -168,13 +209,14 @@ func newTestArticleService(
 	enqueuer *mockEnqueuer,
 ) *ArticleService {
 	return &ArticleService{
-		articleRepo:   articleRepo,
-		taskRepo:      taskRepo,
-		tagRepo:       tagRepo,
-		categoryRepo:  categoryRepo,
-		quotaService:  quota,
-		asynqClient:   enqueuer,
-		broadRecaller: articleRepo,
+		articleRepo:       articleRepo,
+		taskRepo:          taskRepo,
+		tagRepo:           tagRepo,
+		categoryRepo:      categoryRepo,
+		quotaService:      quota,
+		asynqClient:       enqueuer,
+		evidenceRepo:      articleRepo,
+		evidenceRetriever: articleRepo,
 	}
 }
 
@@ -1136,5 +1178,175 @@ func TestRetryArticle_DeletedArticleReturnsNotFound(t *testing.T) {
 	}
 	if resp != nil {
 		t.Fatalf("RetryArticle response = %#v, want nil", resp)
+	}
+}
+
+func TestSearch_PreservesKeywordResultsWhenDirectMatchExists(t *testing.T) {
+	expected := domain.Article{ID: "direct-hit", UserID: "user-1", KeyPoints: []string{}}
+	artRepo := &mockArticleRepo{
+		searchFn: func(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error) {
+			return &repository.ListArticlesResult{
+				Articles: []domain.Article{expected},
+				Total:    1,
+			}, nil
+		},
+		listKnowledgeDocsFn: func(ctx context.Context, userID string) ([]domain.KnowledgeDocument, error) {
+			return []domain.KnowledgeDocument{
+				{
+					ArticleID:        "direct-hit",
+					Title:            "Direct hit",
+					Summary:          "Direct search summary mentions direct evidence.",
+					KeyPoints:        []string{},
+					SemanticKeywords: []string{"direct"},
+					MarkdownContent:  "Direct evidence stays attached without changing result ordering.",
+					CreatedAt:        time.Date(2026, 4, 17, 12, 0, 0, 0, time.UTC),
+				},
+				{
+					ArticleID:        "evidence-only",
+					Title:            "Evidence only",
+					Summary:          "This should not be added when keyword search already has results.",
+					KeyPoints:        []string{},
+					SemanticKeywords: []string{"direct"},
+					MarkdownContent:  "Direct evidence appears here too, but this article must not be mixed into direct search results.",
+					CreatedAt:        time.Date(2026, 4, 16, 12, 0, 0, 0, time.UTC),
+				},
+			}, nil
+		},
+	}
+
+	svc := newTestArticleService(
+		artRepo,
+		&mockTaskRepo{},
+		&mockTagRepo{},
+		&mockCategoryRepo{},
+		&mockQuotaService{},
+		&mockEnqueuer{},
+	)
+
+	result, err := svc.Search(context.Background(), "user-1", "direct evidence", 1, 20)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if result.Total != 1 || len(result.Articles) != 1 || result.Articles[0].ID != expected.ID {
+		t.Fatalf("Search() result = %+v, want direct keyword hit", result)
+	}
+	if result.Articles[0].SearchSnippet == nil || !strings.Contains(strings.ToLower(*result.Articles[0].SearchSnippet), "direct evidence") {
+		snippet := "<nil>"
+		if result.Articles[0].SearchSnippet != nil {
+			snippet = *result.Articles[0].SearchSnippet
+		}
+		t.Fatalf("Search() snippet = %q, want evidence snippet on direct hit", snippet)
+	}
+}
+
+func TestSearch_FallsBackToEvidenceRetrievalWhenDirectMatchMisses(t *testing.T) {
+	articleID := "evidence-hit"
+	article := &domain.Article{
+		ID:        articleID,
+		UserID:    "user-1",
+		Title:     strPtr("Operations note"),
+		Summary:   strPtr("A short note about routine operations."),
+		KeyPoints: []string{},
+		Status:    domain.ArticleStatusReady,
+	}
+
+	artRepo := &mockArticleRepo{
+		searchFn: func(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error) {
+			return &repository.ListArticlesResult{Articles: []domain.Article{}, Total: 0}, nil
+		},
+		getByIDFn: func(ctx context.Context, id string) (*domain.Article, error) {
+			if id == articleID {
+				return article, nil
+			}
+			return nil, nil
+		},
+		listKnowledgeDocsFn: func(ctx context.Context, userID string) ([]domain.KnowledgeDocument, error) {
+			return []domain.KnowledgeDocument{
+				{
+					ArticleID:        articleID,
+					Title:            "Operations note",
+					Summary:          "A short note about routine operations.",
+					KeyPoints:        []string{"routine operations"},
+					SemanticKeywords: []string{"operations", "routine"},
+					MarkdownContent:  "Opening sentence about routine operations. The hidden anchor phrase is lunar spool latency pattern.",
+					CreatedAt:        time.Date(2026, 4, 17, 12, 0, 0, 0, time.UTC),
+				},
+			}, nil
+		},
+	}
+
+	svc := newTestArticleService(
+		artRepo,
+		&mockTaskRepo{},
+		&mockTagRepo{},
+		&mockCategoryRepo{},
+		&mockQuotaService{},
+		&mockEnqueuer{},
+	)
+
+	result, err := svc.Search(context.Background(), "user-1", "lunar spool latency pattern", 1, 20)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if result.Total != 1 || len(result.Articles) != 1 || result.Articles[0].ID != articleID {
+		t.Fatalf("Search() result = %+v, want evidence fallback hit", result)
+	}
+	if result.Articles[0].SearchSnippet == nil || !strings.Contains(*result.Articles[0].SearchSnippet, "lunar spool latency pattern") {
+		t.Fatalf("Search() snippet = %v, want evidence snippet with query phrase", result.Articles[0].SearchSnippet)
+	}
+}
+
+func TestSemanticSearch_ReusesEvidenceCandidates(t *testing.T) {
+	articleID := "semantic-hit"
+	article := &domain.Article{
+		ID:        articleID,
+		UserID:    "user-1",
+		Title:     strPtr("Calm product note"),
+		Summary:   strPtr("A note about calm software defaults."),
+		KeyPoints: []string{},
+		Status:    domain.ArticleStatusReady,
+	}
+
+	artRepo := &mockArticleRepo{
+		getByIDFn: func(ctx context.Context, id string) (*domain.Article, error) {
+			if id == articleID {
+				return article, nil
+			}
+			return nil, nil
+		},
+		listKnowledgeDocsFn: func(ctx context.Context, userID string) ([]domain.KnowledgeDocument, error) {
+			return []domain.KnowledgeDocument{
+				{
+					ArticleID:        articleID,
+					Title:            "Calm product note",
+					Summary:          "A note about calm software defaults.",
+					KeyPoints:        []string{"quiet defaults reduce cognitive load"},
+					SemanticKeywords: []string{"calm software", "quiet defaults", "automation"},
+					MarkdownContent:  "Calm software removes spectacle and keeps the user in flow by making the right thing happen quietly in the background.",
+					CreatedAt:        time.Date(2026, 4, 17, 12, 0, 0, 0, time.UTC),
+				},
+			}, nil
+		},
+	}
+
+	svc := newTestArticleService(
+		artRepo,
+		&mockTaskRepo{},
+		&mockTagRepo{},
+		&mockCategoryRepo{},
+		&mockQuotaService{},
+		&mockEnqueuer{},
+	)
+	svc.aiClient = &mockArticleAI{}
+
+	result, err := svc.SemanticSearch(context.Background(), "user-1", "quiet defaults that stay in the background", 1, 20)
+	if err != nil {
+		t.Fatalf("SemanticSearch() error = %v", err)
+	}
+	if result.Total != 1 || len(result.Articles) != 1 || result.Articles[0].ID != articleID {
+		t.Fatalf("SemanticSearch() result = %+v, want evidence-ranked candidate", result)
+	}
+	if result.Articles[0].SearchSnippet == nil || !strings.Contains(*result.Articles[0].SearchSnippet, "quiet defaults") {
+		t.Fatalf("SemanticSearch() snippet = %v, want evidence snippet from shared retrieval", result.Articles[0].SearchSnippet)
 	}
 }

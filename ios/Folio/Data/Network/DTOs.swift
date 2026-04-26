@@ -308,6 +308,47 @@ struct RAGThreadEntry {
     let citedIndices: [Int]
 }
 
+// MARK: - Knowledge DTOs
+
+struct SparkInsightDTO: Codable, Identifiable {
+    var id: String { insight + sourceIDs.joined(separator: "|") }
+    let insight: String
+    let whyItMatters: String
+    let sourceIDs: [String]
+    let followupQuestion: String
+
+    enum CodingKeys: String, CodingKey {
+        case insight
+        case whyItMatters
+        case sourceIDs = "sourceIds"
+        case followupQuestion
+    }
+}
+
+struct SparkResponse: Codable {
+    let insights: [SparkInsightDTO]
+}
+
+struct LearnItemDTO: Codable, Identifiable {
+    var id: String { title + sourceIDs.joined(separator: "|") }
+    let type: String
+    let title: String
+    let content: String
+    let sourceIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case title
+        case content
+        case sourceIDs = "sourceIds"
+    }
+}
+
+struct LearnResponse: Codable {
+    let summary: String
+    let items: [LearnItemDTO]
+}
+
 // MARK: - Stats DTOs
 
 struct MonthlyStatsResponse: Codable {

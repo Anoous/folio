@@ -48,6 +48,7 @@ func main() {
 	tagRepo := repository.NewTagRepo(pool)
 	categoryRepo := repository.NewCategoryRepo(pool)
 	taskRepo := repository.NewTaskRepo(pool)
+	knowledgeRepo := repository.NewKnowledgeRepo(pool)
 
 	// External clients
 	readerClient := client.NewReaderClient(cfg.ReaderURL)
@@ -139,10 +140,13 @@ func main() {
 	echoService := service.NewEchoService(echoRepo, userRepo)
 	echoAPIHandler := handler.NewEchoHandler(echoService)
 
+	knowledgeService := service.NewKnowledgeServiceWithRetrieval(knowledgeRepo, aiAnalyzer, knowledgeRepo)
+
 	// RAG
 	ragRepo := repository.NewRAGRepo(pool)
-	ragService := service.NewRAGService(ragRepo, userRepo, aiAnalyzer)
+	ragService := service.NewRAGService(ragRepo, userRepo, aiAnalyzer, knowledgeService)
 	ragAPIHandler := handler.NewRAGHandler(ragService)
+	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeService)
 
 	// Relations
 	relationRepo := repository.NewRelationRepo(pool)
@@ -165,6 +169,7 @@ func main() {
 		EchoHandler:         echoAPIHandler,
 		HighlightHandler:    highlightHandler,
 		RAGHandler:          ragAPIHandler,
+		KnowledgeHandler:    knowledgeHandler,
 		StatsHandler:        statsHandler,
 		DeviceHandler:       deviceHandler,
 		RelationHandler:     relationHandler,

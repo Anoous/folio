@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/hibiken/asynq"
 
@@ -18,19 +19,16 @@ type queryExpander interface {
 	RerankArticles(ctx context.Context, question string, candidates []client.RerankCandidate) ([]client.RerankResult, error)
 }
 
-type broadRecaller interface {
-	BroadRecallArticles(ctx context.Context, userID string, keywords []string, limit int) ([]domain.Article, error)
-}
-
 type ArticleService struct {
-	articleRepo   articleCreator
-	taskRepo      taskCreator
-	tagRepo       tagAttacher
-	categoryRepo  categoryGetter
-	quotaService  quotaChecker
-	asynqClient   taskEnqueuer
-	aiClient      queryExpander
-	broadRecaller broadRecaller
+	articleRepo       articleCreator
+	taskRepo          taskCreator
+	tagRepo           tagAttacher
+	categoryRepo      categoryGetter
+	quotaService      quotaChecker
+	asynqClient       taskEnqueuer
+	aiClient          queryExpander
+	evidenceRepo      knowledgeDocumentLister
+	evidenceRetriever knowledgeBroadRecaller
 }
 
 func NewArticleService(
@@ -43,14 +41,15 @@ func NewArticleService(
 	aiClient client.Analyzer,
 ) *ArticleService {
 	return &ArticleService{
-		articleRepo:   articleRepo,
-		taskRepo:      taskRepo,
-		tagRepo:       tagRepo,
-		categoryRepo:  categoryRepo,
-		quotaService:  quotaService,
-		asynqClient:   asynqClient,
-		aiClient:      aiClient,
-		broadRecaller: articleRepo,
+		articleRepo:       articleRepo,
+		taskRepo:          taskRepo,
+		tagRepo:           tagRepo,
+		categoryRepo:      categoryRepo,
+		quotaService:      quotaService,
+		asynqClient:       asynqClient,
+		aiClient:          aiClient,
+		evidenceRepo:      articleRepo,
+		evidenceRetriever: articleRepo,
 	}
 }
 
@@ -287,7 +286,19 @@ func (s *ArticleService) Delete(ctx context.Context, userID, articleID string) e
 }
 
 func (s *ArticleService) Search(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error) {
-	return s.articleRepo.Search(ctx, userID, query, page, perPage)
+	result, err := s.articleRepo.Search(ctx, userID, query, page, perPage)
+	if err != nil {
+		return nil, err
+	}
+	trimmedQuery := strings.TrimSpace(query)
+	if result.Total > 0 {
+		s.attachEvidenceSnippets(ctx, userID, trimmedQuery, result.Articles)
+		return result, nil
+	}
+	if trimmedQuery == "" {
+		return result, nil
+	}
+	return s.searchWithEvidence(ctx, userID, trimmedQuery, page, perPage)
 }
 
 // RetryArticle re-enqueues a failed article for processing.
@@ -350,21 +361,13 @@ func (s *ArticleService) RetryArticle(ctx context.Context, userID, articleID str
 
 // SemanticSearch does LLM-powered search: expand query → broad recall → LLM rerank.
 func (s *ArticleService) SemanticSearch(ctx context.Context, userID, question string, page, perPage int) (*repository.ListArticlesResult, error) {
-	// 1. Expand query
-	keywords, err := s.aiClient.ExpandQuery(ctx, question)
-	if err != nil {
-		slog.Warn("semantic search: query expansion failed, falling back to keyword", "error", err)
-		return s.Search(ctx, userID, question, page, perPage)
-	}
-
-	// 2. Broad recall
-	candidates, err := s.broadRecaller.BroadRecallArticles(ctx, userID, keywords, 50)
+	candidates, err := s.searchEvidenceCandidates(ctx, userID, question, 50)
 	if err != nil || len(candidates) == 0 {
-		slog.Warn("semantic search: broad recall failed, falling back to keyword", "error", err)
+		slog.Warn("semantic search: evidence retrieval failed, falling back to keyword", "error", err)
 		return s.Search(ctx, userID, question, page, perPage)
 	}
 
-	// 3. LLM rerank
+	// 2. LLM rerank
 	rerankCandidates := make([]client.RerankCandidate, len(candidates))
 	for i, a := range candidates {
 		summary := ""
@@ -386,19 +389,10 @@ func (s *ArticleService) SemanticSearch(ctx context.Context, userID, question st
 	ranked, err := s.aiClient.RerankArticles(ctx, question, rerankCandidates)
 	if err != nil {
 		slog.Warn("semantic search: rerank failed, returning recall order", "error", err)
-		total := len(candidates)
-		start := (page - 1) * perPage
-		end := start + perPage
-		if start > total {
-			start = total
-		}
-		if end > total {
-			end = total
-		}
-		return &repository.ListArticlesResult{Articles: candidates[start:end], Total: total}, nil
+		return paginateArticleResults(candidates, page, perPage), nil
 	}
 
-	// 4. Map ranked indices back
+	// 3. Map ranked indices back
 	reranked := make([]domain.Article, 0, len(ranked))
 	for _, r := range ranked {
 		idx := r.Index - 1
@@ -407,7 +401,86 @@ func (s *ArticleService) SemanticSearch(ctx context.Context, userID, question st
 		}
 	}
 
-	total := len(reranked)
+	return paginateArticleResults(reranked, page, perPage), nil
+}
+
+func (s *ArticleService) searchWithEvidence(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error) {
+	candidates, err := s.searchEvidenceCandidates(ctx, userID, query, max(page*perPage, 20))
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		return &repository.ListArticlesResult{Articles: []domain.Article{}, Total: 0}, nil
+	}
+	return paginateArticleResults(candidates, page, perPage), nil
+}
+
+func (s *ArticleService) searchEvidenceCandidates(ctx context.Context, userID, query string, limit int) ([]domain.Article, error) {
+	contextResult, err := s.retrieveEvidenceContext(ctx, userID, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	if contextResult == nil || contextResult.Insufficient || len(contextResult.Sources) == 0 {
+		return nil, nil
+	}
+
+	articles := make([]domain.Article, 0, len(contextResult.Sources))
+	for _, source := range contextResult.Sources {
+		article, err := s.articleRepo.GetByID(ctx, source.ArticleID)
+		if err != nil {
+			return nil, fmt.Errorf("get evidence article %s: %w", source.ArticleID, err)
+		}
+		if article == nil || article.DeletedAt != nil || article.UserID != userID {
+			continue
+		}
+		article.SearchSnippet = source.EvidenceSnippet
+		articles = append(articles, *article)
+	}
+
+	return articles, nil
+}
+
+func (s *ArticleService) attachEvidenceSnippets(ctx context.Context, userID, query string, articles []domain.Article) {
+	if len(articles) == 0 || strings.TrimSpace(query) == "" {
+		return
+	}
+
+	articleIndex := make(map[string]int, len(articles))
+	for idx, article := range articles {
+		articleIndex[article.ID] = idx
+	}
+
+	contextResult, err := s.retrieveEvidenceContext(ctx, userID, query, max(len(articles)*2, 20))
+	if err != nil {
+		slog.Warn("search: evidence snippet retrieval failed", "error", err)
+		return
+	}
+	if contextResult == nil || contextResult.Insufficient {
+		return
+	}
+
+	for _, source := range contextResult.Sources {
+		idx, ok := articleIndex[source.ArticleID]
+		if !ok {
+			continue
+		}
+		articles[idx].SearchSnippet = source.EvidenceSnippet
+	}
+}
+
+func (s *ArticleService) retrieveEvidenceContext(ctx context.Context, userID, query string, limit int) (*EvidenceContext, error) {
+	if s.evidenceRepo == nil {
+		return nil, nil
+	}
+
+	evidenceService := NewEvidenceService(s.evidenceRepo, s.aiClient, s.evidenceRetriever)
+	return evidenceService.Retrieve(ctx, userID, query, EvidenceRetrieveOptions{
+		MaxSources: max(limit, 20),
+	})
+}
+
+func paginateArticleResults(articles []domain.Article, page, perPage int) *repository.ListArticlesResult {
+	total := len(articles)
 	start := (page - 1) * perPage
 	end := start + perPage
 	if start > total {
@@ -416,5 +489,8 @@ func (s *ArticleService) SemanticSearch(ctx context.Context, userID, question st
 	if end > total {
 		end = total
 	}
-	return &repository.ListArticlesResult{Articles: reranked[start:end], Total: total}, nil
+	return &repository.ListArticlesResult{
+		Articles: articles[start:end],
+		Total:    total,
+	}
 }

@@ -25,6 +25,7 @@ type RouterDeps struct {
 	EchoHandler         *handler.EchoHandler
 	HighlightHandler    *handler.HighlightHandler
 	RAGHandler          *handler.RAGHandler
+	KnowledgeHandler    *handler.KnowledgeHandler
 	StatsHandler        *handler.StatsHandler
 	DeviceHandler       *handler.DeviceHandler
 	RelationHandler     *handler.RelationHandler
@@ -110,6 +111,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 			// RAG (question answering over saved articles)
 			r.Post("/rag/query", deps.RAGHandler.HandleQuery)
 			r.Post("/rag/query/stream", deps.RAGHandler.HandleQueryStream)
+			r.Post("/knowledge/spark", deps.KnowledgeHandler.HandleSpark)
+			r.Post("/knowledge/learn", deps.KnowledgeHandler.HandleLearn)
 
 			// Devices (push notification registration)
 			r.Post("/devices", deps.DeviceHandler.HandleRegister)

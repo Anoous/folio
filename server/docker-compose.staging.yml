@@ -91,6 +91,7 @@ services:
       - ./migrations/014_article_field_versions.up.sql:/docker-entrypoint-initdb.d/015_article_field_versions.sql
       - ./migrations/015_refresh_sessions.up.sql:/docker-entrypoint-initdb.d/016_refresh_sessions.sql
       - ./migrations/016_crawl_task_failure_metadata.up.sql:/docker-entrypoint-initdb.d/017_crawl_task_failure_metadata.sql
+      - ./migrations/017_knowledge_fts.up.sql:/docker-entrypoint-initdb.d/018_knowledge_fts.sql
     command: >
       postgres
         -c shared_buffers=64MB

@@ -4,6 +4,8 @@ struct SearchSuggestionsView: View {
     @Binding var searchText: String
     let recentSearches: [String]
     var onShowNoteSheet: () -> Void
+    var onShowSpark: () -> Void
+    var onShowLearn: () -> Void
 
     private var suggestedQuestions: [String] {
         [
@@ -53,7 +55,7 @@ struct SearchSuggestionsView: View {
                 }
 
                 // Suggested questions
-                Text("试试这样问")
+                Text("Ask Folio")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Color.folio.textTertiary)
                     .tracking(0.5)
@@ -72,6 +74,20 @@ struct SearchSuggestionsView: View {
                             .padding(.vertical, 10)
                     }
                 }
+
+                Text("Folio AI")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.folio.textTertiary)
+                    .tracking(0.5)
+                    .padding(.horizontal, Spacing.screenPadding)
+                    .padding(.top, 24)
+                    .padding(.bottom, 16)
+
+                HStack(spacing: 12) {
+                    quickActionCard(icon: "bolt.circle", title: "Spark", action: onShowSpark)
+                    quickActionCard(icon: "graduationcap", title: "Learn", action: onShowLearn)
+                }
+                .padding(.horizontal, Spacing.screenPadding)
 
                 // Quick actions
                 HStack(spacing: 12) {

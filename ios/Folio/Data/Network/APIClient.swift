@@ -639,6 +639,18 @@ final class APIClient: @unchecked Sendable {
         }
     }
 
+    // MARK: - Knowledge
+
+    func knowledgeSpark(prompt: String = "") async throws -> SparkResponse {
+        let body = ["prompt": prompt]
+        return try await request(method: "POST", path: "/api/v1/knowledge/spark", body: body)
+    }
+
+    func knowledgeLearn(prompt: String = "") async throws -> LearnResponse {
+        let body = ["prompt": prompt]
+        return try await request(method: "POST", path: "/api/v1/knowledge/learn", body: body)
+    }
+
     private func parseSSEStream(
         _ bytes: URLSession.AsyncBytes,
         continuation: AsyncThrowingStream<RAGStreamEvent, Error>.Continuation

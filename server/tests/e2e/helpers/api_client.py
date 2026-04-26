@@ -104,6 +104,20 @@ class FolioAPIClient:
     def get_related(self, article_id: str) -> httpx.Response:
         return self.get(f"/api/v1/articles/{article_id}/related")
 
+    def rag_query(self, question: str, conversation_id: str | None = None) -> httpx.Response:
+        payload = {"question": question}
+        if conversation_id is not None:
+            payload["conversation_id"] = conversation_id
+        return self.post("/api/v1/rag/query", json=payload)
+
+    def knowledge_spark(self, prompt: str | None = None) -> httpx.Response:
+        payload = {"prompt": prompt or ""}
+        return self.post("/api/v1/knowledge/spark", json=payload)
+
+    def knowledge_learn(self, prompt: str | None = None) -> httpx.Response:
+        payload = {"prompt": prompt or ""}
+        return self.post("/api/v1/knowledge/learn", json=payload)
+
     def list_tags(self) -> httpx.Response:
         return self.get("/api/v1/tags")
 

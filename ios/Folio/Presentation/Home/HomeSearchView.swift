@@ -41,6 +41,7 @@ struct HomeSearchView: View {
                                 searchViewModel?.searchText = ""
                             } else {
                                 viewModel.clearRAG()
+                                viewModel.clearKnowledge()
                                 handleSearchTextChange(newValue)
                             }
                         }
@@ -62,6 +63,7 @@ struct HomeSearchView: View {
                 Button("取消") {
                     searchText = ""
                     viewModel.clearRAG()
+                    viewModel.clearKnowledge()
                     onDismiss()
                 }
                 .font(.system(size: 16))
@@ -119,11 +121,44 @@ struct HomeSearchView: View {
                     )
                 }
             } else {
-                SearchSuggestionsView(
-                    searchText: $searchText,
-                    recentSearches: recentSearches,
-                    onShowNoteSheet: onShowNoteSheet
-                )
+                if viewModel.activeKnowledgePanel == .spark {
+                    if viewModel.isKnowledgeLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if let error = viewModel.knowledgeError {
+                        Text(error)
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.folio.textSecondary)
+                            .padding(Spacing.screenPadding)
+                    } else {
+                        KnowledgeSparkView(insights: viewModel.sparkInsights) { question in
+                            searchText = question
+                            onSaveRecentSearch(question)
+                        }
+                    }
+                } else if viewModel.activeKnowledgePanel == .learn {
+                    if viewModel.isKnowledgeLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if let error = viewModel.knowledgeError {
+                        Text(error)
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.folio.textSecondary)
+                            .padding(Spacing.screenPadding)
+                    } else if let summary = viewModel.learnSummary {
+                        KnowledgeLearnView(summary: summary, items: viewModel.learnItems)
+                    } else {
+                        Spacer()
+                    }
+                } else {
+                    SearchSuggestionsView(
+                        searchText: $searchText,
+                        recentSearches: recentSearches,
+                        onShowNoteSheet: onShowNoteSheet,
+                        onShowSpark: { Task { await viewModel.loadSpark() } },
+                        onShowLearn: { Task { await viewModel.loadLearn() } }
+                    )
+                }
             }
         }
     }
