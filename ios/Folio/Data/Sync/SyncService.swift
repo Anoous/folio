@@ -117,22 +117,14 @@ final class SyncService {
     // MARK: - Quota Sync
 
     private func syncUserQuota() async {
-        do {
-            let response = try await apiClient.refreshAuth()
-            let user = response.user
-            let isPro = user.subscription != AppConstants.subscriptionFree
-            SharedDataManager.syncQuotaFromServer(
-                monthlyQuota: user.monthlyQuota,
-                currentMonthCount: user.currentMonthCount,
-                isPro: isPro
-            )
-            // Check epoch from auth response
-            if let epoch = user.syncEpoch {
-                _ = makeArticlePullSyncWorkflow().checkEpoch(epoch)
-            }
-        } catch {
-            FolioLogger.sync.error("quota sync failed: \(error)")
-        }
+        await makeUserQuotaSyncWorkflow().syncUserQuota()
+    }
+
+    private func makeUserQuotaSyncWorkflow() -> UserQuotaSyncWorkflow {
+        UserQuotaSyncWorkflow(apiClient: apiClient, epochChecker: { [weak self] epoch in
+            guard let self else { return }
+            _ = self.makeArticlePullSyncWorkflow().checkEpoch(epoch)
+        })
     }
 
     // MARK: - Article Sync
