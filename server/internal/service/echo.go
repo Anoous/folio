@@ -13,8 +13,23 @@ import (
 const echoFreeWeeklyLimit = 3
 
 type EchoService struct {
-	echoRepo *repository.EchoRepo
-	userRepo *repository.UserRepo
+	echoRepo echoStore
+	userRepo echoUserStore
+}
+
+type echoStore interface {
+	GetDueCards(ctx context.Context, userID string, limit int) ([]domain.EchoCard, error)
+	GetCardByID(ctx context.Context, cardID, userID string) (*domain.EchoCard, error)
+	UpdateCard(ctx context.Context, card *domain.EchoCard) error
+	CreateReview(ctx context.Context, review *domain.EchoReview) error
+	IncrementEchoWeekCount(ctx context.Context, userID string) error
+	ResetEchoWeekCount(ctx context.Context, userID string, nextReset time.Time) error
+	GetWeeklyStats(ctx context.Context, userID string) (remembered, total int, err error)
+	GetConsecutiveDays(ctx context.Context, userID string) (int, error)
+}
+
+type echoUserStore interface {
+	GetByID(ctx context.Context, id string) (*domain.User, error)
 }
 
 func NewEchoService(echoRepo *repository.EchoRepo, userRepo *repository.UserRepo) *EchoService {
@@ -38,6 +53,7 @@ func (s *EchoService) GetTodayCards(ctx context.Context, userID string, limit in
 	}
 
 	isFree := user.Subscription == domain.SubscriptionFree
+	fetchLimit := limit
 
 	if isFree {
 		// Check if weekly quota needs resetting
@@ -54,16 +70,20 @@ func (s *EchoService) GetTodayCards(ctx context.Context, userID string, limit in
 			wl := echoFreeWeeklyLimit
 			return []domain.EchoCard{}, 0, user.EchoCountThisWeek, &wl, nil
 		}
+
+		remaining = echoFreeWeeklyLimit - user.EchoCountThisWeek
+		if fetchLimit > remaining {
+			fetchLimit = remaining
+		}
 	}
 
-	cards, err = s.echoRepo.GetDueCards(ctx, userID, limit)
+	cards, err = s.echoRepo.GetDueCards(ctx, userID, fetchLimit)
 	if err != nil {
 		return nil, 0, 0, nil, fmt.Errorf("get due cards: %w", err)
 	}
 
 	if isFree {
 		wl := echoFreeWeeklyLimit
-		remaining = echoFreeWeeklyLimit - user.EchoCountThisWeek
 		return cards, remaining, user.EchoCountThisWeek, &wl, nil
 	}
 
