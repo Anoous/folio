@@ -160,59 +160,9 @@ func (s *KnowledgeService) Ask(ctx context.Context, userID, question string) (*K
 }
 
 func (s *KnowledgeService) Spark(ctx context.Context, userID, prompt string) (*KnowledgeSparkResult, error) {
-	var docs []KnowledgeSource
-	if strings.TrimSpace(prompt) == "" {
-		allDocs, err := s.repo.ListKnowledgeDocuments(ctx, userID)
-		if err != nil {
-			return nil, fmt.Errorf("list knowledge documents: %w", err)
-		}
-		for _, doc := range allDocs {
-			summary := doc.Summary
-			docs = append(docs, KnowledgeSource{
-				ArticleID: doc.ArticleID,
-				Title:     doc.Title,
-				SiteName:  doc.SiteName,
-				Summary:   &summary,
-				CreatedAt: doc.CreatedAt,
-				Relevance: 1,
-			})
-		}
-	} else {
-		contextResult, err := s.Retrieve(ctx, userID, prompt, KnowledgeRetrieveOptions{
-			Mode:       KnowledgeModeSpark,
-			MaxSources: 8,
-		})
-		if err != nil {
-			return nil, err
-		}
-		docs = contextResult.Sources
-	}
-	if len(docs) < 6 {
-		allDocs, err := s.repo.ListKnowledgeDocuments(ctx, userID)
-		if err != nil {
-			return nil, fmt.Errorf("list knowledge documents: %w", err)
-		}
-		existing := map[string]bool{}
-		for _, doc := range docs {
-			existing[doc.ArticleID] = true
-		}
-		for _, doc := range allDocs {
-			if len(docs) >= 6 {
-				break
-			}
-			if existing[doc.ArticleID] {
-				continue
-			}
-			summary := doc.Summary
-			docs = append(docs, KnowledgeSource{
-				ArticleID: doc.ArticleID,
-				Title:     doc.Title,
-				SiteName:  doc.SiteName,
-				Summary:   &summary,
-				CreatedAt: doc.CreatedAt,
-				Relevance: 0.5,
-			})
-		}
+	docs, err := s.sparkSourceCollector().collect(ctx, userID, prompt)
+	if err != nil {
+		return nil, err
 	}
 
 	insights := composeSparkInsights(prompt, docs)
