@@ -131,14 +131,7 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 
 	h.titleBackfiller().backfill(ctx, p, result)
 
-	// Create AI-generated tags and attach to article
-	for _, tagName := range result.Tags {
-		tag, err := h.tagRepo.Create(ctx, p.UserID, tagName, true)
-		if err != nil {
-			continue // Non-fatal
-		}
-		h.tagRepo.AttachToArticle(ctx, p.ArticleID, tag.ID) // Non-fatal
-	}
+	h.tagApplier().apply(ctx, p, result.Tags)
 
 	// Mark AI finished
 	if err := h.taskRepo.SetAIFinished(ctx, p.TaskID); err != nil {
