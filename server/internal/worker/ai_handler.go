@@ -77,31 +77,14 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 
 	start := time.Now()
 
-	// Mark AI started
-	if err := h.taskRepo.SetAIStarted(ctx, p.TaskID); err != nil {
-		return fmt.Errorf("set ai started: %w", err)
-	}
-
-	logPipelineStarted(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, p.TaskID, p.ArticleID, p.UserID, "")
-
-	// Analyze
-	result, err := h.aiClient.Analyze(ctx, client.AnalyzeRequest{
-		Title:   p.Title,
-		Content: p.Markdown,
-		Source:  p.Source,
-		Author:  p.Author,
-	})
+	analysis, err := h.analysisRunner().run(ctx, p, start)
 	if err != nil {
-		failureErr := ensurePipelineErr(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, false, "analyze article", err)
-		logPipelineFailed(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, p.TaskID, p.ArticleID, p.UserID, "", time.Since(start), failureErr)
-		h.taskRepo.SetFailed(ctx, p.TaskID, buildTaskFailure(failureErr, time.Since(start)))
-		h.articleRepo.SetError(ctx, p.ArticleID, failureErr.Error())
-		// Content was already crawled successfully — mark as ready so the
-		// article remains readable.  Only the AI enrichment (summary, tags,
-		// category) is missing.
-		h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusReady)
+		return err
+	}
+	if analysis.done {
 		return nil
 	}
+	result := analysis.response
 
 	cat, err := h.categoryResolver().resolve(ctx, p, result)
 	if err != nil {
