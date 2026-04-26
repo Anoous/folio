@@ -160,50 +160,18 @@ final class SyncService {
         try? context.save()
     }
 
-    // MARK: - Category Sync
+    // MARK: - Taxonomy Sync
 
-    func syncCategories() async {
-        do {
-            let response = try await apiClient.listCategories()
-            let categoryRepo = CategoryRepository(context: context)
-
-            for dto in response.data {
-                if let existing = try categoryRepo.fetchBySlug(dto.slug) {
-                    existing.updateFromDTO(dto)
-                } else if let byServerID = try categoryRepo.fetchByServerID(dto.id) {
-                    byServerID.updateFromDTO(dto)
-                }
-                // If no local match, skip — server and client have the same preset categories
-            }
-
-            try context.save()
-        } catch {
-            FolioLogger.sync.error("category sync failed: \(error)")
-        }
+    private func makeTaxonomySyncWorkflow() -> TaxonomySyncWorkflow {
+        TaxonomySyncWorkflow(apiClient: apiClient, context: context)
     }
 
-    // MARK: - Tag Sync
+    func syncCategories() async {
+        await makeTaxonomySyncWorkflow().syncCategories()
+    }
 
     func syncTags() async {
-        do {
-            let response = try await apiClient.listTags()
-            let tagRepo = TagRepository(context: context)
-
-            for dto in response.data {
-                if let existing = try tagRepo.fetchByServerID(dto.id) {
-                    existing.updateFromDTO(dto)
-                } else if let byName = try tagRepo.fetchByName(dto.name) {
-                    byName.updateFromDTO(dto)
-                } else {
-                    let newTag = Tag.fromDTO(dto)
-                    context.insert(newTag)
-                }
-            }
-
-            try context.save()
-        } catch {
-            FolioLogger.sync.error("tag sync failed: \(error)")
-        }
+        await makeTaxonomySyncWorkflow().syncTags()
     }
 
     // MARK: - Full Sync
