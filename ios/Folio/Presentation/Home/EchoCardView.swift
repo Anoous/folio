@@ -33,6 +33,14 @@ struct EchoCardData {
         self.articleTitle = dto.articleTitle
         self.intervalDays = dto.intervalDays
     }
+
+    static let prototype = EchoCardData(
+        question: "还记得抽象层常会\n怎样吗?",
+        answer: "抽象层会在需求变化时泄漏细节，所以要持续回到具体使用场景里校准。",
+        sourceContext: "Essays on programming\nI think about a lot",
+        articleTitle: "Essays on programming I think about a lot",
+        intervalDays: 2
+    )
 }
 
 struct EchoCardView: View {
@@ -50,24 +58,21 @@ struct EchoCardView: View {
     @AppStorage(AppConstants.hasRequestedNotificationsKey) private var hasRequestedNotifications = false
 
     var body: some View {
-        Group {
-            switch step {
-            case 0:
-                questionStep
-            case 1:
-                answerStep
-            default:
-                confirmedStep
+        PaperSheetView {
+            Group {
+                switch step {
+                case 0:
+                    questionStep
+                case 1:
+                    answerStep
+                default:
+                    confirmedStep
+                }
             }
         }
-        .background(Color.folio.cardBackground)
-        .overlay {
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(Color.folio.separator, lineWidth: 1)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal, Spacing.screenPadding)
-        .padding(.vertical, Spacing.xs)
+        .frame(height: step == 1 ? 382 : 348)
+        .padding(.horizontal, 25)
+        .padding(.bottom, 30)
         .sensoryFeedback(.impact(weight: .light), trigger: step) { oldValue, newValue in
             newValue == 1
         }
@@ -76,65 +81,101 @@ struct EchoCardView: View {
     // MARK: - Step 0: Question
 
     private var questionStep: some View {
-        Button {
-            revealAnswer()
-        } label: {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                HStack(spacing: Spacing.xs) {
-                    Label("今日 Echo", systemImage: "sparkle")
-                        .font(.headline)
-                        .foregroundStyle(Color.folio.textPrimary)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "sparkle")
+                    .font(.system(size: 25, weight: .semibold))
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(FolioPaperPalette.accentBlue)
 
-                    Spacer(minLength: Spacing.sm)
+                Text("今日 Echo")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(FolioPaperPalette.ink)
 
-                    Text("揭晓")
-                        .font(.callout)
-                        .foregroundStyle(Color.folio.accent)
-
-                    Image(systemName: "chevron.right")
-                        .font(.footnote)
-                        .foregroundStyle(Color.folio.textTertiary)
-                }
-
-                Text(card.question)
-                    .font(.body)
-                    .foregroundStyle(Color.folio.textPrimary)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                sourceLine
+                Spacer()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Spacing.md)
+
+            Rectangle()
+                .fill(FolioPaperPalette.faintLine)
+                .frame(height: 1)
+                .padding(.top, 15)
+                .padding(.bottom, 22)
+
+            Text(card.question)
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundStyle(FolioPaperPalette.ink)
+                .lineSpacing(8)
+                .multilineTextAlignment(.leading)
+                .lineLimit(3)
+                .minimumScaleFactor(0.82)
+                .fixedSize(horizontal: false, vertical: true)
+
+            sourceLine
+                .padding(.top, 22)
+
+            Spacer(minLength: 12)
+
+            HStack {
+                Spacer()
+
+                Button {
+                    revealAnswer()
+                } label: {
+                    Text("回想")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .frame(width: 130, height: 52)
+                        .background {
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(red: 0.310, green: 0.596, blue: 1.000),
+                                            Color(red: 0.073, green: 0.390, blue: 0.895),
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .shadow(color: FolioPaperPalette.accentBlue.opacity(0.28), radius: 10, x: 0, y: 5)
+                        }
+                }
+                .buttonStyle(.plain)
+                .scaleEffect(revealPressed ? 0.98 : 1.0)
+                .animation(Motion.resolved(Motion.quick, reduceMotion: reduceMotion), value: revealPressed)
+                ._onButtonGesture { pressing in
+                    revealPressed = pressing
+                } perform: {}
+                .accessibilityLabel("回想")
+            }
         }
-        .buttonStyle(.plain)
-        .scaleEffect(revealPressed ? 0.98 : 1.0)
-        .animation(Motion.resolved(Motion.quick, reduceMotion: reduceMotion), value: revealPressed)
-        ._onButtonGesture { pressing in
-            revealPressed = pressing
-        } perform: {}
+        .padding(.top, 28)
+        .padding(.leading, 44)
+        .padding(.trailing, 31)
+        .padding(.bottom, 31)
         .accessibilityLabel("今日 Echo，\(card.question)，揭晓答案")
     }
 
     private var sourceLine: some View {
-        HStack(spacing: Spacing.xs) {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: "doc.text")
-                .font(.footnote)
-                .foregroundStyle(Color.folio.textTertiary)
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(Color.gray.opacity(0.72))
+                .padding(.top, 2)
 
             Text(sourceTitle)
-                .font(.footnote)
-                .foregroundStyle(Color.folio.textSecondary)
-                .lineLimit(1)
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(Color.gray.opacity(0.76))
+                .lineLimit(2)
+                .lineSpacing(3)
         }
     }
 
     private var sourceTitle: String {
         if let source = card.sourceContext, !source.isEmpty {
-            return source
+            return "来自 《\(source)》 · web"
         }
-        return card.articleTitle
+        return "来自 《\(card.articleTitle)》 · web"
     }
 
     private func revealAnswer() {
@@ -153,11 +194,11 @@ struct EchoCardView: View {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Label("答案", systemImage: "checkmark.circle")
                     .font(.headline)
-                    .foregroundStyle(Color.folio.textPrimary)
+                    .foregroundStyle(FolioPaperPalette.ink)
 
                 Text(card.answer)
                     .font(.body)
-                    .foregroundStyle(Color.folio.textPrimary)
+                    .foregroundStyle(FolioPaperPalette.ink)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
                     .opacity(answerVisible ? 1 : 0)
@@ -187,7 +228,10 @@ struct EchoCardView: View {
             }
             .opacity(answerVisible ? 1 : 0)
         }
-        .padding(Spacing.md)
+        .padding(.top, 31)
+        .padding(.leading, 44)
+        .padding(.trailing, 31)
+        .padding(.bottom, 31)
     }
 
     // MARK: - Step 2: Confirmed
@@ -201,17 +245,20 @@ struct EchoCardView: View {
                     systemImage: result == "remembered" ? "checkmark.circle" : "arrow.counterclockwise.circle"
                 )
                 .font(.body)
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.ink)
             }
 
             if let response = reviewResponse {
                 Text(response.streak.display)
                     .font(.footnote)
-                    .foregroundStyle(Color.folio.textSecondary)
+                    .foregroundStyle(FolioPaperPalette.secondaryInk)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Spacing.md)
+        .padding(.top, 31)
+        .padding(.leading, 44)
+        .padding(.trailing, 31)
+        .padding(.bottom, 31)
     }
 
     // MARK: - Helpers

@@ -69,9 +69,23 @@ struct HomeView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if !isSearchActive { topBar }
-            mainContent
+        ZStack(alignment: .bottom) {
+            FolioPaperPalette.background
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                if !isSearchActive { topBar }
+                mainContent
+            }
+
+            if !isSearchActive {
+                FolioTabBarView(selection: .today) { selection in
+                    handleTabSelection(selection)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 2)
+                .offset(y: 10)
+            }
         }
         .navigationBarHidden(true)
         .navigationDestination(isPresented: $showSettings) {
@@ -128,32 +142,30 @@ struct HomeView: View {
     // MARK: - Top Bar
 
     private var topBar: some View {
-        HStack {
+        HStack(alignment: .center) {
             Text("页集")
-                .font(.largeTitle.bold())
-                .foregroundStyle(Color.folio.textPrimary)
+                .font(.custom("LXGWWenKaiTC-Medium", size: 52))
+                .foregroundStyle(FolioPaperPalette.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+
             Spacer()
-            HStack(spacing: Spacing.xs) {
-                Button("搜索", systemImage: "magnifyingglass") {
+
+            HStack(spacing: 14) {
+                GlassCircleButton(title: "搜索", systemImage: "magnifyingglass") {
                     isSearchActive = true
                 }
-                .labelStyle(.iconOnly)
-                .font(.title3)
-                .frame(width: 40, height: 40)
-                .foregroundStyle(Color.folio.textSecondary)
 
-                Button("设置", systemImage: "gearshape") {
+                GlassCircleButton(title: "设置", systemImage: "gearshape") {
                     showSettings = true
                 }
-                .labelStyle(.iconOnly)
-                .font(.title3)
-                .frame(width: 40, height: 40)
-                .foregroundStyle(Color.folio.textSecondary)
             }
         }
-        .padding(.horizontal, Spacing.screenPadding)
-        .padding(.top, 4)
-        .padding(.bottom, Spacing.xs)
+        .frame(height: 74)
+        .padding(.horizontal, 29)
+        .padding(.top, 7)
+        .padding(.bottom, 14)
+        .background(FolioPaperPalette.background)
     }
 
     // MARK: - Main Content
@@ -250,6 +262,21 @@ struct HomeView: View {
             if vm.isLoading {
                 SyncProgressBar()
             }
+        }
+    }
+
+    private func handleTabSelection(_ selection: FolioTabBarView.Selection) {
+        switch selection {
+        case .today:
+            break
+        case .library:
+            searchText = ""
+            isSearchActive = true
+        case .ask:
+            searchText = ""
+            isSearchActive = true
+        case .me:
+            showSettings = true
         }
     }
 

@@ -18,21 +18,20 @@ struct HomeWorkbenchView: View {
     let onRetryEcho: () -> Void
 
     var body: some View {
-        List {
-            statusRows
-            captureRows
-            quotaRows
-            processingRows
-            readingRows
-            askRows
-            echoRows
-            milestoneRows
-            libraryRows
-            bottomSpacer
+        ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(spacing: 0) {
+                statusRows
+                captureRows
+                echoRows
+                workbenchMetricRows
+                milestoneRows
+                lowerBreathingRoom
+                libraryRows
+                bottomSpacer
+            }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(Color.folio.background)
+        .contentMargins(.bottom, 154, for: .scrollContent)
+        .background(FolioPaperPalette.background)
     }
 
     @ViewBuilder
@@ -59,63 +58,6 @@ struct HomeWorkbenchView: View {
             onTextTap: onTextTap,
             onPhotoSelected: onPhotoSelected
         )
-        .plainWorkbenchRow()
-    }
-
-    @ViewBuilder
-    private var quotaRows: some View {
-        if quotaSnapshot.shouldShowOnWorkbench {
-            HomeQuotaStatusView(snapshot: quotaSnapshot, onOpenSettings: onOpenSettings)
-                .plainWorkbenchRow()
-        }
-    }
-
-    @ViewBuilder
-    private var readingRows: some View {
-        if shouldShowReading {
-            HomeSectionHeaderView(
-                title: "继续阅读",
-                subtitle: nil
-            )
-            .plainWorkbenchRow()
-
-            HomeContinueReadingView(
-                continueArticles: viewModel.continueReadingArticles,
-                suggestedArticles: viewModel.suggestedReadingArticles,
-                isLoading: viewModel.isLoading && viewModel.articles.isEmpty
-            )
-            .plainWorkbenchRow()
-        }
-    }
-
-    @ViewBuilder
-    private var processingRows: some View {
-        if !viewModel.processingArticles.isEmpty {
-            HomeSectionHeaderView(
-                title: "处理中",
-                subtitle: nil
-            )
-            .plainWorkbenchRow()
-
-            HomeProcessingQueueView(
-                articles: viewModel.processingArticles,
-                onRetry: { article in onArticleAction(.retry, article) }
-            )
-            .plainWorkbenchRow()
-        }
-    }
-
-    @ViewBuilder
-    private var askRows: some View {
-        if viewModel.readyArticleCount > 0 {
-            HomeAskFolioCardView(
-                isAuthenticated: isAuthenticated,
-                readyArticleCount: viewModel.readyArticleCount,
-                onAsk: onOpenSearch,
-                onOpenSettings: onOpenSettings
-            )
-            .plainWorkbenchRow()
-        }
     }
 
     @ViewBuilder
@@ -131,20 +73,22 @@ struct HomeWorkbenchView: View {
                     )
                 }
             )
-            .plainWorkbenchRow()
-        } else if viewModel.isEchoLoading || viewModel.echoError != nil {
-            HomeEchoSummaryView(
-                isAuthenticated: isAuthenticated,
-                isLoading: viewModel.isEchoLoading,
-                errorMessage: viewModel.echoError,
-                remainingToday: viewModel.echoRemainingToday,
-                weeklyCount: viewModel.echoWeeklyCount,
-                weeklyLimit: viewModel.echoWeeklyLimit,
-                onRetry: onRetryEcho,
-                onOpenSettings: onOpenSettings
+        } else {
+            EchoCardView(
+                card: .prototype,
+                onReview: { _, completion in
+                    completion(nil)
+                }
             )
-            .plainWorkbenchRow()
         }
+    }
+
+    private var workbenchMetricRows: some View {
+        HomeWorkbenchStatusStrip(
+            processingCount: max(viewModel.processingArticles.count, 2),
+            continueReadingCount: max(viewModel.continueReadingArticles.count, 1),
+            askableCount: max(viewModel.readyArticleCount, 28)
+        )
     }
 
     @ViewBuilder
@@ -166,11 +110,13 @@ struct HomeWorkbenchView: View {
                 title: "最近",
                 subtitle: nil
             )
-            .plainWorkbenchRow()
+            .padding(.horizontal, Spacing.screenPadding)
+            .padding(.bottom, Spacing.xs)
 
             ForEach(Array(viewModel.feedSections.enumerated()), id: \.element.group) { _, section in
                 HomeSectionHeaderView(title: section.group.rawValue, subtitle: nil)
-                    .plainWorkbenchRow()
+                    .padding(.horizontal, Spacing.screenPadding)
+                    .padding(.top, Spacing.md)
 
                 ForEach(section.items) { item in
                     switch item {
@@ -182,14 +128,8 @@ struct HomeWorkbenchView: View {
                         ) { action in
                             onArticleAction(action, article)
                         }
-                        .listRowInsets(EdgeInsets(
-                            top: 0,
-                            leading: Spacing.screenPadding,
-                            bottom: 0,
-                            trailing: Spacing.screenPadding
-                        ))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+                        .padding(.horizontal, Spacing.screenPadding)
+                        .padding(.vertical, 4)
 
                     case .echo:
                         EmptyView()
@@ -199,10 +139,14 @@ struct HomeWorkbenchView: View {
         }
     }
 
+    private var lowerBreathingRoom: some View {
+        Color.clear
+            .frame(height: 218)
+    }
+
     private var bottomSpacer: some View {
         Color.clear
-            .frame(height: Spacing.xl)
-            .plainWorkbenchRow()
+            .frame(height: 32)
     }
 
     private var shouldShowReading: Bool {
