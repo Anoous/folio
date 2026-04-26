@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -75,6 +76,23 @@ func TestSendEmailCode_RateLimitsSecondRequestForSameEmail(t *testing.T) {
 	}
 }
 
+func TestGenerateEmailCode_FormatsSixDigits(t *testing.T) {
+	code, err := generateEmailCode(bytes.NewReader([]byte{0, 0, 42}))
+	if err != nil {
+		t.Fatalf("generateEmailCode() error = %v", err)
+	}
+	if code != "000042" {
+		t.Fatalf("generateEmailCode() = %q, want %q", code, "000042")
+	}
+}
+
+func TestGenerateEmailCode_ReturnsEntropyErrors(t *testing.T) {
+	_, err := generateEmailCode(failingReader{})
+	if err == nil {
+		t.Fatal("generateEmailCode() error = nil, want entropy error")
+	}
+}
+
 func unavailableTCPAddr(t *testing.T) string {
 	t.Helper()
 
@@ -87,6 +105,12 @@ func unavailableTCPAddr(t *testing.T) string {
 		t.Fatalf("close listener: %v", err)
 	}
 	return addr
+}
+
+type failingReader struct{}
+
+func (failingReader) Read(_ []byte) (int, error) {
+	return 0, errors.New("entropy unavailable")
 }
 
 func TestIssueTokenPair_PersistsRefreshSession(t *testing.T) {

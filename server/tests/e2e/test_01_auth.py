@@ -2,10 +2,15 @@
 
 import base64
 import os
+import uuid
 
+import redis
 from helpers.api_client import FolioAPIClient
 from helpers.assertions import assert_error_response
 from helpers.test_auth import test_login
+
+
+REDIS_URL = os.environ.get("E2E_REDIS_URL", "redis://localhost:16379/0")
 
 
 def _refresh_token_with_wrong_secret(refresh_token: str) -> str:
@@ -18,6 +23,46 @@ def _client(base_url: str, forwarded_for: str) -> FolioAPIClient:
     client = FolioAPIClient(base_url)
     client.client.headers["X-Forwarded-For"] = forwarded_for
     return client
+
+
+def _stored_email_code(email: str) -> str | None:
+    rdb = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+    try:
+        return rdb.get(f"auth:code:{email}")
+    finally:
+        rdb.close()
+
+
+class TestEmailCode:
+
+    def test_email_code_round_trip(self, base_url):
+        """Email code login returns an auth response."""
+        client = _client(base_url, "198.51.100.17")
+        email = f"login-{uuid.uuid4().hex}@folio.test"
+
+        send_resp = client.post(
+            "/api/v1/auth/email/code",
+            json={"email": email},
+            authenticated=False,
+        )
+        assert send_resp.status_code == 200
+
+        code = _stored_email_code(email)
+        assert code is not None
+        assert len(code) == 6
+        assert code.isdigit()
+
+        verify_resp = client.post(
+            "/api/v1/auth/email/verify",
+            json={"email": email, "code": code},
+            authenticated=False,
+        )
+        assert verify_resp.status_code == 200
+        body = verify_resp.json()
+        assert "access_token" in body
+        assert "refresh_token" in body
+        assert body["user"]["email"] == email
+        client.close()
 
 
 class TestRefreshToken:

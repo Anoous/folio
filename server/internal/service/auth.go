@@ -6,11 +6,11 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/big"
 	"net/http"
@@ -150,7 +150,10 @@ func (s *AuthService) SendEmailCode(ctx context.Context, req SendCodeRequest) er
 	}
 
 	// Generate 6-digit code
-	code := fmt.Sprintf("%06d", cryptoRandInt(1000000))
+	code, err := generateEmailCode(rand.Reader)
+	if err != nil {
+		return fmt.Errorf("generate verification code: %w", err)
+	}
 
 	if err := s.reserveEmailCode(ctx, email, code); err != nil {
 		slog.Error("failed to persist verification code", "email", email, "error", err)
@@ -237,10 +240,12 @@ func (s *AuthService) VerifyEmailCode(ctx context.Context, req VerifyCodeRequest
 	return s.issueTokenPair(ctx, user)
 }
 
-func cryptoRandInt(max int) int {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return int(binary.BigEndian.Uint32(b)) % max
+func generateEmailCode(reader io.Reader) (string, error) {
+	n, err := rand.Int(reader, big.NewInt(1000000))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", n.Int64()), nil
 }
 
 func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*AuthResponse, error) {

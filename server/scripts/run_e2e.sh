@@ -150,6 +150,7 @@ start_api() {
       REDIS_ADDR="localhost:16379" \
       READER_URL="$READER_URL" \
       JWT_SECRET="e2e-test-secret-key-not-for-production" \
+      RESEND_API_KEY="" \
       PORT="18080" \
       /tmp/folio-e2e-server >>"$API_LOG" 2>&1
   ) &
@@ -216,6 +217,7 @@ fi
 # Export DB URL and JWT secret so test helpers can create users + tokens directly
 export E2E_DATABASE_URL="postgresql://folio:folio_test@localhost:15432/folio_test"
 export E2E_JWT_SECRET="e2e-test-secret-key-not-for-production"
+export E2E_REDIS_URL="redis://localhost:16379/0"
 
 info "Running E2E tests ..."
 echo ""
