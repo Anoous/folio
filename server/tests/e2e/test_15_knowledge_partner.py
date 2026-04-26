@@ -88,6 +88,29 @@ class TestKnowledgePartner:
             assert source["article_id"] in knowledge_library
             assert source["evidence_snippet"]
 
+    def test_ask_folio_streams_sources_answer_and_done(self, knowledge_api, knowledge_library):
+        events = knowledge_api.rag_query_stream("用 citation guardrails 解释 grounded assistant 应该怎么回答")
+
+        event_types = [event_type for event_type, _ in events]
+        assert event_types[0] == "sources"
+        assert "delta" in event_types
+        assert event_types[-1] == "done"
+
+        sources_payload = events[0][1]
+        assert sources_payload["conversation_id"]
+        assert sources_payload["source_count"] >= 1
+        for source in sources_payload["sources"]:
+            assert source["article_id"] in knowledge_library
+            assert source["evidence_snippet"]
+
+        answer = "".join(payload["text"] for event_type, payload in events if event_type == "delta")
+        assert answer
+        assert "¹" in answer or "²" in answer
+
+        done_payload = events[-1][1]
+        assert done_payload["cited_indices"]
+        assert done_payload["followup_suggestions"]
+
     def test_ask_folio_refuses_when_evidence_is_missing(self, knowledge_api, knowledge_library):
         response = knowledge_api.rag_query("文章库里有没有关于 CRISPR 临床试验的数据结论？")
         assert response.status_code == 200, response.text

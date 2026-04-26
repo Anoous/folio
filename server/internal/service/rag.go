@@ -26,10 +26,10 @@ const (
 
 // RAGService orchestrates question-answering over a user's saved articles.
 type RAGService struct {
-	ragRepo          *repository.RAGRepo
-	userRepo         *repository.UserRepo
+	ragRepo          ragRepository
+	userRepo         ragUserRepository
 	aiClient         client.Analyzer
-	knowledgeService *KnowledgeService
+	knowledgeService ragKnowledgeAnswerer
 }
 
 // NewRAGService creates a new RAGService.
@@ -44,59 +44,33 @@ func NewRAGService(ragRepo *repository.RAGRepo, userRepo *repository.UserRepo, a
 
 // Query answers a user question using their saved article summaries as context.
 func (s *RAGService) Query(ctx context.Context, userID, question, conversationID string) (*domain.RAGResponse, error) {
-	// 1. Quota check
-	if err := s.checkQuota(ctx, userID); err != nil {
-		return nil, err
-	}
-
-	// 2. Load articles
-	articles, err := s.ragRepo.LoadArticleSummaries(ctx, userID)
+	run, err := s.prepareKnowledgeRAG(ctx, userID, question)
 	if err != nil {
-		return nil, fmt.Errorf("load articles: %w", err)
-	}
-	if len(articles) == 0 {
-		return &domain.RAGResponse{
-			Answer:      "先收藏一些文章再来提问吧。",
-			Sources:     nil,
-			SourceCount: 0,
-		}, nil
-	}
-
-	question = strings.TrimSpace(client.SanitizeField(question))
-	knowledgeAnswer, err := s.knowledgeService.Ask(ctx, userID, question)
-	if err != nil {
-		slog.Error("knowledge ask failed", "user_id", userID, "error", err)
-		return &domain.RAGResponse{
-			Answer:      "抱歉，回答生成失败，请重试。",
-			Sources:     nil,
-			SourceCount: 0,
-		}, nil
+		switch {
+		case errors.Is(err, errRAGNoArticles):
+			return &domain.RAGResponse{
+				Answer:      "先收藏一些文章再来提问吧。",
+				Sources:     nil,
+				SourceCount: 0,
+			}, nil
+		case errors.Is(err, errRAGAnswerFailed):
+			return &domain.RAGResponse{
+				Answer:      "抱歉，回答生成失败，请重试。",
+				Sources:     nil,
+				SourceCount: 0,
+			}, nil
+		default:
+			return nil, err
+		}
 	}
 
-	ragResult := &client.RAGResult{
-		Answer:              knowledgeAnswer.Answer,
-		CitedIndices:        knowledgeAnswer.CitedIndices,
-		FollowupSuggestions: knowledgeAnswer.FollowupSuggestions,
-	}
-	sources := knowledgeSourcesToRAGSources(knowledgeAnswer.Sources)
-
-	// 9. Save conversation.
-	conversationID, err = s.saveConversation(ctx, userID, conversationID, question, ragResult, sources)
-	if err != nil {
-		slog.Error("failed to save rag conversation", "user_id", userID, "error", err)
-		// Non-fatal: still return the answer.
-	}
-
-	// 10. Increment quota for Free users (best-effort).
-	if incrErr := s.incrementQuotaIfFree(ctx, userID); incrErr != nil {
-		slog.Error("failed to increment rag quota", "user_id", userID, "error", incrErr)
-	}
+	conversationID = s.completeRAGAnswer(ctx, userID, conversationID, run)
 
 	return &domain.RAGResponse{
-		Answer:              knowledgeAnswer.Answer,
-		Sources:             sources,
-		SourceCount:         len(sources),
-		FollowupSuggestions: knowledgeAnswer.FollowupSuggestions,
+		Answer:              run.answer,
+		Sources:             run.sources,
+		SourceCount:         len(run.sources),
+		FollowupSuggestions: run.followupSuggestions,
 		ConversationID:      conversationID,
 	}, nil
 }
@@ -105,62 +79,43 @@ func (s *RAGService) Query(ctx context.Context, userID, question, conversationID
 func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversationID string, events chan<- domain.RAGStreamEvent) {
 	defer close(events)
 
-	// Phase 1: Retrieval
-
-	if err := s.checkQuota(ctx, userID); err != nil {
-		if errors.Is(err, ErrRAGQuotaExceeded) {
+	run, err := s.prepareKnowledgeRAG(ctx, userID, question)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrRAGQuotaExceeded):
 			events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "quota_exceeded", ErrorMessage: "monthly RAG quota exceeded"}
-		} else {
+		case errors.Is(err, errRAGNoArticles):
+			events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "no_articles", ErrorMessage: "no articles saved yet"}
+		case errors.Is(err, errRAGAnswerFailed):
+			events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "answer generation failed"}
+		default:
 			events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "internal error"}
 		}
 		return
 	}
 
-	articles, err := s.ragRepo.LoadArticleSummaries(ctx, userID)
-	if err != nil {
-		events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "internal error"}
-		return
-	}
-	if len(articles) == 0 {
-		events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "no_articles", ErrorMessage: "no articles saved yet"}
-		return
-	}
-
-	question = strings.TrimSpace(client.SanitizeField(question))
-	knowledgeAnswer, err := s.knowledgeService.Ask(ctx, userID, question)
-	if err != nil {
-		events <- domain.RAGStreamEvent{Type: "error", ErrorCode: "internal_error", ErrorMessage: "answer generation failed"}
-		return
-	}
-	sources := knowledgeSourcesToRAGSources(knowledgeAnswer.Sources)
-
-	// Create conversation early so we can send conversation_id in sources event
+	// Create conversation early so we can send conversation_id in sources event.
 	if conversationID == "" {
-		conv := &domain.RAGConversation{
-			UserID: userID,
-			Title:  truncateStringPtr(question, 50),
-		}
-		if err := s.ragRepo.CreateConversation(ctx, conv); err != nil {
-			slog.Error("failed to create conversation", "error", err)
+		createdID, err := s.createRAGConversation(ctx, userID, run.question)
+		if err != nil {
+			slog.Error("failed to create rag conversation", "user_id", userID, "error", err)
 		} else {
-			conversationID = conv.ID
+			conversationID = createdID
 		}
 	}
 
 	select {
 	case events <- domain.RAGStreamEvent{
 		Type:           "sources",
-		Sources:        sources,
-		SourceCount:    len(sources),
+		Sources:        run.sources,
+		SourceCount:    len(run.sources),
 		ConversationID: conversationID,
 	}:
 	case <-ctx.Done():
 		return
 	}
 
-	// Phase 2: Streaming answer generation
-	fullAnswer := knowledgeAnswer.Answer
-	for _, r := range fullAnswer {
+	for _, r := range run.answer {
 		select {
 		case events <- domain.RAGStreamEvent{Type: "delta", Text: string(r)}:
 		case <-ctx.Done():
@@ -168,27 +123,13 @@ func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversa
 		}
 	}
 
-	// Phase 3: Post-processing
-	citedIndices := knowledgeAnswer.CitedIndices
-	followups := knowledgeAnswer.FollowupSuggestions
-
-	if _, saveErr := s.saveConversation(ctx, userID, conversationID, question, &client.RAGResult{
-		Answer:              fullAnswer,
-		CitedIndices:        citedIndices,
-		FollowupSuggestions: followups,
-	}, sources); saveErr != nil {
-		slog.Error("failed to save rag conversation", "user_id", userID, "error", saveErr)
-	}
-
-	if incrErr := s.incrementQuotaIfFree(ctx, userID); incrErr != nil {
-		slog.Error("failed to increment rag quota", "user_id", userID, "error", incrErr)
-	}
+	s.completeRAGAnswer(ctx, userID, conversationID, run)
 
 	select {
 	case events <- domain.RAGStreamEvent{
 		Type:                "done",
-		CitedIndices:        citedIndices,
-		FollowupSuggestions: followups,
+		CitedIndices:        run.citedIndices,
+		FollowupSuggestions: run.followupSuggestions,
 	}:
 	case <-ctx.Done():
 	}
@@ -489,14 +430,11 @@ func (s *RAGService) saveConversation(
 ) (string, error) {
 	// Create new conversation if none provided.
 	if conversationID == "" {
-		conv := &domain.RAGConversation{
-			UserID: userID,
-			Title:  truncateStringPtr(question, 50),
+		createdID, err := s.createRAGConversation(ctx, userID, question)
+		if err != nil {
+			return "", err
 		}
-		if err := s.ragRepo.CreateConversation(ctx, conv); err != nil {
-			return "", fmt.Errorf("create conversation: %w", err)
-		}
-		conversationID = conv.ID
+		conversationID = createdID
 	}
 
 	// Save user message.

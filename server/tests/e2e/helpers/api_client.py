@@ -1,5 +1,7 @@
 """Thin httpx wrapper for Folio API calls."""
 
+import json
+
 import httpx
 
 
@@ -117,6 +119,41 @@ class FolioAPIClient:
         if conversation_id is not None:
             payload["conversation_id"] = conversation_id
         return self.post("/api/v1/rag/query", json=payload)
+
+    def rag_query_stream(self, question: str, conversation_id: str | None = None) -> list[tuple[str, dict]]:
+        payload = {"question": question}
+        if conversation_id is not None:
+            payload["conversation_id"] = conversation_id
+
+        events: list[tuple[str, dict]] = []
+        event_type: str | None = None
+        data_lines: list[str] = []
+
+        def flush_event():
+            nonlocal event_type, data_lines
+            if event_type is not None and data_lines:
+                events.append((event_type, json.loads("\n".join(data_lines))))
+            event_type = None
+            data_lines = []
+
+        with self.client.stream(
+            "POST",
+            "/api/v1/rag/query/stream",
+            json=payload,
+            headers=self._headers(),
+        ) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if line.startswith("event: "):
+                    flush_event()
+                    event_type = line.removeprefix("event: ")
+                elif line.startswith("data: "):
+                    data_lines.append(line.removeprefix("data: "))
+                elif line == "":
+                    flush_event()
+            flush_event()
+
+        return events
 
     def knowledge_spark(self, prompt: str | None = None) -> httpx.Response:
         payload = {"prompt": prompt or ""}
