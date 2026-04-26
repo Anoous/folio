@@ -24,10 +24,15 @@ type mockArticleRepo struct {
 	getByIDFn              func(ctx context.Context, id string) (*domain.Article, error)
 	listByUserFn           func(ctx context.Context, p repository.ListArticlesParams) (*repository.ListArticlesResult, error)
 	updateFn               func(ctx context.Context, id string, userID string, p repository.UpdateArticleParams) error
+	updateStatusFn         func(ctx context.Context, id string, status domain.ArticleStatus) error
 	deleteFn               func(ctx context.Context, id string, userID string) error
 	searchFn               func(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error)
 	listKnowledgeDocsFn    func(ctx context.Context, userID string) ([]domain.KnowledgeDocument, error)
 	broadRecallKnowledgeFn func(ctx context.Context, userID string, keywords []string, limit int) ([]domain.KnowledgeDocument, error)
+	updateStatusCalls      []struct {
+		ID     string
+		Status domain.ArticleStatus
+	}
 }
 
 func (m *mockArticleRepo) Create(ctx context.Context, p repository.CreateArticleParams) (*domain.Article, error) {
@@ -100,6 +105,13 @@ func (m *mockArticleRepo) BroadRecallKnowledgeDocuments(ctx context.Context, use
 }
 
 func (m *mockArticleRepo) UpdateStatus(ctx context.Context, id string, status domain.ArticleStatus) error {
+	m.updateStatusCalls = append(m.updateStatusCalls, struct {
+		ID     string
+		Status domain.ArticleStatus
+	}{ID: id, Status: status})
+	if m.updateStatusFn != nil {
+		return m.updateStatusFn(ctx, id, status)
+	}
 	return nil
 }
 

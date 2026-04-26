@@ -230,60 +230,7 @@ func (s *ArticleService) Search(ctx context.Context, userID, query string, page,
 
 // RetryArticle re-enqueues a failed article for processing.
 func (s *ArticleService) RetryArticle(ctx context.Context, userID, articleID string) (*SubmitURLResponse, error) {
-	article, err := s.articleRepo.GetByID(ctx, articleID)
-	if err != nil {
-		return nil, fmt.Errorf("get article: %w", err)
-	}
-	if article == nil || article.DeletedAt != nil {
-		return nil, ErrNotFound
-	}
-	if article.UserID != userID {
-		return nil, ErrForbidden
-	}
-	if article.Status != domain.ArticleStatusFailed {
-		return nil, fmt.Errorf("article not in failed state")
-	}
-
-	// Reset status
-	if err := s.articleRepo.UpdateStatus(ctx, articleID, domain.ArticleStatusPending); err != nil {
-		return nil, fmt.Errorf("reset status: %w", err)
-	}
-
-	// Create new task
-	task, err := s.taskRepo.Create(ctx, repository.CreateTaskParams{
-		ArticleID:  articleID,
-		UserID:     userID,
-		URL:        article.URL,
-		SourceType: string(article.SourceType),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create retry task: %w", err)
-	}
-
-	// Enqueue based on type
-	if article.URL != nil && *article.URL != "" {
-		crawlTask := worker.NewCrawlTask(articleID, task.ID, *article.URL, userID)
-		if _, err := s.asynqClient.EnqueueContext(ctx, crawlTask); err != nil {
-			return nil, fmt.Errorf("enqueue retry crawl: %w", err)
-		}
-	} else {
-		content := ""
-		if article.MarkdownContent != nil {
-			content = *article.MarkdownContent
-		}
-		title := ""
-		if article.Title != nil {
-			title = *article.Title
-		}
-		aiTask := worker.NewAIProcessTask(articleID, task.ID, userID, title, content, string(article.SourceType), "")
-		if _, err := s.asynqClient.EnqueueContext(ctx, aiTask); err != nil {
-			return nil, fmt.Errorf("enqueue retry ai: %w", err)
-		}
-	}
-
-	slog.Info("article retry enqueued", "article_id", articleID, "task_id", task.ID)
-
-	return &SubmitURLResponse{ArticleID: articleID, TaskID: task.ID}, nil
+	return s.retryWorkflow().Retry(ctx, userID, articleID)
 }
 
 // SemanticSearch does LLM-powered search: expand query → broad recall → LLM rerank.
