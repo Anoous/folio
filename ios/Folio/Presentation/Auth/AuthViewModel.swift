@@ -111,9 +111,12 @@ final class AuthViewModel {
         do {
             try await apiClient.sendEmailCode(email: email)
             FolioLogger.auth.info("verification code sent to \(email)")
+        } catch let error as APIError {
+            FolioLogger.auth.error("send code failed: \(error)")
+            errorMessage = sendCodeErrorMessage(for: error)
         } catch {
             FolioLogger.auth.error("send code failed: \(error)")
-            errorMessage = String(localized: "auth.error.sendCode", defaultValue: "Failed to send verification code. Please try again.")
+            errorMessage = Self.networkUnavailableMessage
         }
     }
 
@@ -131,13 +134,21 @@ final class AuthViewModel {
             FolioLogger.auth.error("email verify failed: \(error)")
             switch error {
             case .unauthorized:
-                errorMessage = String(localized: "auth.error.invalidCode", defaultValue: "Invalid or expired code. Please try again.")
+                errorMessage = "验证码无效或已过期，请重新输入。"
+            case .networkError:
+                errorMessage = Self.networkUnavailableMessage
+            case .serverError:
+                errorMessage = "验证码服务暂时不可用，请稍后再试。"
+            case .quotaExceeded:
+                errorMessage = "尝试次数过多，请稍后再试。"
+            case .serverMessage(let message):
+                errorMessage = Self.localizedServerMessage(message)
             default:
-                errorMessage = String(localized: "auth.error.network", defaultValue: "Could not connect to the server. Please check your network and try again.")
+                errorMessage = "无法完成验证，请稍后再试。"
             }
         } catch {
             FolioLogger.auth.error("email verify failed: \(error)")
-            errorMessage = String(localized: "auth.error.network", defaultValue: "Could not connect to the server. Please check your network and try again.")
+            errorMessage = Self.networkUnavailableMessage
         }
     }
 
@@ -161,5 +172,39 @@ final class AuthViewModel {
         currentUser = nil
         authState = .signedOut
         FolioLogger.auth.info("user signed out")
+    }
+
+    private func sendCodeErrorMessage(for error: APIError) -> String {
+        switch error {
+        case .quotaExceeded:
+            "验证码请求太频繁，请稍后再试。"
+        case .networkError:
+            Self.networkUnavailableMessage
+        case .serverError:
+            "验证码服务暂时不可用，请稍后再试。"
+        case .serverMessage(let message):
+            Self.localizedServerMessage(message)
+        default:
+            "无法发送验证码，请稍后再试。"
+        }
+    }
+
+    private static var networkUnavailableMessage: String {
+        #if DEBUG
+        "无法连接本地 Folio API，请先启动后端服务。"
+        #else
+        "无法连接 Folio 服务，请检查网络后重试。"
+        #endif
+    }
+
+    private static func localizedServerMessage(_ message: String) -> String {
+        switch message {
+        case "please wait before requesting another code":
+            "验证码请求太频繁，请稍后再试。"
+        case "invalid or expired verification code":
+            "验证码无效或已过期，请重新输入。"
+        default:
+            "请求失败，请稍后再试。"
+        }
     }
 }

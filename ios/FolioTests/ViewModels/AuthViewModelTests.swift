@@ -144,6 +144,53 @@ final class AuthViewModelTests: XCTestCase {
         XCTAssertFalse(keychainManager.hasStoredSession)
     }
 
+    func testSendEmailCode_successPostsEmailAndClearsError() async throws {
+        AuthViewModelMockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/auth/email/code")
+            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+            let body = try XCTUnwrap(Self.decodeBody(AuthViewModelMockURLProtocol.lastRequestBody))
+            XCTAssertEqual(body["email"] as? String, "reader@example.com")
+            return (Self.messageResponseJSON(), Self.makeResponse(url: request.url, statusCode: 200))
+        }
+
+        await authViewModel.sendEmailCode(email: "reader@example.com")
+
+        XCTAssertNil(authViewModel.errorMessage)
+        XCTAssertFalse(authViewModel.isLoading)
+    }
+
+    func testSendEmailCode_networkFailureShowsLocalServiceMessage() async {
+        AuthViewModelMockURLProtocol.requestHandler = { _ in
+            throw URLError(.notConnectedToInternet)
+        }
+
+        await authViewModel.sendEmailCode(email: "reader@example.com")
+
+        XCTAssertEqual(authViewModel.errorMessage, "无法连接本地 Folio API，请先启动后端服务。")
+        XCTAssertFalse(authViewModel.isLoading)
+    }
+
+    func testSendEmailCode_rateLimitShowsCooldownMessage() async {
+        AuthViewModelMockURLProtocol.requestHandler = { request in
+            (Self.errorResponseJSON("please wait before requesting another code"), Self.makeResponse(url: request.url, statusCode: 429))
+        }
+
+        await authViewModel.sendEmailCode(email: "reader@example.com")
+
+        XCTAssertEqual(authViewModel.errorMessage, "验证码请求太频繁，请稍后再试。")
+    }
+
+    func testVerifyEmailCode_unauthorizedShowsInvalidCodeMessage() async {
+        AuthViewModelMockURLProtocol.requestHandler = { request in
+            (Self.errorResponseJSON("invalid or expired verification code"), Self.makeResponse(url: request.url, statusCode: 401))
+        }
+
+        await authViewModel.verifyEmailCode(email: "reader@example.com", code: "123456")
+
+        XCTAssertEqual(authViewModel.errorMessage, "验证码无效或已过期，请重新输入。")
+        XCTAssertEqual(authViewModel.authState, .unknown)
+    }
+
     private static func authResponseJSON() -> Data {
         """
         {
@@ -159,6 +206,22 @@ final class AuthViewModelTests: XCTestCase {
                 "created_at": "2025-01-01T00:00:00Z",
                 "updated_at": "2025-01-01T00:00:00Z"
             }
+        }
+        """.data(using: .utf8)!
+    }
+
+    private static func messageResponseJSON() -> Data {
+        """
+        {
+            "message": "verification code sent"
+        }
+        """.data(using: .utf8)!
+    }
+
+    private static func errorResponseJSON(_ message: String) -> Data {
+        """
+        {
+            "error": "\(message)"
         }
         """.data(using: .utf8)!
     }
