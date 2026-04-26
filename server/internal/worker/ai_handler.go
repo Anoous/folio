@@ -114,19 +114,8 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("create fallback category: %w", err)
 	}
 
-	// Update article with AI results
-	if err := h.articleRepo.UpdateAIResult(ctx, p.ArticleID, repository.AIResult{
-		CategoryID:       cat.ID,
-		Summary:          result.Summary,
-		KeyPoints:        result.KeyPoints,
-		Confidence:       result.Confidence,
-		Language:         result.Language,
-		SemanticKeywords: result.SemanticKeywords,
-	}); err != nil {
-		failureErr := ensurePipelineErr(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, true, "persist ai result", err)
-		logPipelineFailed(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, p.TaskID, p.ArticleID, p.UserID, "", time.Since(start), failureErr)
-		h.taskRepo.SetFailed(ctx, p.TaskID, buildTaskFailure(failureErr, time.Since(start)))
-		return fmt.Errorf("update ai result: %w", err)
+	if err := h.resultPersister().persist(ctx, p, result, cat.ID, start); err != nil {
+		return err
 	}
 
 	h.titleBackfiller().backfill(ctx, p, result)
