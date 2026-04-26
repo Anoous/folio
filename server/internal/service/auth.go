@@ -265,7 +265,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*A
 		if lookupErr != nil {
 			return nil, fmt.Errorf("lookup refresh session: %w", lookupErr)
 		}
-		if existing != nil && existing.RevokedAt == nil && existing.ExpiresAt.After(now) && existing.TokenHash != presentedHash {
+		if shouldRevokeRefreshSessionReuse(existing, presentedHash, now) {
 			if revokeErr := s.sessionRepo.Revoke(ctx, sessionID, "", now); revokeErr != nil {
 				slog.Error("token refresh: revoke reused session failed", "session_id", sessionID, "error", revokeErr)
 			}
@@ -285,6 +285,14 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*A
 
 	slog.Debug("token refreshed", "user_id", user.ID, "session_id", sessionID)
 	return s.buildAuthResponse(user, sessionID, newRefreshToken, now)
+}
+
+func shouldRevokeRefreshSessionReuse(session *domain.RefreshSession, presentedHash string, now time.Time) bool {
+	return session != nil &&
+		session.RevokedAt == nil &&
+		session.ExpiresAt.After(now) &&
+		session.ReplacedByTokenHash != nil &&
+		*session.ReplacedByTokenHash == presentedHash
 }
 
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {

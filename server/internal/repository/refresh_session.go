@@ -84,7 +84,7 @@ func (r *RefreshSessionRepo) Rotate(ctx context.Context, sessionID, currentToken
 		    expires_at = $4,
 		    last_used_at = $5,
 		    rotated_at = $5,
-		    replaced_by_token_hash = $3
+		    replaced_by_token_hash = $2
 		WHERE id = $1::uuid
 		  AND token_hash = $2
 		  AND revoked_at IS NULL

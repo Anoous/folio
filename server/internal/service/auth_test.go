@@ -93,10 +93,10 @@ func TestIssueTokenPair_PersistsRefreshSession(t *testing.T) {
 	userRepo := &fakeAuthUserRepo{}
 	sessionRepo := newFakeRefreshSessionRepo()
 	svc := &AuthService{
-		userRepo:     userRepo,
-		sessionRepo:  sessionRepo,
-		jwtSecret:    []byte("01234567890123456789012345678901"),
-		resend:       client.NewResendClient("", "noreply@example.com"),
+		userRepo:    userRepo,
+		sessionRepo: sessionRepo,
+		jwtSecret:   []byte("01234567890123456789012345678901"),
+		resend:      client.NewResendClient("", "noreply@example.com"),
 	}
 
 	user := &domain.User{ID: "user-1"}
@@ -159,6 +159,42 @@ func TestRefreshToken_RotatesSessionAndRevokesOnReuse(t *testing.T) {
 
 	if _, err := svc.RefreshToken(context.Background(), rotated.RefreshToken); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("RefreshToken() after reuse revoke error = %v, want %v", err, ErrForbidden)
+	}
+}
+
+func TestRefreshToken_WrongSecretForKnownSessionDoesNotRevoke(t *testing.T) {
+	userRepo := &fakeAuthUserRepo{
+		users: map[string]*domain.User{
+			"user-1": {ID: "user-1"},
+		},
+	}
+	sessionRepo := newFakeRefreshSessionRepo()
+	svc := &AuthService{
+		userRepo:    userRepo,
+		sessionRepo: sessionRepo,
+		jwtSecret:   []byte("01234567890123456789012345678901"),
+	}
+
+	initial, err := svc.issueTokenPair(context.Background(), userRepo.users["user-1"])
+	if err != nil {
+		t.Fatalf("issueTokenPair() error = %v", err)
+	}
+
+	sessionID, _ := mustParseRefreshToken(t, initial.RefreshToken)
+	wrongToken, _, err := generateRefreshToken(sessionID)
+	if err != nil {
+		t.Fatalf("generateRefreshToken() error = %v", err)
+	}
+
+	if _, err := svc.RefreshToken(context.Background(), wrongToken); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("RefreshToken() with wrong secret error = %v, want %v", err, ErrForbidden)
+	}
+	if sessionRepo.sessions[sessionID].RevokedAt != nil {
+		t.Fatal("RefreshToken() with wrong secret revoked the session")
+	}
+
+	if _, err := svc.RefreshToken(context.Background(), initial.RefreshToken); err != nil {
+		t.Fatalf("RefreshToken() with original token after wrong secret error = %v", err)
 	}
 }
 
@@ -293,10 +329,12 @@ func (r *fakeRefreshSessionRepo) Rotate(_ context.Context, sessionID, currentTok
 		return nil, nil
 	}
 
+	replacedHash := currentTokenHash
 	session.TokenHash = newTokenHash
 	session.ExpiresAt = expiresAt
 	session.LastUsedAt = &now
 	session.RotatedAt = &now
+	session.ReplacedByTokenHash = &replacedHash
 	session.UpdatedAt = now
 	clone := *session
 	return &clone, nil
