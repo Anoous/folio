@@ -1493,3 +1493,40 @@ func TestSemanticSearch_ReusesEvidenceCandidates(t *testing.T) {
 		t.Fatalf("SemanticSearch() snippet = %v, want evidence snippet from shared retrieval", result.Articles[0].SearchSnippet)
 	}
 }
+
+func TestArticleSearchWorkflow_SemanticSearchFallsBackToKeywordWhenEvidenceUnavailable(t *testing.T) {
+	keywordHit := domain.Article{
+		ID:        "keyword-hit",
+		UserID:    "user-1",
+		Title:     strPtr("Keyword result"),
+		KeyPoints: []string{},
+	}
+	searchCalls := 0
+	artRepo := &mockArticleRepo{
+		searchFn: func(ctx context.Context, userID, query string, page, perPage int) (*repository.ListArticlesResult, error) {
+			searchCalls++
+			if userID != "user-1" || query != "keyword fallback" || page != 2 || perPage != 1 {
+				t.Fatalf("Search args = %q %q %d %d", userID, query, page, perPage)
+			}
+			return &repository.ListArticlesResult{
+				Articles: []domain.Article{keywordHit},
+				Total:    1,
+			}, nil
+		},
+	}
+	workflow := articleSearchWorkflow{
+		articleRepo: artRepo,
+		aiClient:    &mockArticleAI{},
+	}
+
+	result, err := workflow.SemanticSearch(context.Background(), "user-1", "keyword fallback", 2, 1)
+	if err != nil {
+		t.Fatalf("SemanticSearch() error = %v", err)
+	}
+	if searchCalls != 1 {
+		t.Fatalf("keyword search calls = %d, want 1", searchCalls)
+	}
+	if result.Total != 1 || len(result.Articles) != 1 || result.Articles[0].ID != keywordHit.ID {
+		t.Fatalf("SemanticSearch() result = %+v, want keyword fallback hit", result)
+	}
+}
