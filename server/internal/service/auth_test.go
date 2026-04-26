@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"math/big"
 	"net"
 	"strings"
 	"testing"
@@ -111,6 +112,66 @@ type failingReader struct{}
 
 func (failingReader) Read(_ []byte) (int, error) {
 	return 0, errors.New("entropy unavailable")
+}
+
+func TestLoginWithApple_InvalidTokenReturnsForbidden(t *testing.T) {
+	svc := &AuthService{}
+
+	_, err := svc.LoginWithApple(context.Background(), AppleAuthRequest{IdentityToken: "not-a-jwt"})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("LoginWithApple() error = %v, want %v", err, ErrForbidden)
+	}
+}
+
+func TestParseRSAPublicKey_AcceptsAppleSigningKey(t *testing.T) {
+	key, err := parseRSAPublicKey(validAppleJWK())
+	if err != nil {
+		t.Fatalf("parseRSAPublicKey() error = %v", err)
+	}
+	if key.N.Cmp(big.NewInt(3233)) != 0 {
+		t.Fatalf("modulus = %s, want 3233", key.N)
+	}
+	if key.E != 65537 {
+		t.Fatalf("exponent = %d, want 65537", key.E)
+	}
+}
+
+func TestParseRSAPublicKey_RejectsUnexpectedJWKMetadata(t *testing.T) {
+	tests := []struct {
+		name string
+		key  AppleJWK
+	}{
+		{name: "key type", key: withAppleJWK(func(jwk *AppleJWK) { jwk.Kty = "EC" })},
+		{name: "use", key: withAppleJWK(func(jwk *AppleJWK) { jwk.Use = "enc" })},
+		{name: "algorithm", key: withAppleJWK(func(jwk *AppleJWK) { jwk.Alg = "RS512" })},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := parseRSAPublicKey(tt.key); err == nil {
+				t.Fatal("parseRSAPublicKey() error = nil, want metadata validation error")
+			}
+		})
+	}
+}
+
+func TestParseRSAPublicKey_RejectsInvalidRSAParameters(t *testing.T) {
+	tests := []struct {
+		name string
+		key  AppleJWK
+	}{
+		{name: "empty modulus", key: withAppleJWK(func(jwk *AppleJWK) { jwk.N = "" })},
+		{name: "even exponent", key: withAppleJWK(func(jwk *AppleJWK) { jwk.E = encodeBigInt(big.NewInt(2)) })},
+		{name: "zero exponent", key: withAppleJWK(func(jwk *AppleJWK) { jwk.E = "" })},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := parseRSAPublicKey(tt.key); err == nil {
+				t.Fatal("parseRSAPublicKey() error = nil, want RSA parameter validation error")
+			}
+		})
+	}
 }
 
 func TestIssueTokenPair_PersistsRefreshSession(t *testing.T) {
@@ -375,4 +436,25 @@ func (r *fakeRefreshSessionRepo) Revoke(_ context.Context, sessionID, tokenHash 
 	session.RevokedAt = &now
 	session.UpdatedAt = now
 	return nil
+}
+
+func validAppleJWK() AppleJWK {
+	return AppleJWK{
+		Kty: "RSA",
+		Kid: "kid-1",
+		Use: "sig",
+		Alg: "RS256",
+		N:   encodeBigInt(big.NewInt(3233)),
+		E:   encodeBigInt(big.NewInt(65537)),
+	}
+}
+
+func withAppleJWK(mutator func(*AppleJWK)) AppleJWK {
+	jwk := validAppleJWK()
+	mutator(&jwk)
+	return jwk
+}
+
+func encodeBigInt(n *big.Int) string {
+	return base64.RawURLEncoding.EncodeToString(n.Bytes())
 }

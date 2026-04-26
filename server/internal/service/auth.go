@@ -130,7 +130,7 @@ func (s *AuthService) LoginWithApple(ctx context.Context, req AppleAuthRequest) 
 	appleUserID, err := s.verifyAppleToken(req.IdentityToken)
 	if err != nil {
 		slog.Info("apple login: token verification failed", "error", err)
-		return nil, fmt.Errorf("invalid apple token: %w", err)
+		return nil, ErrForbidden
 	}
 
 	// Atomically find-or-create user (handles existing Apple user, email linking, new user)
@@ -496,6 +496,15 @@ func fetchAppleJWKS() (*AppleJWKSResponse, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		// Grace period: return stale JWKS if available (up to 48h)
+		if appleJWKS != nil && time.Since(appleJWKSFetch) < 48*time.Hour {
+			slog.Warn("apple JWKS fetch returned non-2xx, using stale cache", "age", time.Since(appleJWKSFetch), "status", resp.StatusCode)
+			return appleJWKS, nil
+		}
+		return nil, fmt.Errorf("fetch apple jwks: unexpected status %d", resp.StatusCode)
+	}
+
 	var jwks AppleJWKSResponse
 	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
 		// Grace period: return stale JWKS if available (up to 48h)
@@ -512,6 +521,16 @@ func fetchAppleJWKS() (*AppleJWKSResponse, error) {
 }
 
 func parseRSAPublicKey(jwk AppleJWK) (*rsa.PublicKey, error) {
+	if jwk.Kty != "RSA" {
+		return nil, fmt.Errorf("unexpected apple JWK key type %q", jwk.Kty)
+	}
+	if jwk.Use != "sig" {
+		return nil, fmt.Errorf("unexpected apple JWK use %q", jwk.Use)
+	}
+	if jwk.Alg != "RS256" {
+		return nil, fmt.Errorf("unexpected apple JWK algorithm %q", jwk.Alg)
+	}
+
 	nBytes, err := base64.RawURLEncoding.DecodeString(jwk.N)
 	if err != nil {
 		return nil, fmt.Errorf("decode modulus: %w", err)
@@ -523,9 +542,19 @@ func parseRSAPublicKey(jwk AppleJWK) (*rsa.PublicKey, error) {
 
 	n := new(big.Int).SetBytes(nBytes)
 	e := new(big.Int).SetBytes(eBytes)
+	if n.Sign() <= 0 {
+		return nil, fmt.Errorf("invalid RSA modulus")
+	}
+	if !e.IsInt64() {
+		return nil, fmt.Errorf("invalid RSA exponent")
+	}
+	exponent := e.Int64()
+	if exponent < 3 || exponent%2 == 0 || exponent > int64(^uint(0)>>1) {
+		return nil, fmt.Errorf("invalid RSA exponent")
+	}
 
 	return &rsa.PublicKey{
 		N: n,
-		E: int(e.Int64()),
+		E: int(exponent),
 	}, nil
 }

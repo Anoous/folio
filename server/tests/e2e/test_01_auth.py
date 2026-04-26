@@ -65,6 +65,21 @@ class TestEmailCode:
         client.close()
 
 
+class TestAppleLogin:
+
+    def test_invalid_apple_token_returns_forbidden(self, base_url):
+        """Invalid Apple identity tokens are authentication failures."""
+        client = _client(base_url, "198.51.100.18")
+
+        resp = client.post(
+            "/api/v1/auth/apple",
+            json={"identity_token": "not-a-jwt"},
+            authenticated=False,
+        )
+        assert resp.status_code == 403
+        client.close()
+
+
 class TestRefreshToken:
 
     def test_refresh_token_success(self, base_url):
