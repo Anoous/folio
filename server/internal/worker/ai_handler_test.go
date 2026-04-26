@@ -256,7 +256,7 @@ func TestAIHandler_EnqueuesRelateTask(t *testing.T) {
 		},
 		articleRepo:  articleRepo,
 		taskRepo:     taskRepo,
-		categoryRepo: nil, // Will cause panic — we need a mock
+		categoryRepo: nil,
 		tagRepo:      &mockAITagRepo{},
 		cacheRepo:    nil,
 		asynqClient:  enqueuer,
