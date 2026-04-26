@@ -41,6 +41,39 @@ func (m *mockKnowledgeExpander) ExpandQuery(_ context.Context, query string) ([]
 	return slices.Clone(m.keywords), nil
 }
 
+func TestKnowledgeQueryPlannerMergesAliasesExpansionAndPhrases(t *testing.T) {
+	expander := &mockKnowledgeExpander{keywords: []string{"bounded queues", "incident response"}}
+	planner := knowledgeQueryPlanner{expander: expander}
+
+	plan := planner.Plan(context.Background(), "calm SLO 怎么和可靠性结合")
+
+	for _, term := range []string{
+		"calm",
+		"calm software",
+		"quiet defaults",
+		"slo",
+		"slos",
+		"service level objectives",
+		"可靠性",
+		"reliability",
+		"trust",
+		"bounded queues",
+		"incident response",
+	} {
+		if !slices.Contains(plan.Terms, term) {
+			t.Fatalf("plan terms = %v, want %q", plan.Terms, term)
+		}
+	}
+	for _, phrase := range []string{"calm software", "quiet defaults", "service level objectives", "bounded queues"} {
+		if !slices.Contains(plan.Phrases, phrase) {
+			t.Fatalf("plan phrases = %v, want %q", plan.Phrases, phrase)
+		}
+	}
+	if expander.callCount != 1 {
+		t.Fatalf("expander calls = %d, want 1", expander.callCount)
+	}
+}
+
 type mockKnowledgeRetriever struct {
 	docs         []KnowledgeDocument
 	responses    [][]KnowledgeDocument
