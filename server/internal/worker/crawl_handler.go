@@ -76,57 +76,11 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 
 	// Load article once for pre-crawl checks
 	preCheckArticle, preCheckErr := h.articleRepo.GetByID(ctx, p.ArticleID)
-
-	// If article has highlights AND already has server-extracted content, skip Reader and go to AI.
-	// If article has highlights but NO content, proceed with Reader crawl normally.
-	if preCheckErr == nil && preCheckArticle != nil && preCheckArticle.HighlightCount > 0 {
-		if preCheckArticle.MarkdownContent != nil && *preCheckArticle.MarkdownContent != "" {
-			slog.Info("crawl skipped: article has highlights and content, routing to AI",
-				"article_id", p.ArticleID,
-				"highlight_count", preCheckArticle.HighlightCount,
-			)
-			return h.aiHandoff().enqueue(ctx, crawlAIHandoffRequest{
-				payload:             p,
-				title:               derefOrEmpty(preCheckArticle.Title),
-				markdown:            *preCheckArticle.MarkdownContent,
-				source:              derefOrDefault(preCheckArticle.SiteName, "web"),
-				author:              derefOrEmpty(preCheckArticle.Author),
-				finishBeforeEnqueue: true,
-				setFinishedLabel:    "highlights: set crawl finished",
-				enqueueLabel:        "enqueue ai task (highlights)",
-			})
+	if preCheckErr == nil {
+		handled, err := h.existingContentRoute().beforeCrawl(ctx, p, preCheckArticle)
+		if handled || err != nil {
+			return err
 		}
-		slog.Info("crawl proceeding: article has highlights but no content",
-			"article_id", p.ArticleID,
-			"highlight_count", preCheckArticle.HighlightCount,
-		)
-	}
-
-	// Skip crawl for screenshot/voice — they have content, just need AI
-	if preCheckErr == nil && preCheckArticle != nil &&
-		(preCheckArticle.SourceType == domain.SourceScreenshot || preCheckArticle.SourceType == domain.SourceVoice) {
-		if preCheckArticle.MarkdownContent != nil && *preCheckArticle.MarkdownContent != "" {
-			slog.Info("crawl skipped: screenshot/voice article has content, routing to AI",
-				"article_id", p.ArticleID,
-				"source_type", preCheckArticle.SourceType,
-			)
-			return h.aiHandoff().enqueue(ctx, crawlAIHandoffRequest{
-				payload:             p,
-				title:               derefOrEmpty(preCheckArticle.Title),
-				markdown:            *preCheckArticle.MarkdownContent,
-				source:              string(preCheckArticle.SourceType),
-				author:              derefOrEmpty(preCheckArticle.Author),
-				finishBeforeEnqueue: true,
-				setFinishedLabel:    "screenshot/voice: set crawl finished",
-				enqueueLabel:        "enqueue ai task (screenshot/voice)",
-			})
-		}
-		// No content — mark as ready (e.g. image-only screenshot with no extracted text)
-		slog.Info("crawl skipped: screenshot/voice article has no content, marking ready",
-			"article_id", p.ArticleID,
-			"source_type", preCheckArticle.SourceType,
-		)
-		return h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusReady)
 	}
 
 	// Mark crawl started
@@ -151,21 +105,11 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 
 	// --- Optimization 2: Check client-extracted content ---
 	article, getErr := h.articleRepo.GetByID(ctx, p.ArticleID)
-	if getErr == nil && article != nil && article.MarkdownContent != nil && *article.MarkdownContent != "" {
-		slog.Info("crawl task using client-provided content, skipping Reader",
-			"article_id", p.ArticleID,
-			"duration_ms", time.Since(start).Milliseconds(),
-		)
-		return h.aiHandoff().enqueue(ctx, crawlAIHandoffRequest{
-			payload:             p,
-			title:               derefOrEmpty(article.Title),
-			markdown:            *article.MarkdownContent,
-			source:              derefOrDefault(article.SiteName, "web"),
-			author:              derefOrEmpty(article.Author),
-			finishBeforeEnqueue: false,
-			setFinishedLabel:    "client content: set crawl finished",
-			enqueueLabel:        "enqueue ai task (client content)",
-		})
+	if getErr == nil {
+		handled, err := h.existingContentRoute().afterCacheMiss(ctx, p, article, start)
+		if handled || err != nil {
+			return err
+		}
 	}
 
 	// --- Normal path: call Reader, fallback to Jina ---
