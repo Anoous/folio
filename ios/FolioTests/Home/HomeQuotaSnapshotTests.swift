@@ -61,4 +61,18 @@ final class HomeQuotaSnapshotTests: XCTestCase {
 
         XCTAssertEqual(snapshot.state, .signedOut)
     }
+
+    func testWorkbenchOnlyShowsActionableQuotaStates() {
+        let available = HomeQuotaSnapshot(isAuthenticated: true, isPro: false, used: 10, monthlyQuota: 30)
+        let warning = HomeQuotaSnapshot(isAuthenticated: true, isPro: false, used: 24, monthlyQuota: 30)
+        let exceeded = HomeQuotaSnapshot(isAuthenticated: true, isPro: false, used: 30, monthlyQuota: 30)
+        let pro = HomeQuotaSnapshot(isAuthenticated: true, isPro: true, used: 30, monthlyQuota: 30)
+        let signedOut = HomeQuotaSnapshot(isAuthenticated: false, isPro: false, used: 0, monthlyQuota: 30)
+
+        XCTAssertFalse(available.shouldShowOnWorkbench)
+        XCTAssertTrue(warning.shouldShowOnWorkbench)
+        XCTAssertTrue(exceeded.shouldShowOnWorkbench)
+        XCTAssertFalse(pro.shouldShowOnWorkbench)
+        XCTAssertFalse(signedOut.shouldShowOnWorkbench)
+    }
 }

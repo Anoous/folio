@@ -10,44 +10,37 @@ struct HomeQuickCaptureView: View {
     @State private var selectedPhoto: PhotosPickerItem?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            HStack(spacing: Spacing.sm) {
-                captureButton(
-                    title: "粘贴链接",
-                    systemImage: "link.badge.plus",
-                    action: handlePaste
-                )
+        HStack(spacing: Spacing.sm) {
+            captureButton(
+                title: "链接",
+                systemImage: "link",
+                action: handlePaste
+            )
 
-                captureButton(
-                    title: "写一点",
-                    systemImage: "square.and.pencil",
-                    action: onTextTap
-                )
+            captureButton(
+                title: "文字",
+                systemImage: "square.and.pencil",
+                action: onTextTap
+            )
+
+            iconButton(
+                title: "语音",
+                systemImage: "mic",
+                action: onMicTap
+            )
+
+            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                Image(systemName: "camera")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.folio.textPrimary)
+                    .frame(width: 46, height: 46)
+                    .background(Color.folio.echoBg)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .accessibilityLabel("截图")
             }
-
-            HStack(spacing: Spacing.sm) {
-                captureButton(
-                    title: "语音",
-                    systemImage: "mic.fill",
-                    action: onMicTap
-                )
-
-                PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                    Label("截图", systemImage: "camera.viewfinder")
-                        .font(Typography.body)
-                        .foregroundStyle(Color.folio.textPrimary)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(Color.folio.echoBg)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-            }
-
-            Text("保存后会立即进入队列；网页和长文本完成分析后可阅读、提问、生成 Echo。")
-                .font(Typography.caption)
-                .foregroundStyle(Color.folio.textTertiary)
-                .lineLimit(3)
         }
         .padding(.horizontal, Spacing.screenPadding)
+        .padding(.top, Spacing.md)
         .padding(.bottom, Spacing.sm)
         .onChange(of: selectedPhoto) { _, newValue in
             guard let item = newValue else { return }
@@ -65,10 +58,22 @@ struct HomeQuickCaptureView: View {
         Button(title, systemImage: systemImage, action: action)
             .font(Typography.body)
             .foregroundStyle(Color.folio.textPrimary)
-            .frame(maxWidth: .infinity, minHeight: 44)
+            .frame(maxWidth: .infinity, minHeight: 46)
             .background(Color.folio.echoBg)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .buttonStyle(.plain)
+    }
+
+    private func iconButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(title, systemImage: systemImage, action: action)
+            .labelStyle(.iconOnly)
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(Color.folio.textPrimary)
+            .frame(width: 46, height: 46)
+            .background(Color.folio.echoBg)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .buttonStyle(.plain)
+            .accessibilityLabel(title)
     }
 
     private func handlePaste() {

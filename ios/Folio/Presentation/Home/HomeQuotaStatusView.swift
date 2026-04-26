@@ -55,9 +55,9 @@ struct HomeQuotaStatusView: View {
         case .available:
             return "本月还可捕获 \(snapshot.remaining) 篇"
         case .warning:
-            return "本月额度剩余 \(snapshot.remaining) 篇"
+            return "额度剩余 \(snapshot.remaining) 篇"
         case .exceeded:
-            return "本月捕获额度已用完"
+            return "捕获额度已用完"
         }
     }
 
@@ -70,9 +70,9 @@ struct HomeQuotaStatusView: View {
         case .available:
             return "已使用 \(snapshot.used) / \(snapshot.effectiveQuota)。接近上限时这里会提前提醒。"
         case .warning:
-            return "已使用 \(snapshot.used) / \(snapshot.effectiveQuota)。继续捕获前建议确认订阅状态。"
+            return "已使用 \(snapshot.used) / \(snapshot.effectiveQuota)。"
         case .exceeded:
-            return "阅读和搜索仍可用；新增捕获需要等待下月重置或升级 Pro。"
+            return "阅读和搜索仍可用；新增捕获需等待重置或升级。"
         }
     }
 

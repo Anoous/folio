@@ -74,76 +74,62 @@ struct HomeView: View {
             if !isSearchActive { topBar }
             mainContent
         }
-        .safeAreaInset(edge: .bottom) {
-            if !isSearchActive {
-                CaptureBarView(
-                    onMicTap: { showVoiceRecording = true },
-                    onTextTap: {
-                        noteSheetText = ""
-                        showNoteSheet = true
-                    },
-                    onPhotoSelected: { image in
-                        saveScreenshot(image)
-                    }
-                )
-            }
-        }
         .navigationBarHidden(true)
-            .navigationDestination(isPresented: $showSettings) {
-                SettingsView()
+        .navigationDestination(isPresented: $showSettings) {
+            SettingsView()
+        }
+        .toast(isPresented: showToastBinding, message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
+        .alert(
+            deleteConfirmTitle,
+            isPresented: $showDeleteConfirmation
+        ) {
+            Button(String(localized: "button.cancel", defaultValue: "Cancel"), role: .cancel) {
+                articleToDelete = nil
             }
-            .toast(isPresented: showToastBinding, message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
-            .alert(
-                deleteConfirmTitle,
-                isPresented: $showDeleteConfirmation
-            ) {
-                Button(String(localized: "button.cancel", defaultValue: "Cancel"), role: .cancel) {
+            Button(String(localized: "reader.delete", defaultValue: "Delete"), role: .destructive) {
+                if let article = articleToDelete {
+                    viewModel?.deleteArticle(article)
                     articleToDelete = nil
                 }
-                Button(String(localized: "reader.delete", defaultValue: "Delete"), role: .destructive) {
-                    if let article = articleToDelete {
-                        viewModel?.deleteArticle(article)
-                        articleToDelete = nil
-                    }
+            }
+        } message: {
+            Text(String(localized: "reader.deleteMessage", defaultValue: "This article will be permanently removed."))
+        }
+        .sheet(isPresented: $showNoteSheet) {
+            ManualNoteSheet(text: noteSheetText) { content in
+                if let url = URLDetection.extractURL(from: content) {
+                    saveURL(url.absoluteString)
+                } else {
+                    saveManualContent(content)
                 }
-            } message: {
-                Text(String(localized: "reader.deleteMessage", defaultValue: "This article will be permanently removed."))
+                searchText = ""
             }
-            .sheet(isPresented: $showNoteSheet) {
-                ManualNoteSheet(text: noteSheetText) { content in
-                    if let url = URLDetection.extractURL(from: content) {
-                        saveURL(url.absoluteString)
-                    } else {
-                        saveManualContent(content)
-                    }
-                    searchText = ""
-                }
+        }
+        .sheet(isPresented: $showVoiceRecording) {
+            VoiceRecordingView { transcribedText in
+                saveVoiceNote(transcribedText)
             }
-            .sheet(isPresented: $showVoiceRecording) {
-                VoiceRecordingView { transcribedText in
-                    saveVoiceNote(transcribedText)
-                }
-                .presentationDetents([.medium])
+            .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let items = shareItems {
+                ShareSheet(activityItems: items)
             }
-            .sheet(isPresented: $showShareSheet) {
-                if let items = shareItems {
-                    ShareSheet(activityItems: items)
-                }
+        }
+        .sensoryFeedback(.success, trigger: saveSucceeded)
+        .sensoryFeedback(.error, trigger: saveFailed)
+        .sensoryFeedback(.impact(weight: .medium), trigger: deleteConfirmTrigger)
+        .sensoryFeedback(.impact(weight: .light), trigger: refreshTrigger)
+        .onAppear(perform: initializeViewModels)
+        .onChange(of: authViewModel?.isAuthenticated) { _, newValue in
+            viewModel?.isAuthenticated = newValue ?? false
+            if newValue == true {
+                Task { await viewModel?.fetchEchoCards() }
             }
-            .sensoryFeedback(.success, trigger: saveSucceeded)
-            .sensoryFeedback(.error, trigger: saveFailed)
-            .sensoryFeedback(.impact(weight: .medium), trigger: deleteConfirmTrigger)
-            .sensoryFeedback(.impact(weight: .light), trigger: refreshTrigger)
-            .onAppear(perform: initializeViewModels)
-            .onChange(of: authViewModel?.isAuthenticated) { _, newValue in
-                viewModel?.isAuthenticated = newValue ?? false
-                if newValue == true {
-                    Task { await viewModel?.fetchEchoCards() }
-                }
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                handleScenePhaseChange(newPhase)
-            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            handleScenePhaseChange(newPhase)
+        }
     }
 
     // MARK: - Top Bar

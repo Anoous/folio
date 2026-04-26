@@ -35,6 +35,15 @@ struct HomeQuotaSnapshot: Equatable {
         return .available
     }
 
+    var shouldShowOnWorkbench: Bool {
+        switch state {
+        case .warning, .exceeded:
+            return true
+        case .signedOut, .pro, .available:
+            return false
+        }
+    }
+
     init(isAuthenticated: Bool, isPro: Bool, used: Int, monthlyQuota: Int) {
         self.isAuthenticated = isAuthenticated
         self.isPro = isPro

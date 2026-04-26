@@ -21,10 +21,10 @@ struct HomeWorkbenchView: View {
     var body: some View {
         List {
             statusRows
-            headerRows
             captureRows
-            readingRows
+            quotaRows
             processingRows
+            readingRows
             askRows
             echoRows
             milestoneRows
@@ -54,21 +54,7 @@ struct HomeWorkbenchView: View {
     }
 
     @ViewBuilder
-    private var headerRows: some View {
-        HomeWorkbenchHeaderView(
-            articleCount: viewModel.articles.count,
-            readyCount: viewModel.readyArticleCount,
-            processingCount: viewModel.processingArticles.count,
-            echoCount: viewModel.echoCards.count
-        )
-        .plainWorkbenchRow()
-    }
-
-    @ViewBuilder
     private var captureRows: some View {
-        HomeSectionHeaderView(title: "快速捕获", subtitle: "每天最常用的入口")
-            .plainWorkbenchRow()
-
         HomeQuickCaptureView(
             onPasteURL: onPasteURL,
             onTextTap: onTextTap,
@@ -76,68 +62,73 @@ struct HomeWorkbenchView: View {
             onPhotoSelected: onPhotoSelected
         )
         .plainWorkbenchRow()
+    }
 
-        HomeQuotaStatusView(snapshot: quotaSnapshot, onOpenSettings: onOpenSettings)
-            .plainWorkbenchRow()
+    @ViewBuilder
+    private var quotaRows: some View {
+        if quotaSnapshot.shouldShowOnWorkbench {
+            HomeQuotaStatusView(snapshot: quotaSnapshot, onOpenSettings: onOpenSettings)
+                .plainWorkbenchRow()
+        }
     }
 
     @ViewBuilder
     private var readingRows: some View {
-        HomeSectionHeaderView(
-            title: "继续阅读",
-            subtitle: viewModel.continueReadingArticles.isEmpty ? "下一篇可读内容" : "从上次停下的位置继续"
-        )
-        .plainWorkbenchRow()
+        if shouldShowReading {
+            HomeSectionHeaderView(
+                title: "继续阅读",
+                subtitle: nil
+            )
+            .plainWorkbenchRow()
 
-        HomeContinueReadingView(
-            continueArticles: viewModel.continueReadingArticles,
-            suggestedArticles: viewModel.suggestedReadingArticles,
-            isLoading: viewModel.isLoading && viewModel.articles.isEmpty
-        )
-        .plainWorkbenchRow()
+            HomeContinueReadingView(
+                continueArticles: viewModel.continueReadingArticles,
+                suggestedArticles: viewModel.suggestedReadingArticles,
+                isLoading: viewModel.isLoading && viewModel.articles.isEmpty
+            )
+            .plainWorkbenchRow()
+        }
     }
 
     @ViewBuilder
     private var processingRows: some View {
-        HomeSectionHeaderView(
-            title: "处理队列",
-            subtitle: "保存、分析、失败和本地就绪状态"
-        )
-        .plainWorkbenchRow()
+        if !viewModel.processingArticles.isEmpty {
+            HomeSectionHeaderView(
+                title: "处理中",
+                subtitle: nil
+            )
+            .plainWorkbenchRow()
 
-        HomeProcessingQueueView(
-            articles: viewModel.processingArticles,
-            onRetry: { article in onArticleAction(.retry, article) }
-        )
-        .plainWorkbenchRow()
+            HomeProcessingQueueView(
+                articles: viewModel.processingArticles,
+                onRetry: { article in onArticleAction(.retry, article) }
+            )
+            .plainWorkbenchRow()
+        }
     }
 
     @ViewBuilder
     private var askRows: some View {
-        HomeSectionHeaderView(
-            title: "Ask Folio",
-            subtitle: "只在有来源时回答"
-        )
-        .plainWorkbenchRow()
-
-        HomeAskFolioCardView(
-            isAuthenticated: isAuthenticated,
-            readyArticleCount: viewModel.readyArticleCount,
-            onAsk: onOpenSearch,
-            onOpenSettings: onOpenSettings
-        )
-        .plainWorkbenchRow()
+        if viewModel.readyArticleCount > 0 {
+            HomeAskFolioCardView(
+                isAuthenticated: isAuthenticated,
+                readyArticleCount: viewModel.readyArticleCount,
+                onAsk: onOpenSearch,
+                onOpenSettings: onOpenSettings
+            )
+            .plainWorkbenchRow()
+        }
     }
 
     @ViewBuilder
     private var echoRows: some View {
-        HomeSectionHeaderView(
-            title: "今日 Echo",
-            subtitle: "10 秒主动回忆"
-        )
-        .plainWorkbenchRow()
-
         if let echoCard = viewModel.intersectionEchoCard {
+            HomeSectionHeaderView(
+                title: "今日 Echo",
+                subtitle: nil
+            )
+            .plainWorkbenchRow()
+
             EchoCardView(
                 card: EchoCardData(from: echoCard),
                 onReview: { result, completion in
@@ -149,7 +140,7 @@ struct HomeWorkbenchView: View {
                 }
             )
             .plainWorkbenchRow()
-        } else {
+        } else if viewModel.isEchoLoading || viewModel.echoError != nil {
             HomeEchoSummaryView(
                 isAuthenticated: isAuthenticated,
                 isLoading: viewModel.isEchoLoading,
@@ -178,21 +169,13 @@ struct HomeWorkbenchView: View {
 
     @ViewBuilder
     private var libraryRows: some View {
-        HomeSectionHeaderView(
-            title: "最近资料库",
-            subtitle: viewModel.articles.isEmpty ? "捕获完成后会按时间进入这里" : "\(viewModel.articles.count) 个条目"
-        )
-        .plainWorkbenchRow()
-
-        if viewModel.articles.isEmpty {
-            ContentUnavailableView(
-                "资料库还是空的",
-                systemImage: "tray",
-                description: Text("使用上方入口保存第一条内容。")
+        if !viewModel.articles.isEmpty {
+            HomeSectionHeaderView(
+                title: "最近",
+                subtitle: nil
             )
-            .frame(maxWidth: .infinity, minHeight: 120)
             .plainWorkbenchRow()
-        } else {
+
             ForEach(Array(viewModel.feedSections.enumerated()), id: \.element.group) { _, section in
                 HomeSectionHeaderView(title: section.group.rawValue, subtitle: nil)
                     .plainWorkbenchRow()
@@ -228,5 +211,11 @@ struct HomeWorkbenchView: View {
         Color.clear
             .frame(height: Spacing.xl)
             .plainWorkbenchRow()
+    }
+
+    private var shouldShowReading: Bool {
+        (viewModel.isLoading && viewModel.articles.isEmpty)
+            || !viewModel.continueReadingArticles.isEmpty
+            || !viewModel.suggestedReadingArticles.isEmpty
     }
 }
