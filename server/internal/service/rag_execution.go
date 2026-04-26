@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"folio-server/internal/client"
 	"folio-server/internal/domain"
@@ -23,9 +22,8 @@ type ragRepository interface {
 	BroadRecallSummaries(ctx context.Context, userID string, keywords []string, limit int, excludeID string) ([]domain.RAGSource, error)
 	CreateConversation(ctx context.Context, conv *domain.RAGConversation) error
 	AddMessage(ctx context.Context, msg *domain.RAGMessage) error
-	GetUserRAGQuota(ctx context.Context, userID string) (count int, resetAt *time.Time, err error)
-	ResetRAGMonthCount(ctx context.Context, userID string, resetAt time.Time) error
-	IncrementRAGMonthCount(ctx context.Context, userID string) error
+	ReserveRAGQuota(ctx context.Context, userID string, limit int) (bool, error)
+	ReleaseReservedRAGQuota(ctx context.Context, userID string) error
 }
 
 type ragUserRepository interface {
@@ -42,6 +40,7 @@ type ragAnswerRun struct {
 	sources             []domain.RAGSource
 	citedIndices        []int
 	followupSuggestions []string
+	quotaReserved       bool
 }
 
 func (r *ragAnswerRun) result() *client.RAGResult {
@@ -53,9 +52,16 @@ func (r *ragAnswerRun) result() *client.RAGResult {
 }
 
 func (s *RAGService) prepareKnowledgeRAG(ctx context.Context, userID, question string) (*ragAnswerRun, error) {
-	if err := s.checkQuota(ctx, userID); err != nil {
+	quotaReserved, err := s.reserveRAGQuota(ctx, userID)
+	if err != nil {
 		return nil, err
 	}
+	committed := false
+	defer func() {
+		if !committed {
+			s.releaseReservedRAGQuota(userID, quotaReserved)
+		}
+	}()
 
 	articles, err := s.ragRepo.LoadArticleSummaries(ctx, userID)
 	if err != nil {
@@ -72,12 +78,14 @@ func (s *RAGService) prepareKnowledgeRAG(ctx context.Context, userID, question s
 		return nil, fmt.Errorf("%w: %v", errRAGAnswerFailed, err)
 	}
 
+	committed = true
 	return &ragAnswerRun{
 		question:            question,
 		answer:              knowledgeAnswer.Answer,
 		sources:             knowledgeSourcesToRAGSources(knowledgeAnswer.Sources),
 		citedIndices:        knowledgeAnswer.CitedIndices,
 		followupSuggestions: knowledgeAnswer.FollowupSuggestions,
+		quotaReserved:       quotaReserved,
 	}, nil
 }
 
@@ -98,10 +106,6 @@ func (s *RAGService) completeRAGAnswer(ctx context.Context, userID, conversation
 		slog.Error("failed to save rag conversation", "user_id", userID, "error", err)
 	} else {
 		conversationID = savedConversationID
-	}
-
-	if incrErr := s.incrementQuotaIfFree(ctx, userID); incrErr != nil {
-		slog.Error("failed to increment rag quota", "user_id", userID, "error", incrErr)
 	}
 
 	return conversationID

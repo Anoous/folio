@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 
+import psycopg2
 import pytest
 
 from helpers.api_client import FolioAPIClient
@@ -11,6 +13,11 @@ from helpers.polling import poll_many_until_done
 from helpers.test_auth import test_login
 
 pytestmark = pytest.mark.timeout(240)
+
+DATABASE_URL = os.environ.get(
+    "E2E_DATABASE_URL",
+    "postgresql://folio:folio_test@localhost:15432/folio_test",
+)
 
 BENCHMARK_CORPUS = [
     ("Amazon's Two-Pizza Teams and Service Ownership", "Service ownership lowers coordination cost and makes reliability work visible because one team owns one service end to end."),
@@ -42,11 +49,21 @@ BENCHMARK_CORPUS = [
 
 
 @pytest.fixture(scope="module")
-def knowledge_api(base_url) -> FolioAPIClient:
+def knowledge_account(base_url) -> tuple[FolioAPIClient, str]:
     client = FolioAPIClient(base_url)
-    test_login(client, alias=f"knowledge-{uuid.uuid4().hex}")
-    yield client
+    data = test_login(client, alias=f"knowledge-{uuid.uuid4().hex}")
+    yield client, data["user"]["id"]
     client.close()
+
+
+@pytest.fixture(scope="module")
+def knowledge_api(knowledge_account) -> FolioAPIClient:
+    return knowledge_account[0]
+
+
+@pytest.fixture(scope="module")
+def knowledge_user_id(knowledge_account) -> str:
+    return knowledge_account[1]
 
 
 @pytest.fixture(scope="module")
@@ -72,6 +89,37 @@ def knowledge_library(knowledge_api) -> set[str]:
 
     assert len(article_ids) == 25
     return article_ids
+
+
+def _set_rag_quota(user_id: str, count: int):
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE users
+                   SET subscription = 'free',
+                       rag_count_this_month = %s,
+                       rag_month_reset_at = NOW()
+                   WHERE id = %s""",
+                (count, user_id),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def _rag_quota_count(user_id: str) -> int:
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT rag_count_this_month FROM users WHERE id = %s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            return row[0]
+    finally:
+        conn.close()
 
 
 class TestKnowledgePartner:
@@ -175,3 +223,15 @@ class TestKnowledgePartner:
             for source_id in item["source_ids"]:
                 assert source_id in knowledge_library
                 assert source_id in sources
+
+    def test_ask_folio_enforces_free_monthly_quota(self, knowledge_api, knowledge_library, knowledge_user_id):
+        _set_rag_quota(knowledge_user_id, 4)
+
+        allowed = knowledge_api.rag_query("用 calm software 总结一个默认设计原则")
+        assert allowed.status_code == 200, allowed.text
+        assert _rag_quota_count(knowledge_user_id) == 5
+
+        blocked = knowledge_api.rag_query("这次应该超过免费 RAG 月额度")
+        assert blocked.status_code == 429, blocked.text
+        assert blocked.json()["error"] == "monthly RAG quota exceeded"
+        assert _rag_quota_count(knowledge_user_id) == 5

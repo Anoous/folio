@@ -86,6 +86,12 @@ func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversa
 		}
 		return
 	}
+	completed := false
+	defer func() {
+		if !completed {
+			s.releaseReservedRAGQuota(userID, run.quotaReserved)
+		}
+	}()
 
 	// Create conversation early so we can send conversation_id in sources event.
 	if conversationID == "" {
@@ -117,6 +123,7 @@ func (s *RAGService) QueryStream(ctx context.Context, userID, question, conversa
 	}
 
 	s.completeRAGAnswer(ctx, userID, conversationID, run)
+	completed = true
 
 	select {
 	case events <- domain.RAGStreamEvent{
@@ -144,41 +151,40 @@ func knowledgeSourcesToRAGSources(sources []KnowledgeSource) []domain.RAGSource 
 	return result
 }
 
-// checkQuota verifies the user hasn't exceeded their monthly RAG quota.
-// Pro users are unlimited; Free users get ragFreeMonthlyLimit per month.
-func (s *RAGService) checkQuota(ctx context.Context, userID string) error {
+// reserveRAGQuota atomically reserves one completed-answer slot for free users.
+// Pro users are unlimited and do not need a reservation.
+func (s *RAGService) reserveRAGQuota(ctx context.Context, userID string) (bool, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("get user for quota: %w", err)
+		return false, fmt.Errorf("get user for quota: %w", err)
 	}
 	if user == nil {
-		return ErrNotFound
+		return false, ErrNotFound
 	}
 
-	// Pro users have unlimited RAG queries.
 	if user.Subscription != domain.SubscriptionFree {
-		return nil
+		return false, nil
 	}
 
-	count, resetAt, err := s.ragRepo.GetUserRAGQuota(ctx, userID)
+	reserved, err := s.ragRepo.ReserveRAGQuota(ctx, userID, ragFreeMonthlyLimit)
 	if err != nil {
-		return fmt.Errorf("get rag quota: %w", err)
+		return false, fmt.Errorf("reserve rag quota: %w", err)
 	}
+	if !reserved {
+		return false, ErrRAGQuotaExceeded
+	}
+	return true, nil
+}
 
-	// Reset if needed: resetAt is nil or before the 1st of this month.
-	now := time.Now().UTC()
-	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	if resetAt == nil || resetAt.Before(monthStart) {
-		if resetErr := s.ragRepo.ResetRAGMonthCount(ctx, userID, now); resetErr != nil {
-			return fmt.Errorf("reset rag month count: %w", resetErr)
-		}
-		count = 0
+func (s *RAGService) releaseReservedRAGQuota(userID string, reserved bool) {
+	if !reserved {
+		return
 	}
-
-	if count >= ragFreeMonthlyLimit {
-		return ErrRAGQuotaExceeded
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := s.ragRepo.ReleaseReservedRAGQuota(ctx, userID); err != nil {
+		slog.Error("failed to release rag quota reservation", "user_id", userID, "error", err)
 	}
-	return nil
 }
 
 // saveConversation persists the user question and assistant answer.
@@ -231,18 +237,6 @@ func (s *RAGService) saveConversation(
 	}
 
 	return conversationID, nil
-}
-
-// incrementQuotaIfFree increments RAG usage count for Free-tier users.
-func (s *RAGService) incrementQuotaIfFree(ctx context.Context, userID string) error {
-	user, err := s.userRepo.GetByID(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if user == nil || user.Subscription != domain.SubscriptionFree {
-		return nil
-	}
-	return s.ragRepo.IncrementRAGMonthCount(ctx, userID)
 }
 
 // truncateRunes truncates s to maxRunes runes, appending "..." if truncated.

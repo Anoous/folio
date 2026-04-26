@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -11,14 +12,13 @@ import (
 )
 
 type mockRAGRepository struct {
-	articles       []domain.RAGSource
-	quotaCount     int
-	quotaResetAt   *time.Time
-	loadCalls      int
-	createCalls    int
-	messages       []domain.RAGMessage
-	incrementCalls int
-	resetCalls     int
+	articles           []domain.RAGSource
+	quotaReserveDenied bool
+	loadCalls          int
+	createCalls        int
+	messages           []domain.RAGMessage
+	reserveCalls       int
+	releaseCalls       int
 }
 
 func (m *mockRAGRepository) LoadArticleSummaries(_ context.Context, _ string) ([]domain.RAGSource, error) {
@@ -51,19 +51,13 @@ func (m *mockRAGRepository) AddMessage(_ context.Context, msg *domain.RAGMessage
 	return nil
 }
 
-func (m *mockRAGRepository) GetUserRAGQuota(_ context.Context, _ string) (int, *time.Time, error) {
-	return m.quotaCount, m.quotaResetAt, nil
+func (m *mockRAGRepository) ReserveRAGQuota(_ context.Context, _ string, _ int) (bool, error) {
+	m.reserveCalls++
+	return !m.quotaReserveDenied, nil
 }
 
-func (m *mockRAGRepository) ResetRAGMonthCount(_ context.Context, _ string, resetAt time.Time) error {
-	m.resetCalls++
-	m.quotaCount = 0
-	m.quotaResetAt = &resetAt
-	return nil
-}
-
-func (m *mockRAGRepository) IncrementRAGMonthCount(_ context.Context, _ string) error {
-	m.incrementCalls++
+func (m *mockRAGRepository) ReleaseReservedRAGQuota(_ context.Context, _ string) error {
+	m.releaseCalls++
 	return nil
 }
 
@@ -79,6 +73,7 @@ func (m *mockRAGUserRepository) GetByID(_ context.Context, _ string) (*domain.Us
 
 type mockRAGKnowledgeAnswerer struct {
 	answer       *KnowledgeAnswer
+	err          error
 	askCalls     int
 	lastQuestion string
 }
@@ -86,6 +81,9 @@ type mockRAGKnowledgeAnswerer struct {
 func (m *mockRAGKnowledgeAnswerer) Ask(_ context.Context, _ string, question string) (*KnowledgeAnswer, error) {
 	m.askCalls++
 	m.lastQuestion = question
+	if m.err != nil {
+		return nil, m.err
+	}
 	return m.answer, nil
 }
 
@@ -123,7 +121,6 @@ func TestRAGServiceQueryRunsSharedKnowledgePipeline(t *testing.T) {
 			Summary:   &summary,
 			CreatedAt: now,
 		}},
-		quotaResetAt: &now,
 	}
 	userRepo := &mockRAGUserRepository{user: &domain.User{ID: "user-1", Subscription: domain.SubscriptionFree}}
 	knowledge := &mockRAGKnowledgeAnswerer{answer: &KnowledgeAnswer{
@@ -170,8 +167,11 @@ func TestRAGServiceQueryRunsSharedKnowledgePipeline(t *testing.T) {
 	if repo.messages[1].Role != "assistant" || !slices.Equal(repo.messages[1].SourceArticleIDs, []string{"ready-article"}) {
 		t.Fatalf("assistant message = %+v", repo.messages[1])
 	}
-	if repo.incrementCalls != 1 {
-		t.Fatalf("quota increments = %d, want 1", repo.incrementCalls)
+	if repo.reserveCalls != 1 {
+		t.Fatalf("quota reservations = %d, want 1", repo.reserveCalls)
+	}
+	if repo.releaseCalls != 0 {
+		t.Fatalf("quota releases = %d, want 0", repo.releaseCalls)
 	}
 }
 
@@ -180,8 +180,7 @@ func TestRAGServiceQueryStreamUsesSamePreparedAnswer(t *testing.T) {
 	summary := "Streaming summary"
 	evidence := "Streaming evidence"
 	repo := &mockRAGRepository{
-		articles:     []domain.RAGSource{{ArticleID: "stream-article", Title: "Stream Article", CreatedAt: now}},
-		quotaResetAt: &now,
+		articles: []domain.RAGSource{{ArticleID: "stream-article", Title: "Stream Article", CreatedAt: now}},
 	}
 	userRepo := &mockRAGUserRepository{user: &domain.User{ID: "user-1", Subscription: domain.SubscriptionFree}}
 	knowledge := &mockRAGKnowledgeAnswerer{answer: &KnowledgeAnswer{
@@ -233,7 +232,116 @@ func TestRAGServiceQueryStreamUsesSamePreparedAnswer(t *testing.T) {
 	if len(repo.messages) != 2 {
 		t.Fatalf("messages saved = %d, want 2", len(repo.messages))
 	}
-	if repo.incrementCalls != 1 {
-		t.Fatalf("quota increments = %d, want 1", repo.incrementCalls)
+	if repo.reserveCalls != 1 {
+		t.Fatalf("quota reservations = %d, want 1", repo.reserveCalls)
+	}
+	if repo.releaseCalls != 0 {
+		t.Fatalf("quota releases = %d, want 0", repo.releaseCalls)
+	}
+}
+
+func TestRAGServiceQueryRejectsWhenFreeQuotaReservationDenied(t *testing.T) {
+	repo := &mockRAGRepository{quotaReserveDenied: true}
+	userRepo := &mockRAGUserRepository{user: &domain.User{ID: "user-1", Subscription: domain.SubscriptionFree}}
+	knowledge := &mockRAGKnowledgeAnswerer{}
+	svc := &RAGService{ragRepo: repo, userRepo: userRepo, knowledgeService: knowledge}
+
+	response, err := svc.Query(context.Background(), "user-1", "quota question", "")
+	if !errors.Is(err, ErrRAGQuotaExceeded) {
+		t.Fatalf("Query() error = %v, want ErrRAGQuotaExceeded", err)
+	}
+	if response != nil {
+		t.Fatalf("response = %+v, want nil", response)
+	}
+	if repo.reserveCalls != 1 {
+		t.Fatalf("quota reservations = %d, want 1", repo.reserveCalls)
+	}
+	if repo.loadCalls != 0 {
+		t.Fatalf("loaded articles = %d, want 0", repo.loadCalls)
+	}
+	if knowledge.askCalls != 0 {
+		t.Fatalf("knowledge asks = %d, want 0", knowledge.askCalls)
+	}
+	if repo.releaseCalls != 0 {
+		t.Fatalf("quota releases = %d, want 0", repo.releaseCalls)
+	}
+}
+
+func TestRAGServiceQueryReleasesReservedQuotaWhenNoArticles(t *testing.T) {
+	repo := &mockRAGRepository{}
+	userRepo := &mockRAGUserRepository{user: &domain.User{ID: "user-1", Subscription: domain.SubscriptionFree}}
+	knowledge := &mockRAGKnowledgeAnswerer{}
+	svc := &RAGService{ragRepo: repo, userRepo: userRepo, knowledgeService: knowledge}
+
+	response, err := svc.Query(context.Background(), "user-1", "empty library", "")
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if response == nil || response.Answer != "先收藏一些文章再来提问吧。" {
+		t.Fatalf("response = %+v, want no-articles answer", response)
+	}
+	if repo.reserveCalls != 1 {
+		t.Fatalf("quota reservations = %d, want 1", repo.reserveCalls)
+	}
+	if repo.releaseCalls != 1 {
+		t.Fatalf("quota releases = %d, want 1", repo.releaseCalls)
+	}
+	if knowledge.askCalls != 0 {
+		t.Fatalf("knowledge asks = %d, want 0", knowledge.askCalls)
+	}
+}
+
+func TestRAGServicePrepareReleasesReservedQuotaWhenAnswerFails(t *testing.T) {
+	now := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
+	repo := &mockRAGRepository{
+		articles: []domain.RAGSource{{ArticleID: "article-1", Title: "Article", CreatedAt: now}},
+	}
+	userRepo := &mockRAGUserRepository{user: &domain.User{ID: "user-1", Subscription: domain.SubscriptionFree}}
+	knowledge := &mockRAGKnowledgeAnswerer{err: errors.New("model unavailable")}
+	svc := &RAGService{ragRepo: repo, userRepo: userRepo, knowledgeService: knowledge}
+
+	run, err := svc.prepareKnowledgeRAG(context.Background(), "user-1", "question")
+	if !errors.Is(err, errRAGAnswerFailed) {
+		t.Fatalf("prepareKnowledgeRAG() error = %v, want errRAGAnswerFailed", err)
+	}
+	if run != nil {
+		t.Fatalf("run = %+v, want nil", run)
+	}
+	if repo.reserveCalls != 1 {
+		t.Fatalf("quota reservations = %d, want 1", repo.reserveCalls)
+	}
+	if repo.releaseCalls != 1 {
+		t.Fatalf("quota releases = %d, want 1", repo.releaseCalls)
+	}
+}
+
+func TestRAGServiceQueryDoesNotReserveQuotaForProUser(t *testing.T) {
+	now := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
+	repo := &mockRAGRepository{
+		articles: []domain.RAGSource{{ArticleID: "article-1", Title: "Article", CreatedAt: now}},
+	}
+	userRepo := &mockRAGUserRepository{user: &domain.User{ID: "user-1", Subscription: domain.SubscriptionPro}}
+	knowledge := &mockRAGKnowledgeAnswerer{answer: &KnowledgeAnswer{
+		Answer: "Pro answer",
+		Sources: []KnowledgeSource{{
+			ArticleID: "article-1",
+			Title:     "Article",
+			CreatedAt: now,
+		}},
+	}}
+	svc := &RAGService{ragRepo: repo, userRepo: userRepo, knowledgeService: knowledge}
+
+	response, err := svc.Query(context.Background(), "user-1", "question", "")
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if response == nil || response.Answer != "Pro answer" {
+		t.Fatalf("response = %+v, want pro answer", response)
+	}
+	if repo.reserveCalls != 0 {
+		t.Fatalf("quota reservations = %d, want 0", repo.reserveCalls)
+	}
+	if repo.releaseCalls != 0 {
+		t.Fatalf("quota releases = %d, want 0", repo.releaseCalls)
 	}
 }

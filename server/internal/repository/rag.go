@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -243,41 +242,51 @@ func (r *RAGRepo) GetConversationMessages(ctx context.Context, conversationID st
 	return msgs, nil
 }
 
-// GetUserRAGQuota returns rag_count_this_month and rag_month_reset_at for a user.
-func (r *RAGRepo) GetUserRAGQuota(ctx context.Context, userID string) (count int, resetAt *time.Time, err error) {
-	err = r.db.QueryRow(ctx,
-		`SELECT rag_count_this_month, rag_month_reset_at FROM users WHERE id = $1`,
-		userID,
-	).Scan(&count, &resetAt)
+// ReserveRAGQuota atomically reserves one free-tier RAG answer for the current
+// month. It returns false when the monthly limit has already been reached.
+func (r *RAGRepo) ReserveRAGQuota(ctx context.Context, userID string, limit int) (bool, error) {
+	var newCount int
+	err := r.db.QueryRow(ctx, `
+		UPDATE users SET
+			rag_count_this_month = CASE
+				WHEN rag_month_reset_at IS NULL
+				     OR date_trunc('month', rag_month_reset_at) < date_trunc('month', NOW())
+				THEN 1
+				ELSE rag_count_this_month + 1
+			END,
+			rag_month_reset_at = CASE
+				WHEN rag_month_reset_at IS NULL
+				     OR date_trunc('month', rag_month_reset_at) < date_trunc('month', NOW())
+				THEN NOW()
+				ELSE rag_month_reset_at
+			END
+		WHERE id = $1
+		  AND (
+			rag_month_reset_at IS NULL
+			OR date_trunc('month', rag_month_reset_at) < date_trunc('month', NOW())
+			OR rag_count_this_month < $2
+		  )
+		RETURNING rag_count_this_month`,
+		userID, limit,
+	).Scan(&newCount)
 	if err == pgx.ErrNoRows {
-		return 0, nil, nil
+		return false, nil
 	}
 	if err != nil {
-		return 0, nil, fmt.Errorf("get user rag quota: %w", err)
+		return false, fmt.Errorf("reserve rag quota: %w", err)
 	}
-	return count, resetAt, nil
+	return true, nil
 }
 
-// ResetRAGMonthCount resets rag_count_this_month to 0 and sets rag_month_reset_at.
-func (r *RAGRepo) ResetRAGMonthCount(ctx context.Context, userID string, resetAt time.Time) error {
+// ReleaseReservedRAGQuota rolls back a quota reservation when answer generation
+// does not complete.
+func (r *RAGRepo) ReleaseReservedRAGQuota(ctx context.Context, userID string) error {
 	_, err := r.db.Exec(ctx,
-		`UPDATE users SET rag_count_this_month = 0, rag_month_reset_at = $1 WHERE id = $2`,
-		resetAt, userID,
-	)
-	if err != nil {
-		return fmt.Errorf("reset rag month count: %w", err)
-	}
-	return nil
-}
-
-// IncrementRAGMonthCount increments rag_count_this_month by 1.
-func (r *RAGRepo) IncrementRAGMonthCount(ctx context.Context, userID string) error {
-	_, err := r.db.Exec(ctx,
-		`UPDATE users SET rag_count_this_month = rag_count_this_month + 1 WHERE id = $1`,
+		`UPDATE users SET rag_count_this_month = GREATEST(rag_count_this_month - 1, 0) WHERE id = $1`,
 		userID,
 	)
 	if err != nil {
-		return fmt.Errorf("increment rag month count: %w", err)
+		return fmt.Errorf("release rag quota reservation: %w", err)
 	}
 	return nil
 }
