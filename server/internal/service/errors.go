@@ -12,7 +12,8 @@ var (
 	ErrCodeRateLimit    = errors.New("verification code rate limit")
 
 	// Subscription errors
-	ErrInvalidProduct       = errors.New("invalid product ID")
-	ErrInvalidBundleID      = errors.New("bundle ID mismatch")
-	ErrSubscriptionExpired  = errors.New("subscription already expired")
+	ErrInvalidProduct      = errors.New("invalid product ID")
+	ErrInvalidTransaction  = errors.New("invalid transaction")
+	ErrInvalidBundleID     = errors.New("bundle ID mismatch")
+	ErrSubscriptionExpired = errors.New("subscription already expired")
 )

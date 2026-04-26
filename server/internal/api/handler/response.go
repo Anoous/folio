@@ -41,6 +41,8 @@ func handleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusConflict, "url already saved")
 	case errors.Is(err, service.ErrInvalidProduct):
 		writeError(w, http.StatusBadRequest, "invalid product ID")
+	case errors.Is(err, service.ErrInvalidTransaction):
+		writeError(w, http.StatusBadRequest, "invalid transaction")
 	case errors.Is(err, service.ErrInvalidBundleID):
 		writeError(w, http.StatusBadRequest, "bundle ID mismatch")
 	case errors.Is(err, service.ErrSubscriptionExpired):

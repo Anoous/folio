@@ -8,7 +8,6 @@ import (
 
 	"folio-server/internal/client"
 	"folio-server/internal/domain"
-	"folio-server/internal/repository"
 )
 
 // Valid product IDs for Folio Pro subscriptions.
@@ -21,12 +20,17 @@ var validProductIDs = map[string]bool{
 // processing.
 type SubscriptionService struct {
 	appleClient client.AppleStoreClient
-	userRepo    *repository.UserRepo
+	userRepo    subscriptionUserStore
 	bundleID    string
 }
 
+type subscriptionUserStore interface {
+	UpdateSubscription(ctx context.Context, userID string, subscription domain.Subscription, expiresAt *time.Time, originalTxnID *string) error
+	GetByOriginalTransactionID(ctx context.Context, txnID string) (*domain.User, error)
+}
+
 // NewSubscriptionService creates a SubscriptionService.
-func NewSubscriptionService(appleClient client.AppleStoreClient, userRepo *repository.UserRepo, bundleID string) *SubscriptionService {
+func NewSubscriptionService(appleClient client.AppleStoreClient, userRepo subscriptionUserStore, bundleID string) *SubscriptionService {
 	return &SubscriptionService{
 		appleClient: appleClient,
 		userRepo:    userRepo,
@@ -54,26 +58,13 @@ func (s *SubscriptionService) VerifyAndActivate(ctx context.Context, userID, tra
 		return nil, fmt.Errorf("verify transaction: %w", err)
 	}
 
-	// Validate bundle ID (real client returns actual bundleID; mock returns
-	// the configured one, so this check passes for both).
-	if s.bundleID != "" && txnInfo.BundleID != "" && txnInfo.BundleID != s.bundleID {
-		slog.Warn("subscription: bundle ID mismatch",
-			"expected", s.bundleID, "got", txnInfo.BundleID)
-		return nil, ErrInvalidBundleID
-	}
-
-	// Validate product ID.
-	if !validProductIDs[txnInfo.ProductID] {
-		slog.Warn("subscription: invalid product ID",
-			"product_id", txnInfo.ProductID, "user_id", userID)
-		return nil, ErrInvalidProduct
-	}
-
-	// Check expiry.
-	if txnInfo.ExpiresDate == nil || txnInfo.ExpiresDate.Before(time.Now()) {
-		slog.Warn("subscription: transaction already expired",
-			"expires", txnInfo.ExpiresDate, "user_id", userID)
-		return nil, ErrSubscriptionExpired
+	if err := validateSubscriptionActivation(txnInfo, productID, s.bundleID, time.Now()); err != nil {
+		slog.Warn("subscription: transaction rejected",
+			"error", err,
+			"requested_product_id", productID,
+			"transaction_product_id", safeProductID(txnInfo),
+			"user_id", userID)
+		return nil, err
 	}
 
 	// Activate.
@@ -93,6 +84,25 @@ func (s *SubscriptionService) VerifyAndActivate(ctx context.Context, userID, tra
 		Subscription: string(domain.SubscriptionPro),
 		ExpiresAt:    txnInfo.ExpiresDate,
 	}, nil
+}
+
+func validateSubscriptionActivation(txnInfo *client.TransactionInfo, requestedProductID string, bundleID string, now time.Time) error {
+	if txnInfo == nil || txnInfo.TransactionID == "" || txnInfo.OriginalTransactionID == "" {
+		return ErrInvalidTransaction
+	}
+	if requestedProductID == "" || txnInfo.ProductID != requestedProductID {
+		return ErrInvalidProduct
+	}
+	if !validProductIDs[txnInfo.ProductID] {
+		return ErrInvalidProduct
+	}
+	if bundleID != "" && txnInfo.BundleID != "" && txnInfo.BundleID != bundleID {
+		return ErrInvalidBundleID
+	}
+	if txnInfo.ExpiresDate == nil || !txnInfo.ExpiresDate.After(now) {
+		return ErrSubscriptionExpired
+	}
+	return nil
 }
 
 // HandleWebhookEvent processes an App Store Server notification.
@@ -228,4 +238,11 @@ func safeOrigTxnID(txnInfo *client.TransactionInfo) string {
 		return "<unknown>"
 	}
 	return txnInfo.OriginalTransactionID
+}
+
+func safeProductID(txnInfo *client.TransactionInfo) string {
+	if txnInfo == nil {
+		return "<unknown>"
+	}
+	return txnInfo.ProductID
 }
