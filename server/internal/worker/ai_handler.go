@@ -176,32 +176,7 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	logPipelineSucceeded(pipeline.StageAIAnalyze, pipeline.ProviderDeepSeek, p.TaskID, p.ArticleID, p.UserID, "", time.Since(start))
 
 	// Write to content cache for cross-user reuse
-	if h.cacheRepo != nil {
-		article, err := h.articleRepo.GetByID(ctx, p.ArticleID)
-		if err == nil && article != nil && article.URL != nil {
-			markdown := derefOrEmpty(article.MarkdownContent)
-			if domain.IsCacheWorthy(markdown, result.Confidence) {
-				now := time.Now()
-				h.cacheRepo.Upsert(ctx, &domain.ContentCache{
-					URL:             *article.URL,
-					Title:           article.Title,
-					Author:          article.Author,
-					SiteName:        article.SiteName,
-					FaviconURL:      article.FaviconURL,
-					CoverImageURL:   article.CoverImageURL,
-					MarkdownContent: article.MarkdownContent,
-					WordCount:       article.WordCount,
-					Language:        article.Language,
-					CategorySlug:    &result.Category,
-					Summary:         &result.Summary,
-					KeyPoints:       result.KeyPoints,
-					AIConfidence:    &result.Confidence,
-					AITagNames:      result.Tags,
-					AIAnalyzedAt:    &now,
-				}) // Non-fatal: cache write failure doesn't affect the article
-			}
-		}
-	}
+	h.cacheWriter().write(ctx, p, result)
 
 	// Enqueue echo card generation (non-blocking)
 	echoTask, err := NewEchoTask(p.ArticleID, p.UserID, "")
