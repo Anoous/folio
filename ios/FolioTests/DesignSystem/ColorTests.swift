@@ -49,10 +49,10 @@ final class ColorTests: XCTestCase {
 
     func testAccentColor() {
         let resolved = Color.folio.accent.resolve(in: EnvironmentValues())
-        // #3A6B4E => R:58/255≈0.227, G:107/255≈0.420, B:78/255≈0.306
-        XCTAssertEqual(resolved.red, 58.0 / 255.0, accuracy: 0.01)
-        XCTAssertEqual(resolved.green, 107.0 / 255.0, accuracy: 0.01)
-        XCTAssertEqual(resolved.blue, 78.0 / 255.0, accuracy: 0.01)
+        // #0071E3 => R:0/255=0.000, G:113/255≈0.443, B:227/255≈0.890
+        XCTAssertEqual(resolved.red, 0.0 / 255.0, accuracy: 0.01)
+        XCTAssertEqual(resolved.green, 113.0 / 255.0, accuracy: 0.01)
+        XCTAssertEqual(resolved.blue, 227.0 / 255.0, accuracy: 0.01)
     }
 
 }

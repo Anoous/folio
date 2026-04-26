@@ -118,14 +118,13 @@ final class APIClient: @unchecked Sendable {
 
     // MARK: - Core Request
 
-    private func request<T: Decodable>(
+    private func makeRequest(
         method: String,
         path: String,
         queryItems: [URLQueryItem]? = nil,
         body: (any Encodable)? = nil,
-        requiresAuth: Bool = true,
-        isRetryAfterRefresh: Bool = false
-    ) async throws -> T {
+        requiresAuth: Bool = true
+    ) throws -> URLRequest {
         guard var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: true) else {
             throw APIError.invalidURL
         }
@@ -156,57 +155,108 @@ final class APIClient: @unchecked Sendable {
             }
         }
 
-        let data: Data
-        let response: URLResponse
+        return urlRequest
+    }
+
+    private func performDataRequest(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
         do {
-            (data, response) = try await session.data(for: urlRequest)
+            let (data, response) = try await session.data(for: urlRequest)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw APIError.networkError("Invalid response")
+            }
+            return (data, httpResponse)
+        } catch let error as APIError {
+            throw error
         } catch {
             throw APIError.networkError(error.localizedDescription)
         }
+    }
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.networkError("Invalid response")
+    private func performByteStreamRequest(_ urlRequest: URLRequest) async throws -> (URLSession.AsyncBytes, HTTPURLResponse) {
+        do {
+            let (bytes, response) = try await session.bytes(for: urlRequest)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw APIError.networkError("Invalid response")
+            }
+            return (bytes, httpResponse)
+        } catch let error as APIError {
+            throw error
+        } catch {
+            throw APIError.networkError(error.localizedDescription)
         }
+    }
 
-        switch httpResponse.statusCode {
-        case 200...299:
+    private func httpError(statusCode: Int, data: Data) -> APIError {
+        switch statusCode {
+        case 401:
+            return .unauthorized
+        case 403:
+            return .forbidden
+        case 404:
+            return .notFound
+        case 409:
+            return .conflict
+        case 429:
+            return .quotaExceeded
+        default:
+            if statusCode >= 500 {
+                return .serverError(statusCode)
+            }
+            if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
+                return .serverMessage(errorResponse.error)
+            }
+            return .serverError(statusCode)
+        }
+    }
+
+    private func collectStreamBody(_ bytes: URLSession.AsyncBytes) async throws -> Data {
+        var bodyData = Data()
+        for try await byte in bytes {
+            bodyData.append(byte)
+        }
+        return bodyData
+    }
+
+    private func request<T: Decodable>(
+        method: String,
+        path: String,
+        queryItems: [URLQueryItem]? = nil,
+        body: (any Encodable)? = nil,
+        requiresAuth: Bool = true,
+        isRetryAfterRefresh: Bool = false
+    ) async throws -> T {
+        let urlRequest = try makeRequest(
+            method: method,
+            path: path,
+            queryItems: queryItems,
+            body: body,
+            requiresAuth: requiresAuth
+        )
+        let (data, httpResponse) = try await performDataRequest(urlRequest)
+
+        if (200...299).contains(httpResponse.statusCode) {
             do {
                 return try decoder.decode(T.self, from: data)
             } catch {
                 throw APIError.decodingFailed(error.localizedDescription)
             }
-        case 401:
-            FolioLogger.network.info("401 unauthorized, attempting refresh — \(path)")
-            if !isRetryAfterRefresh {
-                try await performTokenRefresh()
-                return try await request(
-                    method: method,
-                    path: path,
-                    queryItems: queryItems,
-                    body: body,
-                    requiresAuth: requiresAuth,
-                    isRetryAfterRefresh: true
-                )
-            }
-            throw APIError.unauthorized
-        case 403:
-            throw APIError.forbidden
-        case 404:
-            throw APIError.notFound
-        case 409:
-            throw APIError.conflict
-        case 429:
-            throw APIError.quotaExceeded
-        default:
-            FolioLogger.network.error("HTTP \(httpResponse.statusCode) — \(method) \(path)")
-            if httpResponse.statusCode >= 500 {
-                throw APIError.serverError(httpResponse.statusCode)
-            }
-            if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
-                throw APIError.serverMessage(errorResponse.error)
-            }
-            throw APIError.serverError(httpResponse.statusCode)
         }
+
+        if httpResponse.statusCode == 401, requiresAuth, !isRetryAfterRefresh {
+            FolioLogger.network.info("401 unauthorized, attempting refresh — \(path)")
+            try await performTokenRefresh()
+            return try await request(
+                method: method,
+                path: path,
+                queryItems: queryItems,
+                body: body,
+                requiresAuth: requiresAuth,
+                isRetryAfterRefresh: true
+            )
+        }
+
+        FolioLogger.network.error("HTTP \(httpResponse.statusCode) — \(method) \(path)")
+        throw httpError(statusCode: httpResponse.statusCode, data: data)
     }
 
     // Variant for void responses (DELETE, PUT).
@@ -215,72 +265,36 @@ final class APIClient: @unchecked Sendable {
         method: String,
         path: String,
         body: (any Encodable)? = nil,
+        requiresAuth: Bool = true,
         isRetryAfterRefresh: Bool = false
     ) async throws {
-        guard let components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: true) else {
-            throw APIError.invalidURL
-        }
-        guard let url = components.url else {
-            throw APIError.invalidURL
-        }
+        let urlRequest = try makeRequest(
+            method: method,
+            path: path,
+            body: body,
+            requiresAuth: requiresAuth
+        )
+        let (data, httpResponse) = try await performDataRequest(urlRequest)
 
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = method
-
-        FolioLogger.network.debug("\(method) \(path)")
-
-        if let token = keychainManager.accessToken {
-            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        if let body {
-            urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            do {
-                urlRequest.httpBody = try encoder.encode(AnyEncodable(body))
-            } catch {
-                throw APIError.encodingFailed
-            }
-        }
-
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: urlRequest)
-        } catch {
-            throw APIError.networkError(error.localizedDescription)
-        }
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.networkError("Invalid response")
-        }
-
-        switch httpResponse.statusCode {
-        case 200...299:
+        if (200...299).contains(httpResponse.statusCode) {
             return // Success — ignore body (handles both 200 and 204)
-        case 401:
-            FolioLogger.network.info("401 unauthorized, attempting refresh — \(path)")
-            if !isRetryAfterRefresh {
-                try await performTokenRefresh()
-                try await requestVoid(method: method, path: path, body: body, isRetryAfterRefresh: true)
-                return
-            }
-            throw APIError.unauthorized
-        case 403:
-            throw APIError.forbidden
-        case 404:
-            throw APIError.notFound
-        case 409:
-            throw APIError.conflict
-        default:
-            FolioLogger.network.error("HTTP \(httpResponse.statusCode) — \(method) \(path)")
-            if httpResponse.statusCode >= 500 {
-                throw APIError.serverError(httpResponse.statusCode)
-            }
-            if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
-                throw APIError.serverMessage(errorResponse.error)
-            }
-            throw APIError.serverError(httpResponse.statusCode)
         }
+
+        if httpResponse.statusCode == 401, requiresAuth, !isRetryAfterRefresh {
+            FolioLogger.network.info("401 unauthorized, attempting refresh — \(path)")
+            try await performTokenRefresh()
+            try await requestVoid(
+                method: method,
+                path: path,
+                body: body,
+                requiresAuth: requiresAuth,
+                isRetryAfterRefresh: true
+            )
+            return
+        }
+
+        FolioLogger.network.error("HTTP \(httpResponse.statusCode) — \(method) \(path)")
+        throw httpError(statusCode: httpResponse.statusCode, data: data)
     }
 
     // MARK: - Token Refresh
@@ -381,44 +395,12 @@ final class APIClient: @unchecked Sendable {
         }
 
         let body = ["refresh_token": refreshToken]
-        guard let components = URLComponents(url: baseURL.appendingPathComponent("/api/v1/auth/logout"), resolvingAgainstBaseURL: true),
-              let url = components.url else {
-            throw APIError.invalidURL
-        }
-
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: urlRequest)
-        } catch {
-            throw APIError.networkError(error.localizedDescription)
-        }
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.networkError("Invalid response")
-        }
-
-        switch httpResponse.statusCode {
-        case 200...299:
-            return
-        case 401:
-            throw APIError.unauthorized
-        case 403:
-            throw APIError.forbidden
-        default:
-            if httpResponse.statusCode >= 500 {
-                throw APIError.serverError(httpResponse.statusCode)
-            }
-            if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
-                throw APIError.serverMessage(errorResponse.error)
-            }
-            throw APIError.serverError(httpResponse.statusCode)
-        }
+        try await requestVoid(
+            method: "POST",
+            path: "/api/v1/auth/logout",
+            body: body,
+            requiresAuth: false
+        )
     }
 
     // MARK: - Email Auth
@@ -587,44 +569,28 @@ final class APIClient: @unchecked Sendable {
             let task = Task {
                 do {
                     let body = RAGQueryRequest(question: question, conversationId: conversationId)
-                    let bodyData = try encoder.encode(body)
-
-                    var urlRequest = URLRequest(url: baseURL.appendingPathComponent("/api/v1/rag/query/stream"))
-                    urlRequest.httpMethod = "POST"
-                    urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    if let token = keychainManager.accessToken {
-                        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                    }
-                    urlRequest.httpBody = bodyData
-
-                    let (bytes, response) = try await session.bytes(for: urlRequest)
-
-                    guard let httpResponse = response as? HTTPURLResponse else {
-                        throw APIError.networkError("Invalid response")
-                    }
+                    let request = try makeRequest(
+                        method: "POST",
+                        path: "/api/v1/rag/query/stream",
+                        body: body
+                    )
+                    var (bytes, httpResponse) = try await performByteStreamRequest(request)
 
                     if httpResponse.statusCode == 401 {
-                        try await refreshTokensInternal()
-                        if let newToken = keychainManager.accessToken {
-                            urlRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
-                        }
-                        let (retryBytes, retryResponse) = try await session.bytes(for: urlRequest)
-                        guard let retryHttp = retryResponse as? HTTPURLResponse, retryHttp.statusCode == 200 else {
-                            throw APIError.unauthorized
-                        }
-                        try await self.parseSSEStream(retryBytes, continuation: continuation)
-                        return
+                        FolioLogger.network.info("401 unauthorized, attempting refresh — /api/v1/rag/query/stream")
+                        try await performTokenRefresh()
+                        let retryRequest = try makeRequest(
+                            method: "POST",
+                            path: "/api/v1/rag/query/stream",
+                            body: body
+                        )
+                        (bytes, httpResponse) = try await performByteStreamRequest(retryRequest)
                     }
 
                     if httpResponse.statusCode != 200 {
-                        var bodyData = Data()
-                        for try await byte in bytes {
-                            bodyData.append(byte)
-                        }
-                        if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: bodyData) {
-                            throw APIError.serverMessage(errorResponse.error)
-                        }
-                        throw APIError.serverError(httpResponse.statusCode)
+                        let bodyData = try await collectStreamBody(bytes)
+                        FolioLogger.network.error("HTTP \(httpResponse.statusCode) — POST /api/v1/rag/query/stream")
+                        throw httpError(statusCode: httpResponse.statusCode, data: bodyData)
                     }
 
                     try await self.parseSSEStream(bytes, continuation: continuation)

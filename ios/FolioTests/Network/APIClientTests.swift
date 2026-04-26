@@ -312,6 +312,20 @@ final class APIClientTests: XCTestCase {
         }
     }
 
+    func testVoidRequest_429_throwsQuotaExceeded() async {
+        try? keychainManager.saveTokens(access: "token", refresh: "r")
+        MockURLProtocol.requestHandler = { _ in
+            (Data(), self.makeResponse(statusCode: 429))
+        }
+
+        do {
+            try await client.deleteArticle(id: "a1")
+            XCTFail("Should throw")
+        } catch {
+            XCTAssertEqual(error as? APIError, .quotaExceeded)
+        }
+    }
+
     func testRequest_500_throwsServerError() async {
         try? keychainManager.saveTokens(access: "token", refresh: "r")
         MockURLProtocol.requestHandler = { _ in
@@ -431,6 +445,24 @@ final class APIClientTests: XCTestCase {
         }
     }
 
+    func testUnauthenticatedRequest_401_doesNotRefresh() async {
+        try? keychainManager.saveTokens(access: "expired", refresh: "valid_refresh")
+
+        var callCount = 0
+        MockURLProtocol.requestHandler = { _ in
+            callCount += 1
+            return (Data(), self.makeResponse(statusCode: 401))
+        }
+
+        do {
+            try await client.sendEmailCode(email: "a@b.com")
+            XCTFail("Should throw")
+        } catch {
+            XCTAssertEqual(error as? APIError, .unauthorized)
+            XCTAssertEqual(callCount, 1)
+        }
+    }
+
     func testLogout_postsRefreshTokenWithoutAuthorizationHeader() async throws {
         try keychainManager.saveTokens(access: "token", refresh: "refresh-123")
 
@@ -448,6 +480,20 @@ final class APIClientTests: XCTestCase {
             try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
         }
         XCTAssertEqual(body?["refresh_token"] as? String, "refresh-123")
+    }
+
+    func testLogout_403_throwsForbidden() async {
+        try? keychainManager.saveTokens(access: "token", refresh: "refresh-123")
+        MockURLProtocol.requestHandler = { _ in
+            (Data(), self.makeResponse(statusCode: 403))
+        }
+
+        do {
+            try await client.logout()
+            XCTFail("Should throw")
+        } catch {
+            XCTAssertEqual(error as? APIError, .forbidden)
+        }
     }
 
     func testLogout_withoutRefreshToken_throwsUnauthorized() async {

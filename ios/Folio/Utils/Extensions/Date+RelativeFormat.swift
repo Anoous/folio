@@ -36,8 +36,7 @@ extension Date {
         return formatter
     }()
 
-    func relativeFormatted(locale: Locale = .current) -> String {
-        let now = Date()
+    func relativeFormatted(locale: Locale = .current, relativeTo now: Date = Date()) -> String {
         let interval = now.timeIntervalSince(self)
         let calendar = Calendar.current
 
@@ -48,7 +47,8 @@ extension Date {
         }
 
         // Yesterday — explicit check before using system formatter
-        if calendar.isDateInYesterday(self) {
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now)),
+           calendar.isDate(self, inSameDayAs: yesterday) {
             let isChinese = locale.language.languageCode?.identifier == "zh"
             return isChinese ? "昨天" : "Yesterday"
         }

@@ -13,7 +13,7 @@ final class SpacingTests: XCTestCase {
     }
 
     func testScreenPadding() {
-        XCTAssertEqual(Spacing.screenPadding, 16)
+        XCTAssertEqual(Spacing.screenPadding, 20)
     }
 
     func testCornerRadiusValues() {

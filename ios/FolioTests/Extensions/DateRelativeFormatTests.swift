@@ -5,79 +5,80 @@ final class DateRelativeFormatTests: XCTestCase {
 
     let zhLocale = Locale(identifier: "zh-Hans")
     let enLocale = Locale(identifier: "en")
+    let referenceDate = Calendar.current.date(from: DateComponents(year: 2026, month: 4, day: 26, hour: 12, minute: 0, second: 0))!
 
     func testJustNow() {
-        let date = Date()
-        XCTAssertEqual(date.relativeFormatted(locale: zhLocale), "刚刚")
+        let date = referenceDate
+        XCTAssertEqual(date.relativeFormatted(locale: zhLocale, relativeTo: referenceDate), "刚刚")
     }
 
     func testMinutesAgo() {
-        let date = Date(timeIntervalSinceNow: -5 * 60)
-        XCTAssertEqual(date.relativeFormatted(locale: zhLocale), "5分钟前")
+        let date = Date(timeInterval: -5 * 60, since: referenceDate)
+        XCTAssertEqual(date.relativeFormatted(locale: zhLocale, relativeTo: referenceDate), "5分钟前")
     }
 
     func testHoursAgo() {
-        let date = Date(timeIntervalSinceNow: -3 * 3600)
-        XCTAssertEqual(date.relativeFormatted(locale: zhLocale), "3小时前")
+        let date = Date(timeInterval: -3 * 3600, since: referenceDate)
+        XCTAssertEqual(date.relativeFormatted(locale: zhLocale, relativeTo: referenceDate), "3小时前")
     }
 
     func testYesterday() {
         let calendar = Calendar.current
-        let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: Date()))!
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: referenceDate))!
         let date = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: yesterday)!
-        XCTAssertEqual(date.relativeFormatted(locale: zhLocale), "昨天")
+        XCTAssertEqual(date.relativeFormatted(locale: zhLocale, relativeTo: referenceDate), "昨天")
     }
 
     func testDaysAgo() {
-        let date = Date(timeIntervalSinceNow: -3 * 86400)
-        let result = date.relativeFormatted(locale: zhLocale)
+        let date = Date(timeInterval: -3 * 86400, since: referenceDate)
+        let result = date.relativeFormatted(locale: zhLocale, relativeTo: referenceDate)
         XCTAssertTrue(result.contains("天前"), "Expected '天前' but got: \(result)")
     }
 
     func testSpecificDate() {
-        let date = Date(timeIntervalSinceNow: -30 * 86400)
-        let result = date.relativeFormatted(locale: zhLocale)
+        let date = Date(timeInterval: -30 * 86400, since: referenceDate)
+        let result = date.relativeFormatted(locale: zhLocale, relativeTo: referenceDate)
         XCTAssertTrue(result.contains("月") && result.contains("日"),
                        "Expected date format with 月 and 日 but got: \(result)")
     }
 
     func testEnglishLocale() {
-        let date = Date()
-        XCTAssertEqual(date.relativeFormatted(locale: enLocale), "Just now")
+        let date = referenceDate
+        XCTAssertEqual(date.relativeFormatted(locale: enLocale, relativeTo: referenceDate), "Just now")
 
-        let fiveMin = Date(timeIntervalSinceNow: -5 * 60)
-        XCTAssertEqual(fiveMin.relativeFormatted(locale: enLocale), "5m ago")
+        let fiveMin = Date(timeInterval: -5 * 60, since: referenceDate)
+        XCTAssertEqual(fiveMin.relativeFormatted(locale: enLocale, relativeTo: referenceDate), "5m ago")
 
-        let threeHours = Date(timeIntervalSinceNow: -3 * 3600)
-        XCTAssertEqual(threeHours.relativeFormatted(locale: enLocale), "3h ago")
+        let threeHours = Date(timeInterval: -3 * 3600, since: referenceDate)
+        XCTAssertEqual(threeHours.relativeFormatted(locale: enLocale, relativeTo: referenceDate), "3h ago")
     }
 
     // MARK: - English Specific
 
     func testEnglish_yesterday() {
         let calendar = Calendar.current
-        let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: Date()))!
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: referenceDate))!
         let date = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: yesterday)!
-        XCTAssertEqual(date.relativeFormatted(locale: enLocale), "Yesterday")
+        XCTAssertEqual(date.relativeFormatted(locale: enLocale, relativeTo: referenceDate), "Yesterday")
     }
 
     func testEnglish_daysAgo() {
-        let date = Date(timeIntervalSinceNow: -3 * 86400)
-        let result = date.relativeFormatted(locale: enLocale)
+        let date = Date(timeInterval: -3 * 86400, since: referenceDate)
+        let result = date.relativeFormatted(locale: enLocale, relativeTo: referenceDate)
         XCTAssertTrue(result.contains("d ago"), "Expected 'd ago' but got: \(result)")
     }
 
     // MARK: - Boundary Tests
 
     func testExactly60Seconds() {
-        let date = Date(timeIntervalSinceNow: -60)
-        let result = date.relativeFormatted(locale: zhLocale)
+        let date = Date(timeInterval: -60, since: referenceDate)
+        let result = date.relativeFormatted(locale: zhLocale, relativeTo: referenceDate)
         XCTAssertEqual(result, "1分钟前")
     }
 
     func testExactly7Days() {
-        let date = Date(timeIntervalSinceNow: -7 * 86400)
-        let result = date.relativeFormatted(locale: zhLocale)
+        let date = Date(timeInterval: -7 * 86400, since: referenceDate)
+        let result = date.relativeFormatted(locale: zhLocale, relativeTo: referenceDate)
         // At exactly 7 days, days >= 7 so it should format as a specific date (M月d日), not "N天前"
         XCTAssertTrue(result.contains("月") && result.contains("日"),
                        "Expected date format with 月 and 日 but got: \(result)")
@@ -85,8 +86,8 @@ final class DateRelativeFormatTests: XCTestCase {
 
     func testCrossYear() {
         let calendar = Calendar.current
-        let lastYear = calendar.date(byAdding: .year, value: -1, to: Date())!
-        let result = lastYear.relativeFormatted(locale: zhLocale)
+        let lastYear = calendar.date(byAdding: .year, value: -1, to: referenceDate)!
+        let result = lastYear.relativeFormatted(locale: zhLocale, relativeTo: referenceDate)
         // Previous year should include year in format (yyyy年M月d日)
         XCTAssertTrue(result.contains("年"), "Expected year in format but got: \(result)")
     }
