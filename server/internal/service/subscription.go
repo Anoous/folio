@@ -26,6 +26,7 @@ type SubscriptionService struct {
 }
 
 type subscriptionUserStore interface {
+	GetByID(ctx context.Context, id string) (*domain.User, error)
 	UpdateSubscription(ctx context.Context, userID string, subscription domain.Subscription, expiresAt *time.Time, originalTxnID *string) error
 	GetByOriginalTransactionID(ctx context.Context, txnID string) (*domain.User, error)
 }
@@ -69,6 +70,14 @@ func (s *SubscriptionService) VerifyAndActivate(ctx context.Context, userID, tra
 			"transaction_product_id", safeProductID(txnInfo),
 			"user_id", userID)
 		return nil, err
+	}
+
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get subscription user: %w", err)
+	}
+	if user == nil {
+		return nil, ErrNotFound
 	}
 
 	// Activate.

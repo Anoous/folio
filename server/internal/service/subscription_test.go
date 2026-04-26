@@ -22,6 +22,9 @@ func TestVerifyAndActivate_ActivatesMatchingAppleTransaction(t *testing.T) {
 		},
 	}
 	users := &fakeSubscriptionUserRepo{}
+	users.users = map[string]*domain.User{
+		"user-1": {ID: "user-1"},
+	}
 	svc := NewSubscriptionService(apple, users, "com.folio.app")
 
 	result, err := svc.VerifyAndActivate(context.Background(), "user-1", "txn-1", "com.folio.app.pro.monthly")
@@ -78,6 +81,29 @@ func TestVerifyAndActivate_MapsAppleInvalidTransaction(t *testing.T) {
 	_, err := svc.VerifyAndActivate(context.Background(), "user-1", "missing-txn", "com.folio.app.pro.yearly")
 	if !errors.Is(err, ErrInvalidTransaction) {
 		t.Fatalf("VerifyAndActivate() error = %v, want %v", err, ErrInvalidTransaction)
+	}
+	if len(users.updates) != 0 {
+		t.Fatalf("updates = %d, want 0", len(users.updates))
+	}
+}
+
+func TestVerifyAndActivate_RejectsUnknownUser(t *testing.T) {
+	expires := time.Now().Add(24 * time.Hour)
+	apple := &fakeAppleStoreClient{
+		transaction: &client.TransactionInfo{
+			TransactionID:         "txn-1",
+			OriginalTransactionID: "orig-1",
+			ProductID:             "com.folio.app.pro.yearly",
+			BundleID:              "com.folio.app",
+			ExpiresDate:           &expires,
+		},
+	}
+	users := &fakeSubscriptionUserRepo{}
+	svc := NewSubscriptionService(apple, users, "com.folio.app")
+
+	_, err := svc.VerifyAndActivate(context.Background(), "missing-user", "txn-1", "com.folio.app.pro.yearly")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("VerifyAndActivate() error = %v, want %v", err, ErrNotFound)
 	}
 	if len(users.updates) != 0 {
 		t.Fatalf("updates = %d, want 0", len(users.updates))
@@ -199,6 +225,7 @@ func (c *fakeAppleStoreClient) ParseSignedTransaction(_ string) (*client.Transac
 }
 
 type fakeSubscriptionUserRepo struct {
+	users   map[string]*domain.User
 	updates []subscriptionUpdate
 }
 
@@ -207,6 +234,13 @@ type subscriptionUpdate struct {
 	subscription  domain.Subscription
 	expiresAt     *time.Time
 	originalTxnID *string
+}
+
+func (r *fakeSubscriptionUserRepo) GetByID(_ context.Context, id string) (*domain.User, error) {
+	if r.users == nil {
+		return nil, nil
+	}
+	return r.users[id], nil
 }
 
 func (r *fakeSubscriptionUserRepo) UpdateSubscription(_ context.Context, userID string, subscription domain.Subscription, expiresAt *time.Time, originalTxnID *string) error {
