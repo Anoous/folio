@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -23,6 +24,17 @@ const (
 	appleStoreKitProductionURL = "https://api.storekit.itunes.apple.com"
 	appleStoreKitSandboxURL    = "https://api.storekit-sandbox.itunes.apple.com"
 )
+
+var ErrAppleTransactionNotFound = errors.New("apple transaction not found")
+
+type AppleAPIError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *AppleAPIError) Error() string {
+	return fmt.Sprintf("apple api error: status %d, body: %s", e.StatusCode, e.Body)
+}
 
 // appleRootCAPEM is Apple Root CA - G3, used to verify the certificate chain
 // in JWS payloads from App Store Server Notifications.
@@ -156,7 +168,7 @@ func (c *AppleClient) VerifyTransaction(ctx context.Context, transactionID strin
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("apple api error: status %d, body: %s", resp.StatusCode, string(body))
+		return nil, classifyAppleAPIError(resp.StatusCode, body)
 	}
 
 	// Response wraps the transaction in a JWS envelope.
@@ -168,6 +180,18 @@ func (c *AppleClient) VerifyTransaction(ctx context.Context, transactionID strin
 	}
 
 	return parseSignedTransaction(envelope.SignedTransactionInfo)
+}
+
+func classifyAppleAPIError(statusCode int, body []byte) error {
+	switch statusCode {
+	case http.StatusBadRequest, http.StatusNotFound:
+		return fmt.Errorf("%w: status %d, body: %s", ErrAppleTransactionNotFound, statusCode, string(body))
+	default:
+		return &AppleAPIError{
+			StatusCode: statusCode,
+			Body:       string(body),
+		}
+	}
 }
 
 // ParseWebhookPayload decodes an App Store Server notification from its
@@ -400,6 +424,10 @@ type MockAppleClient struct {
 }
 
 func (m *MockAppleClient) VerifyTransaction(_ context.Context, txnID string) (*TransactionInfo, error) {
+	if txnID == "invalid-transaction" {
+		return nil, ErrAppleTransactionNotFound
+	}
+
 	now := time.Now()
 	expires := now.Add(365 * 24 * time.Hour)
 	return &TransactionInfo{

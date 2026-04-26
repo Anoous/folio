@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -55,6 +56,9 @@ type VerifyAndActivateResult struct {
 func (s *SubscriptionService) VerifyAndActivate(ctx context.Context, userID, transactionID, productID string) (*VerifyAndActivateResult, error) {
 	txnInfo, err := s.appleClient.VerifyTransaction(ctx, transactionID)
 	if err != nil {
+		if errors.Is(err, client.ErrAppleTransactionNotFound) {
+			return nil, ErrInvalidTransaction
+		}
 		return nil, fmt.Errorf("verify transaction: %w", err)
 	}
 

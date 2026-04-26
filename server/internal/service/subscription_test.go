@@ -70,6 +70,20 @@ func TestVerifyAndActivate_RejectsRequestedProductMismatch(t *testing.T) {
 	}
 }
 
+func TestVerifyAndActivate_MapsAppleInvalidTransaction(t *testing.T) {
+	apple := &fakeAppleStoreClient{err: client.ErrAppleTransactionNotFound}
+	users := &fakeSubscriptionUserRepo{}
+	svc := NewSubscriptionService(apple, users, "com.folio.app")
+
+	_, err := svc.VerifyAndActivate(context.Background(), "user-1", "missing-txn", "com.folio.app.pro.yearly")
+	if !errors.Is(err, ErrInvalidTransaction) {
+		t.Fatalf("VerifyAndActivate() error = %v, want %v", err, ErrInvalidTransaction)
+	}
+	if len(users.updates) != 0 {
+		t.Fatalf("updates = %d, want 0", len(users.updates))
+	}
+}
+
 func TestValidateSubscriptionActivation(t *testing.T) {
 	now := time.Date(2026, 4, 26, 10, 0, 0, 0, time.UTC)
 	future := now.Add(time.Hour)
@@ -166,9 +180,13 @@ func TestValidateSubscriptionActivation(t *testing.T) {
 
 type fakeAppleStoreClient struct {
 	transaction *client.TransactionInfo
+	err         error
 }
 
 func (c *fakeAppleStoreClient) VerifyTransaction(_ context.Context, _ string) (*client.TransactionInfo, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
 	return c.transaction, nil
 }
 

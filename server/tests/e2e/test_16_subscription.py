@@ -41,3 +41,19 @@ class TestSubscriptionVerify:
 
         assert_error_response(resp, 400, error_contains="invalid product")
         client.close()
+
+    def test_verify_subscription_rejects_invalid_transaction(self, base_url):
+        """Invalid Apple transaction IDs are client errors, not 500s."""
+        client = FolioAPIClient(base_url)
+        test_login(client, alias="subscription-invalid-transaction")
+
+        resp = client.post(
+            "/api/v1/subscription/verify",
+            json={
+                "transaction_id": "invalid-transaction",
+                "product_id": "com.folio.app.pro.yearly",
+            },
+        )
+
+        assert_error_response(resp, 400, error_contains="invalid transaction")
+        client.close()
