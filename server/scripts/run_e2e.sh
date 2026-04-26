@@ -122,7 +122,7 @@ wait_for() {
 # ---------- start reader service locally ----------
 start_reader() {
   info "Installing reader-service dependencies ..."
-  (cd "$READER_DIR" && npm install --silent 2>&1 | tail -3)
+  (cd "$READER_DIR" && npm ci --silent 2>&1 | tail -3)
 
   READER_LOG="${LOG_DIR}/reader.log"
   : > "$READER_LOG"
