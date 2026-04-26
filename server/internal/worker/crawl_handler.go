@@ -142,39 +142,9 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 
 	// --- Optimization 1: Check content cache ---
 	if cached, err := h.cacheRepo.GetByURL(ctx, p.URL); err == nil && cached != nil {
-		if cached.HasFullResult() {
-			return h.applyCacheHit(ctx, p, cached, start)
-		}
-		if cached.HasContent() {
-			// Partial hit: have content but no AI. Use cached content, run AI.
-			if err := h.articleRepo.UpdateCrawlResult(ctx, p.ArticleID, repository.CrawlResult{
-				Title:      derefOrEmpty(cached.Title),
-				Author:     derefOrEmpty(cached.Author),
-				SiteName:   derefOrEmpty(cached.SiteName),
-				Markdown:   derefOrEmpty(cached.MarkdownContent),
-				CoverImage: derefOrEmpty(cached.CoverImageURL),
-				Language:   derefOrEmpty(cached.Language),
-				FaviconURL: derefOrEmpty(cached.FaviconURL),
-			}); err != nil {
-				return fmt.Errorf("cache partial: update crawl result: %w", err)
-			}
-			if err := h.aiHandoff().enqueue(ctx, crawlAIHandoffRequest{
-				payload:             p,
-				title:               derefOrEmpty(cached.Title),
-				markdown:            derefOrEmpty(cached.MarkdownContent),
-				source:              derefOrDefault(cached.SiteName, "web"),
-				author:              derefOrEmpty(cached.Author),
-				finishBeforeEnqueue: true,
-				setFinishedLabel:    "cache partial: set crawl finished",
-				enqueueLabel:        "enqueue ai task (cache partial)",
-			}); err != nil {
-				return err
-			}
-			slog.Info("crawl task using cached content (partial, needs AI)",
-				"article_id", p.ArticleID,
-				"duration_ms", time.Since(start).Milliseconds(),
-			)
-			return nil
+		handled, err := h.cacheHandler().handle(ctx, p, cached, start)
+		if handled || err != nil {
+			return err
 		}
 	}
 
@@ -283,68 +253,6 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		h.asynqClient.EnqueueContext(ctx, imgTask) // Non-blocking, errors OK
 	}
 
-	return nil
-}
-
-// applyCacheHit handles the full cache hit: copies content + AI results to the article,
-// creates user-specific tags, and marks the task as done.
-func (h *CrawlHandler) applyCacheHit(ctx context.Context, p CrawlPayload, cached *domain.ContentCache, start time.Time) error {
-	// Update article with cached crawl results
-	if err := h.articleRepo.UpdateCrawlResult(ctx, p.ArticleID, repository.CrawlResult{
-		Title:      derefOrEmpty(cached.Title),
-		Author:     derefOrEmpty(cached.Author),
-		SiteName:   derefOrEmpty(cached.SiteName),
-		Markdown:   derefOrEmpty(cached.MarkdownContent),
-		CoverImage: derefOrEmpty(cached.CoverImageURL),
-		Language:   derefOrEmpty(cached.Language),
-		FaviconURL: derefOrEmpty(cached.FaviconURL),
-	}); err != nil {
-		return fmt.Errorf("cache hit: update crawl result: %w", err)
-	}
-
-	// Ensure category exists and update article with cached AI results
-	categorySlug := derefOrEmpty(cached.CategorySlug)
-	var categoryID string
-	if categorySlug != "" {
-		cat, err := h.categoryRepo.FindOrCreate(ctx, categorySlug, categorySlug, categorySlug)
-		if err != nil {
-			return fmt.Errorf("cache hit: find or create category: %w", err)
-		}
-		categoryID = cat.ID
-	}
-	if err := h.articleRepo.UpdateAIResult(ctx, p.ArticleID, repository.AIResult{
-		CategoryID: categoryID,
-		Summary:    derefOrEmpty(cached.Summary),
-		KeyPoints:  cached.KeyPoints,
-		Confidence: derefFloat(cached.AIConfidence),
-		Language:   derefOrEmpty(cached.Language),
-	}); err != nil {
-		return fmt.Errorf("cache hit: update ai result: %w", err)
-	}
-
-	// Set article status to ready (cache hit has full content + AI)
-	if err := h.articleRepo.UpdateStatus(ctx, p.ArticleID, domain.ArticleStatusReady); err != nil {
-		return fmt.Errorf("cache hit: update article status: %w", err)
-	}
-
-	// Create per-user tags from cached AI tag names
-	for _, tagName := range cached.AITagNames {
-		tag, err := h.tagRepo.Create(ctx, p.UserID, tagName, true)
-		if err != nil {
-			continue
-		}
-		h.tagRepo.AttachToArticle(ctx, p.ArticleID, tag.ID)
-	}
-
-	// Mark task as done (SetAIFinished sets status='done')
-	if err := h.taskRepo.SetAIFinished(ctx, p.TaskID); err != nil {
-		return fmt.Errorf("cache hit: set task done: %w", err)
-	}
-
-	slog.Info("crawl task completed via cache hit",
-		"article_id", p.ArticleID,
-		"duration_ms", time.Since(start).Milliseconds(),
-	)
 	return nil
 }
 
