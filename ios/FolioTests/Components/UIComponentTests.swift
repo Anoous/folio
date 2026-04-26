@@ -27,4 +27,29 @@ final class UIComponentTests: XCTestCase {
         XCTAssertEqual(toast.message, "Saved!")
         XCTAssertEqual(toast.icon, "checkmark")
     }
+
+    func testHomeQuickCaptureViewConstructs() {
+        let view = HomeQuickCaptureView(
+            onPasteURL: { _ in },
+            onTextTap: {},
+            onPhotoSelected: { _ in }
+        )
+
+        XCTAssertNotNil(view)
+    }
+
+    func testEchoCardViewConstructs() {
+        let card = EchoCardData(
+            question: "还记得抽象层常会怎样吗？",
+            answer: "抽象层常会泄漏，需要了解底层细节。",
+            sourceContext: "来自《Essays on programming I think about a lot》",
+            articleTitle: "Essays on programming I think about a lot",
+            intervalDays: 7
+        )
+        let view = EchoCardView(card: card) { _, completion in
+            completion(nil)
+        }
+
+        XCTAssertNotNil(view)
+    }
 }

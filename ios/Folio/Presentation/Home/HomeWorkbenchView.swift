@@ -121,12 +121,6 @@ struct HomeWorkbenchView: View {
     @ViewBuilder
     private var echoRows: some View {
         if let echoCard = viewModel.intersectionEchoCard {
-            HomeSectionHeaderView(
-                title: "今日 Echo",
-                subtitle: nil
-            )
-            .plainWorkbenchRow()
-
             EchoCardView(
                 card: EchoCardData(from: echoCard),
                 onReview: { result, completion in

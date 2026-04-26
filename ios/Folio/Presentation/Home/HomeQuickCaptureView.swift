@@ -9,32 +9,36 @@ struct HomeQuickCaptureView: View {
     @State private var selectedPhoto: PhotosPickerItem?
 
     var body: some View {
-        HStack(spacing: Spacing.sm) {
-            captureButton(
-                title: "链接",
-                systemImage: "link",
-                action: handlePaste
-            )
+        HStack(spacing: 0) {
+            captureButton(title: "链接", systemImage: "link", action: handlePaste)
 
-            captureButton(
-                title: "文字",
-                systemImage: "square.and.pencil",
-                action: onTextTap
-            )
+            commandDivider
+
+            captureButton(title: "文字", systemImage: "square.and.pencil", action: onTextTap)
+
+            commandDivider
 
             PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                Image(systemName: "camera")
-                    .font(.system(size: 18, weight: .semibold))
+                Label("截图", systemImage: "camera")
+                    .labelStyle(.iconOnly)
+                    .font(.body)
+                    .imageScale(.large)
                     .foregroundStyle(Color.folio.textPrimary)
-                    .frame(width: 46, height: 46)
-                    .background(Color.folio.echoBg)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .accessibilityLabel("截图")
+                    .frame(width: 56)
+                    .frame(minHeight: 48)
             }
+            .buttonStyle(.plain)
         }
+        .padding(Spacing.xxs)
+        .background(Color.folio.cardBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(Color.folio.separator, lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16))
         .padding(.horizontal, Spacing.screenPadding)
-        .padding(.top, Spacing.md)
-        .padding(.bottom, Spacing.sm)
+        .padding(.top, Spacing.sm)
+        .padding(.bottom, Spacing.lg)
         .onChange(of: selectedPhoto) { _, newValue in
             guard let item = newValue else { return }
             Task {
@@ -48,13 +52,20 @@ struct HomeQuickCaptureView: View {
     }
 
     private func captureButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        Button(title, systemImage: systemImage, action: action)
-            .font(Typography.body)
-            .foregroundStyle(Color.folio.textPrimary)
-            .frame(maxWidth: .infinity, minHeight: 46)
-            .background(Color.folio.echoBg)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.body)
+                .imageScale(.medium)
+                .foregroundStyle(Color.folio.textPrimary)
+                .frame(maxWidth: .infinity, minHeight: 48)
+        }
             .buttonStyle(.plain)
+    }
+
+    private var commandDivider: some View {
+        Rectangle()
+            .fill(Color.folio.separator)
+            .frame(width: 1, height: 24)
     }
 
     private func handlePaste() {

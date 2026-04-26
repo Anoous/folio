@@ -130,27 +130,30 @@ struct HomeView: View {
     private var topBar: some View {
         HStack {
             Text("页集")
-                .font(Typography.v3PageTitle)
+                .font(.largeTitle.bold())
                 .foregroundStyle(Color.folio.textPrimary)
             Spacer()
-            HStack(spacing: 4) {
+            HStack(spacing: Spacing.xs) {
                 Button("搜索", systemImage: "magnifyingglass") {
                     isSearchActive = true
                 }
                 .labelStyle(.iconOnly)
-                .frame(width: 38, height: 38)
+                .font(.title3)
+                .frame(width: 40, height: 40)
                 .foregroundStyle(Color.folio.textSecondary)
 
                 Button("设置", systemImage: "gearshape") {
                     showSettings = true
                 }
                 .labelStyle(.iconOnly)
-                .frame(width: 38, height: 38)
+                .font(.title3)
+                .frame(width: 40, height: 40)
                 .foregroundStyle(Color.folio.textSecondary)
             }
         }
         .padding(.horizontal, Spacing.screenPadding)
-        .padding(.top, 6)
+        .padding(.top, 4)
+        .padding(.bottom, Spacing.xs)
     }
 
     // MARK: - Main Content
