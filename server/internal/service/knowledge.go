@@ -128,21 +128,9 @@ func (s *KnowledgeService) Spark(ctx context.Context, userID, prompt string) (*K
 }
 
 func (s *KnowledgeService) Learn(ctx context.Context, userID, prompt string) (*KnowledgeLearnResult, error) {
-	contextResult, err := s.Retrieve(ctx, userID, prompt, KnowledgeRetrieveOptions{
-		Mode:       KnowledgeModeLearn,
-		MaxSources: 6,
-	})
+	contextResult, err := s.learnContextCollector().collect(ctx, userID, prompt)
 	if err != nil {
 		return nil, err
-	}
-	if contextResult.Insufficient || len(contextResult.Sources) == 0 {
-		contextResult, err = s.Retrieve(ctx, userID, "knowledge learning review", KnowledgeRetrieveOptions{
-			Mode:       KnowledgeModeLearn,
-			MaxSources: 6,
-		})
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	summary := composeLearnSummary(prompt, contextResult.Sources)
