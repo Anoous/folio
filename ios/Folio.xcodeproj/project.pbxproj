@@ -21,6 +21,8 @@
 		70B8779F56BB7499EC955F5B /* ArticleSyncCursorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A306433A403FD052AF903F2 /* ArticleSyncCursorStore.swift */; };
 		8BFC3D346EE4EB64215065D5 /* ArticlePullSyncWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2593D1E362791FF38E9B4686 /* ArticlePullSyncWorkflow.swift */; };
 		6CBC497B59DC77BECE3FF0BB /* ArticlePullSyncWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A973C135B3649A01597A4B1 /* ArticlePullSyncWorkflowTests.swift */; };
+		D7E95B7A844991BD0FD20713 /* ArticleDeletionSyncWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28FC9F87186B2D2C7CA90B07 /* ArticleDeletionSyncWorkflow.swift */; };
+		912CED21FFDB6467041D27DF /* ArticleDeletionSyncWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84714F9D9EB2D8FD3CF4FFEF /* ArticleDeletionSyncWorkflowTests.swift */; };
 		08FD0FFA5E94D6EE8DBA8619 /* FTS5SearchManagerQueryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2B9FA9B03C15A89D34F796 /* FTS5SearchManagerQueryTests.swift */; };
 		0934A246EE8C385420BE7F4D /* MockDataFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B684C5506B2386577EBB864 /* MockDataFactoryTests.swift */; };
 		0D55DE5292B112620F6B22E3 /* HomeSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9222608BDEF0C61D04599C21 /* HomeSearchView.swift */; };
@@ -260,6 +262,8 @@
 		1A306433A403FD052AF903F2 /* ArticleSyncCursorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleSyncCursorStore.swift; sourceTree = "<group>"; };
 		2593D1E362791FF38E9B4686 /* ArticlePullSyncWorkflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticlePullSyncWorkflow.swift; sourceTree = "<group>"; };
 		9A973C135B3649A01597A4B1 /* ArticlePullSyncWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticlePullSyncWorkflowTests.swift; sourceTree = "<group>"; };
+		28FC9F87186B2D2C7CA90B07 /* ArticleDeletionSyncWorkflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleDeletionSyncWorkflow.swift; sourceTree = "<group>"; };
+		84714F9D9EB2D8FD3CF4FFEF /* ArticleDeletionSyncWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleDeletionSyncWorkflowTests.swift; sourceTree = "<group>"; };
 		102CBA1FA053F5BE0660B9BC /* MilestoneCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MilestoneCardView.swift; sourceTree = "<group>"; };
 		117C69065C4BFC1C68EB1C00 /* CategoryRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryRepositoryTests.swift; sourceTree = "<group>"; };
 		169A0B494F30137A1EB80458 /* Color+Folio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Folio.swift"; sourceTree = "<group>"; };
@@ -495,6 +499,7 @@
 			isa = PBXGroup;
 			children = (
 				4850A28FF6AF926B9C1E85ED /* AppStartupCoordinatorTests.swift */,
+				84714F9D9EB2D8FD3CF4FFEF /* ArticleDeletionSyncWorkflowTests.swift */,
 				9A973C135B3649A01597A4B1 /* ArticlePullSyncWorkflowTests.swift */,
 				5F7DD506603F5ED3FC6A79B5 /* ArticleSyncWorkflowTests.swift */,
 				0D9D8E7C6B5A493827161514 /* ArticleUpdateSyncWorkflowTests.swift */,
@@ -850,6 +855,7 @@
 		D00CB4EF65C8C1AA0618DCAD /* Sync */ = {
 			isa = PBXGroup;
 			children = (
+				28FC9F87186B2D2C7CA90B07 /* ArticleDeletionSyncWorkflow.swift */,
 				474CF0D33CFF4F03AAAC3443 /* ArticleMerger.swift */,
 				2593D1E362791FF38E9B4686 /* ArticlePullSyncWorkflow.swift */,
 				1A306433A403FD052AF903F2 /* ArticleSyncCursorStore.swift */,
@@ -1151,6 +1157,7 @@
 			files = (
 				72153227A49357BAA1A4CB07 /* APIClientTests.swift in Sources */,
 				B05B9A46775C3C0666533F2F /* AppStartupCoordinatorTests.swift in Sources */,
+				912CED21FFDB6467041D27DF /* ArticleDeletionSyncWorkflowTests.swift in Sources */,
 				3C6C21CF9FD05E60442EB8ED /* ArticleExtractionTests.swift in Sources */,
 				AE71CDA974E9564AE40D425F /* ArticleModelTests.swift in Sources */,
 				D1616228CC0A5A3B07FEFD58 /* ArticleRepositoryTests.swift in Sources */,
@@ -1208,6 +1215,7 @@
 				D303B5F38CD65F29727A13BD /* Article+Actions.swift in Sources */,
 				06562C0449E24B52CC26DA06 /* Article.swift in Sources */,
 				AF496B39DFC8253B5A33DD31 /* ArticleCardView.swift in Sources */,
+				D7E95B7A844991BD0FD20713 /* ArticleDeletionSyncWorkflow.swift in Sources */,
 				881BB78B428B2D07461619DD /* ArticleMerger.swift in Sources */,
 				8BFC3D346EE4EB64215065D5 /* ArticlePullSyncWorkflow.swift in Sources */,
 				F5BE0ECDAAACF5B2E049067E /* ArticleMetaInfoView.swift in Sources */,

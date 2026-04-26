@@ -286,27 +286,13 @@ final class SyncService {
 
     // MARK: - Deletion Sync
 
+    private func makeArticleDeletionSyncWorkflow() -> ArticleDeletionSyncWorkflow {
+        ArticleDeletionSyncWorkflow(apiClient: apiClient, context: context)
+    }
+
     /// Send pending local deletions to the server.
     func syncDeletions() async {
-        let descriptor = FetchDescriptor<PendingDeletion>(
-            sortBy: [SortDescriptor(\.deletedAt)]
-        )
-        guard let pending = try? context.fetch(descriptor), !pending.isEmpty else { return }
-
-        FolioLogger.sync.info("syncing \(pending.count) pending deletion(s)")
-        for deletion in pending {
-            do {
-                try await apiClient.deleteArticle(id: deletion.serverID)
-                context.delete(deletion)
-                FolioLogger.sync.debug("deletion synced: \(deletion.serverID)")
-            } catch let error as APIError where error == .notFound {
-                // Already deleted on server — clear the pending record
-                context.delete(deletion)
-            } catch {
-                FolioLogger.sync.error("deletion sync failed: \(deletion.serverID) — \(error)")
-            }
-        }
-        try? context.save()
+        await makeArticleDeletionSyncWorkflow().syncPendingDeletions()
     }
 
     // MARK: - Pending Update Sync
@@ -321,16 +307,7 @@ final class SyncService {
 
     /// Remove DeletionRecords older than retention period.
     private func cleanupOldDeletionRecords() {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -DeletionRecord.retentionDays, to: Date()) ?? Date()
-        let descriptor = FetchDescriptor<DeletionRecord>(
-            predicate: #Predicate<DeletionRecord> { $0.deletedAt < cutoff }
-        )
-        guard let expired = try? context.fetch(descriptor), !expired.isEmpty else { return }
-        for record in expired {
-            context.delete(record)
-        }
-        try? context.save()
-        FolioLogger.sync.debug("cleaned up \(expired.count) old deletion record(s)")
+        makeArticleDeletionSyncWorkflow().cleanupOldDeletionRecords()
     }
 
     // MARK: - Processing Article Polling
