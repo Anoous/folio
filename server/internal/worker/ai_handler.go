@@ -178,25 +178,7 @@ func (h *AIHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	// Write to content cache for cross-user reuse
 	h.cacheWriter().write(ctx, p, result)
 
-	// Enqueue echo card generation (non-blocking)
-	echoTask, err := NewEchoTask(p.ArticleID, p.UserID, "")
-	if err == nil {
-		if _, err := h.asynqClient.EnqueueContext(ctx, echoTask); err != nil {
-			slog.Error("[ECHO] failed to enqueue for article",
-				"article_id", p.ArticleID,
-				"error", err,
-			)
-		}
-	}
-
-	// Enqueue related article computation (non-blocking)
-	relateTask := NewRelateTask(p.ArticleID, p.UserID)
-	if _, err := h.asynqClient.EnqueueContext(ctx, relateTask); err != nil {
-		slog.Error("[RELATE] failed to enqueue for article",
-			"article_id", p.ArticleID,
-			"error", err,
-		)
-	}
+	h.followupEnqueuer().enqueue(ctx, p)
 
 	return nil
 }
