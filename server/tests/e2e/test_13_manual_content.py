@@ -43,6 +43,17 @@ class TestManualContentSubmission:
         article = fresh_api.get_article(body["article_id"]).json()
         assert article["source_type"] == "manual"
 
+    def test_text_capture_source_types_are_preserved(self, fresh_api):
+        for source_type in ("screenshot", "voice"):
+            resp = fresh_api.submit_manual(
+                f"Testing {source_type} capture content",
+                source_type=source_type,
+            )
+            assert resp.status_code == 202
+            body = resp.json()
+            article = fresh_api.get_article(body["article_id"]).json()
+            assert article["source_type"] == source_type
+
     def test_no_url_in_article(self, fresh_api):
         resp = fresh_api.submit_manual("A thought without URL")
         body = resp.json()

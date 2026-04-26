@@ -85,64 +85,33 @@ func (s *ArticleService) SubmitURL(ctx context.Context, userID string, req Submi
 		return nil, ErrDuplicateURL
 	}
 
-	// Check quota
-	if err := s.quotaService.CheckAndIncrement(ctx, userID); err != nil {
-		return nil, err
-	}
-
 	// Detect source
 	sourceType := DetectSource(req.URL)
 
-	// Create article
-	article, err := s.articleRepo.Create(ctx, repository.CreateArticleParams{
-		UserID:          userID,
-		URL:             &req.URL,
-		SourceType:      sourceType,
-		Title:           req.Title,
-		Author:          req.Author,
-		SiteName:        req.SiteName,
-		MarkdownContent: req.MarkdownContent,
-		WordCount:       req.WordCount,
+	return s.submitIngestion(ctx, articleIngestion{
+		userID: userID,
+		createArticle: repository.CreateArticleParams{
+			UserID:          userID,
+			URL:             &req.URL,
+			SourceType:      sourceType,
+			Title:           req.Title,
+			Author:          req.Author,
+			SiteName:        req.SiteName,
+			MarkdownContent: req.MarkdownContent,
+			WordCount:       req.WordCount,
+		},
+		tagIDs:          req.TagIDs,
+		taskURL:         &req.URL,
+		sourceType:      sourceType,
+		taskCreateLabel: "create task",
+		enqueueLabel:    "enqueue crawl",
+		buildTask: func(article *domain.Article, task *domain.CrawlTask) *asynq.Task {
+			return worker.NewCrawlTask(article.ID, task.ID, req.URL, userID)
+		},
+		logSubmitted: func(article *domain.Article, task *domain.CrawlTask) {
+			slog.Info("article submitted", "article_id", article.ID, "task_id", task.ID, "url", req.URL)
+		},
 	})
-	if err != nil {
-		// Rollback quota on creation failure
-		_ = s.quotaService.DecrementQuota(ctx, userID)
-		return nil, fmt.Errorf("create article: %w", err)
-	}
-
-	// Attach user-provided tags
-	for _, tagID := range req.TagIDs {
-		if err := s.tagRepo.AttachToArticle(ctx, article.ID, tagID); err != nil {
-			slog.Error("failed to attach tag", "article_id", article.ID, "tag_id", tagID, "error", err)
-			continue
-		}
-	}
-
-	// Create crawl task
-	task, err := s.taskRepo.Create(ctx, repository.CreateTaskParams{
-		ArticleID:  article.ID,
-		UserID:     userID,
-		URL:        &req.URL,
-		SourceType: string(sourceType),
-	})
-	if err != nil {
-		_ = s.quotaService.DecrementQuota(ctx, userID)
-		return nil, fmt.Errorf("create task: %w", err)
-	}
-
-	// Enqueue async crawl
-	crawlTask := worker.NewCrawlTask(article.ID, task.ID, req.URL, userID)
-	if _, err := s.asynqClient.EnqueueContext(ctx, crawlTask); err != nil {
-		_ = s.quotaService.DecrementQuota(ctx, userID)
-		return nil, fmt.Errorf("enqueue crawl: %w", err)
-	}
-
-	slog.Info("article submitted", "article_id", article.ID, "task_id", task.ID, "url", req.URL)
-
-	return &SubmitURLResponse{
-		ArticleID: article.ID,
-		TaskID:    task.ID,
-	}, nil
 }
 
 func (s *ArticleService) SubmitManualContent(ctx context.Context, userID string, req SubmitManualContentRequest) (*SubmitURLResponse, error) {
@@ -156,11 +125,6 @@ func (s *ArticleService) SubmitManualContent(ctx context.Context, userID string,
 		}
 	}
 
-	// Check quota
-	if err := s.quotaService.CheckAndIncrement(ctx, userID); err != nil {
-		return nil, err
-	}
-
 	// Compute word count
 	wordCount := repository.CountWords(req.Content)
 
@@ -170,58 +134,34 @@ func (s *ArticleService) SubmitManualContent(ctx context.Context, userID string,
 		sourceType = domain.SourceManual
 	}
 
-	// Create article
-	article, err := s.articleRepo.Create(ctx, repository.CreateArticleParams{
-		UserID:          userID,
-		URL:             nil,
-		SourceType:      sourceType,
-		Title:           req.Title,
-		MarkdownContent: &req.Content,
-		WordCount:       &wordCount,
-		ClientID:        req.ClientID,
-	})
-	if err != nil {
-		_ = s.quotaService.DecrementQuota(ctx, userID)
-		return nil, fmt.Errorf("create article: %w", err)
-	}
-
-	// Attach user-provided tags
-	for _, tagID := range req.TagIDs {
-		if err := s.tagRepo.AttachToArticle(ctx, article.ID, tagID); err != nil {
-			slog.Error("failed to attach tag", "article_id", article.ID, "tag_id", tagID, "error", err)
-			continue
-		}
-	}
-
-	// Create task for AI processing
-	task, err := s.taskRepo.Create(ctx, repository.CreateTaskParams{
-		ArticleID:  article.ID,
-		UserID:     userID,
-		URL:        nil,
-		SourceType: string(sourceType),
-	})
-	if err != nil {
-		_ = s.quotaService.DecrementQuota(ctx, userID)
-		return nil, fmt.Errorf("create task: %w", err)
-	}
-
-	// Enqueue AI processing directly (no crawl needed for manual content)
 	title := ""
 	if req.Title != nil {
 		title = *req.Title
 	}
-	aiTask := worker.NewAIProcessTask(article.ID, task.ID, userID, title, req.Content, string(sourceType), "")
-	if _, err := s.asynqClient.EnqueueContext(ctx, aiTask); err != nil {
-		_ = s.quotaService.DecrementQuota(ctx, userID)
-		return nil, fmt.Errorf("enqueue ai process: %w", err)
-	}
 
-	slog.Info("manual content submitted", "article_id", article.ID, "task_id", task.ID, "word_count", wordCount)
-
-	return &SubmitURLResponse{
-		ArticleID: article.ID,
-		TaskID:    task.ID,
-	}, nil
+	return s.submitIngestion(ctx, articleIngestion{
+		userID: userID,
+		createArticle: repository.CreateArticleParams{
+			UserID:          userID,
+			URL:             nil,
+			SourceType:      sourceType,
+			Title:           req.Title,
+			MarkdownContent: &req.Content,
+			WordCount:       &wordCount,
+			ClientID:        req.ClientID,
+		},
+		tagIDs:          req.TagIDs,
+		taskURL:         nil,
+		sourceType:      sourceType,
+		taskCreateLabel: "create task",
+		enqueueLabel:    "enqueue ai process",
+		buildTask: func(article *domain.Article, task *domain.CrawlTask) *asynq.Task {
+			return worker.NewAIProcessTask(article.ID, task.ID, userID, title, req.Content, string(sourceType), "")
+		},
+		logSubmitted: func(article *domain.Article, task *domain.CrawlTask) {
+			slog.Info("manual content submitted", "article_id", article.ID, "task_id", task.ID, "word_count", wordCount)
+		},
+	})
 }
 
 func (s *ArticleService) GetByID(ctx context.Context, userID, articleID string) (*domain.Article, error) {

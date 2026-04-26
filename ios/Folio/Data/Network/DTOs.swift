@@ -271,6 +271,7 @@ struct RAGSource: Codable {
     let title: String
     let siteName: String?
     let summary: String?
+    let evidenceSnippet: String?
     let createdAt: Date
     let relevance: Double
 }

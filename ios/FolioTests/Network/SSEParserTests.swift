@@ -4,7 +4,7 @@ import XCTest
 final class SSEParserTests: XCTestCase {
 
     func testParseSourcesEvent() throws {
-        let data = "{\"sources\":[{\"article_id\":\"a1\",\"title\":\"Test\",\"created_at\":\"2025-01-01T00:00:00Z\",\"relevance\":0.9}],\"source_count\":1,\"conversation_id\":\"conv1\"}"
+        let data = "{\"sources\":[{\"article_id\":\"a1\",\"title\":\"Test\",\"evidence_snippet\":\"Matched evidence\",\"created_at\":\"2025-01-01T00:00:00Z\",\"relevance\":0.9}],\"source_count\":1,\"conversation_id\":\"conv1\"}"
         let event = try SSEEventParser.parse(eventType: "sources", data: data)
         guard case .sources(let payload) = event else {
             XCTFail("expected sources event"); return
@@ -13,6 +13,7 @@ final class SSEParserTests: XCTestCase {
         XCTAssertEqual(payload.conversationId, "conv1")
         XCTAssertEqual(payload.sources.count, 1)
         XCTAssertEqual(payload.sources[0].articleId, "a1")
+        XCTAssertEqual(payload.sources[0].evidenceSnippet, "Matched evidence")
     }
 
     func testParseDeltaEvent() throws {

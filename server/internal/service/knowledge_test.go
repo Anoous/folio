@@ -425,6 +425,36 @@ func TestLearnGroundingFiltersUnsupportedItems(t *testing.T) {
 	}
 }
 
+func TestKnowledgeGroundingFiltersUnsupportedAndDeduplicatesIDs(t *testing.T) {
+	sources := []KnowledgeSource{
+		{ArticleID: "a1", Title: "Supported", Summary: strPtr("Supported summary")},
+		{ArticleID: "a2", Title: "Unsupported"},
+	}
+
+	grounding := newKnowledgeGrounding(sources)
+	ids := grounding.groundedSourceIDs([]string{"a1", "a2", "a1", "missing", ""})
+
+	if !slices.Equal(ids, []string{"a1"}) {
+		t.Fatalf("grounded ids = %v, want [a1]", ids)
+	}
+}
+
+func TestKnowledgeGroundingPreservesRetrievalOrderForUsedSources(t *testing.T) {
+	sources := []KnowledgeSource{
+		{ArticleID: "a1", Title: "First", Summary: strPtr("First summary")},
+		{ArticleID: "a2", Title: "Second", Summary: strPtr("Second summary")},
+		{ArticleID: "a3", Title: "Third", Summary: strPtr("Third summary")},
+	}
+
+	grounding := newKnowledgeGrounding(sources)
+	used := map[string]bool{"a3": true, "a1": true}
+	grounded := grounding.sourcesByUsedIDs(used)
+
+	if len(grounded) != 2 || grounded[0].ArticleID != "a1" || grounded[1].ArticleID != "a3" {
+		t.Fatalf("grounded sources = %+v, want retrieval order a1,a3", grounded)
+	}
+}
+
 func benchmarkDoc(id, title, summary string) KnowledgeDocument {
 	now := time.Date(2026, 4, 16, 12, 0, 0, 0, time.UTC)
 	return KnowledgeDocument{

@@ -45,10 +45,10 @@ final class ContentSaveService {
         let manager = SharedDataManager(
             context: context,
             onArticleIndexed: { [searchIndexCoordinator] article in
-                searchIndexCoordinator.index(article)
+                searchIndexCoordinator.sync(article)
             },
             onArticleUpdated: { [searchIndexCoordinator] article in
-                searchIndexCoordinator.update(article)
+                searchIndexCoordinator.sync(article)
             }
         )
         do {
@@ -74,10 +74,10 @@ final class ContentSaveService {
         let manager = SharedDataManager(
             context: context,
             onArticleIndexed: { [searchIndexCoordinator] article in
-                searchIndexCoordinator.index(article)
+                searchIndexCoordinator.sync(article)
             },
             onArticleUpdated: { [searchIndexCoordinator] article in
-                searchIndexCoordinator.update(article)
+                searchIndexCoordinator.sync(article)
             }
         )
         do {
@@ -139,7 +139,7 @@ final class ContentSaveService {
                 message: String(localized: "home.screenshotError", defaultValue: "Failed to process image")
             )
         }
-        searchIndexCoordinator.index(article)
+        searchIndexCoordinator.sync(article)
         SharedDataManager.incrementQuota()
 
         // Run OCR in background — sync AFTER OCR completes to avoid uploading empty content
@@ -161,7 +161,7 @@ final class ContentSaveService {
                         article.wordCount = Article.countWords(text)
                         article.updatedAt = .now
                         try? ctx.save()
-                        searchIndexCoordinator.update(article)
+                        searchIndexCoordinator.sync(article)
                     }
                     onOCRComplete()
                 }
@@ -197,7 +197,7 @@ final class ContentSaveService {
         context.insert(article)
         do {
             try context.save()
-            searchIndexCoordinator.index(article)
+            searchIndexCoordinator.sync(article)
             SharedDataManager.incrementQuota()
             triggerSync()
             return .success(

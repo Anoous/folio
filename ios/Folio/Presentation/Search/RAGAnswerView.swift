@@ -203,8 +203,8 @@ struct RAGAnswerView: View {
                         .foregroundStyle(Color.folio.textTertiary)
 
                     if expandedSourceId == source.articleId,
-                       let summary = source.summary, !summary.isEmpty {
-                        Text(summary)
+                       let sourceText = sourceEvidenceText(source) {
+                        Text(sourceText)
                             .font(.system(size: 14))
                             .foregroundStyle(Color.folio.textSecondary)
                             .lineSpacing(4)
@@ -215,6 +215,16 @@ struct RAGAnswerView: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private func sourceEvidenceText(_ source: RAGSource) -> String? {
+        if let evidenceSnippet = source.evidenceSnippet, !evidenceSnippet.isEmpty {
+            return evidenceSnippet
+        }
+        if let summary = source.summary, !summary.isEmpty {
+            return summary
+        }
+        return nil
     }
 
     private func sourceMetaText(_ source: RAGSource) -> String {

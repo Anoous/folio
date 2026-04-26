@@ -368,7 +368,7 @@ final class HomeViewModelTests: XCTestCase {
         let article = Article(url: "https://example.com/search-delete", title: "Delete Search Index")
         context.insert(article)
         try context.save()
-        searchIndexer.index(article)
+        searchIndexer.sync(article)
 
         XCTAssertEqual(try searchIndexer.searchManager.search(query: "Delete").count, 1)
 

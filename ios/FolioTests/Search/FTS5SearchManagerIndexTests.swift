@@ -29,6 +29,31 @@ final class FTS5SearchManagerIndexTests: XCTestCase {
         XCTAssertEqual(try manager.rowCount(), 1)
     }
 
+    func testIndexArticle_isIdempotentForSameArticle() throws {
+        let article = Article(url: "https://example.com", title: "Swift Concurrency")
+        article.markdownContent = "Learn about async await in Swift"
+
+        try manager.indexArticle(article)
+        try manager.indexArticle(article)
+
+        XCTAssertEqual(try manager.rowCount(), 1)
+        XCTAssertEqual(try manager.search(query: "Concurrency").count, 1)
+    }
+
+    @MainActor
+    func testCoordinatorSync_upsertsArticleThroughSingleInterface() throws {
+        let coordinator = SearchIndexCoordinator(searchManager: manager)
+        let article = Article(url: "https://example.com", title: "Original Title")
+
+        coordinator.sync(article)
+        article.title = "Updated Title"
+        coordinator.sync(article)
+
+        XCTAssertEqual(try manager.rowCount(), 1)
+        XCTAssertEqual(try manager.search(query: "Updated").count, 1)
+        XCTAssertEqual(try manager.search(query: "Original").count, 0)
+    }
+
     func testRemoveFromIndex() throws {
         let article = Article(url: "https://example.com", title: "Remove me")
         try manager.indexArticle(article)

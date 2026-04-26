@@ -27,12 +27,13 @@ type ragQueryRequest struct {
 }
 
 type ragSourceResponse struct {
-	ArticleID string  `json:"article_id"`
-	Title     string  `json:"title"`
-	SiteName  *string `json:"site_name"`
-	Summary   *string `json:"summary"`
-	CreatedAt string  `json:"created_at"`
-	Relevance float64 `json:"relevance"`
+	ArticleID       string  `json:"article_id"`
+	Title           string  `json:"title"`
+	SiteName        *string `json:"site_name"`
+	Summary         *string `json:"summary"`
+	EvidenceSnippet *string `json:"evidence_snippet,omitempty"`
+	CreatedAt       string  `json:"created_at"`
+	Relevance       float64 `json:"relevance"`
 }
 
 type ragQueryResponse struct {
@@ -77,21 +78,9 @@ func (h *RAGHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sources := make([]ragSourceResponse, 0, len(result.Sources))
-	for _, s := range result.Sources {
-		sources = append(sources, ragSourceResponse{
-			ArticleID: s.ArticleID,
-			Title:     s.Title,
-			SiteName:  s.SiteName,
-			Summary:   s.Summary,
-			CreatedAt: s.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			Relevance: s.Relevance,
-		})
-	}
-
 	writeJSON(w, http.StatusOK, ragQueryResponse{
 		Answer:              result.Answer,
-		Sources:             sources,
+		Sources:             domainSourcesToResponse(result.Sources),
 		SourceCount:         result.SourceCount,
 		FollowupSuggestions: result.FollowupSuggestions,
 		ConversationID:      result.ConversationID,
@@ -196,12 +185,13 @@ func domainSourcesToResponse(sources []domain.RAGSource) []ragSourceResponse {
 	result := make([]ragSourceResponse, 0, len(sources))
 	for _, s := range sources {
 		result = append(result, ragSourceResponse{
-			ArticleID: s.ArticleID,
-			Title:     s.Title,
-			SiteName:  s.SiteName,
-			Summary:   s.Summary,
-			CreatedAt: s.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			Relevance: s.Relevance,
+			ArticleID:       s.ArticleID,
+			Title:           s.Title,
+			SiteName:        s.SiteName,
+			Summary:         s.Summary,
+			EvidenceSnippet: s.EvidenceSnippet,
+			CreatedAt:       s.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			Relevance:       s.Relevance,
 		})
 	}
 	return result

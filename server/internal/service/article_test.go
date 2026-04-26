@@ -149,10 +149,14 @@ func (m *mockCategoryRepo) GetByID(ctx context.Context, id string) (*domain.Cate
 }
 
 type mockQuotaService struct {
-	checkFn func(ctx context.Context, userID string) error
+	checkFn         func(ctx context.Context, userID string) error
+	checkCalls      int
+	decrementCalls  int
+	lastDecrementID string
 }
 
 func (m *mockQuotaService) CheckAndIncrement(ctx context.Context, userID string) error {
+	m.checkCalls++
 	if m.checkFn != nil {
 		return m.checkFn(ctx, userID)
 	}
@@ -160,6 +164,8 @@ func (m *mockQuotaService) CheckAndIncrement(ctx context.Context, userID string)
 }
 
 func (m *mockQuotaService) DecrementQuota(ctx context.Context, userID string) error {
+	m.decrementCalls++
+	m.lastDecrementID = userID
 	return nil
 }
 
@@ -494,6 +500,31 @@ func TestSubmitURL_WithoutContentFields_BackwardCompat(t *testing.T) {
 	}
 }
 
+func TestSubmitURL_IngestionPipelineConsumesQuotaOnce(t *testing.T) {
+	artRepo := &mockArticleRepo{}
+	taskRepo := &mockTaskRepo{}
+	tagRepo := &mockTagRepo{}
+	catRepo := &mockCategoryRepo{}
+	quota := &mockQuotaService{}
+	enqueuer := &mockEnqueuer{}
+
+	svc := newTestArticleService(artRepo, taskRepo, tagRepo, catRepo, quota, enqueuer)
+
+	_, err := svc.SubmitURL(context.Background(), "user-1", SubmitURLRequest{
+		URL: "https://example.com/article",
+	})
+	if err != nil {
+		t.Fatalf("SubmitURL failed: %v", err)
+	}
+
+	if quota.checkCalls != 1 {
+		t.Fatalf("quota checks = %d, want 1", quota.checkCalls)
+	}
+	if quota.decrementCalls != 0 {
+		t.Fatalf("quota rollbacks = %d, want 0", quota.decrementCalls)
+	}
+}
+
 func TestSubmitURL_PartialFields_OnlyTitle(t *testing.T) {
 	artRepo := &mockArticleRepo{}
 	taskRepo := &mockTaskRepo{}
@@ -787,6 +818,118 @@ func TestSubmitURL_TaskRepoFields(t *testing.T) {
 	}
 	if tp.SourceType != string(domain.SourceTwitter) {
 		t.Errorf("CreateTaskParams.SourceType = %q, want %q", tp.SourceType, string(domain.SourceTwitter))
+	}
+}
+
+func TestSubmitManualContent_IngestionPipelineCreatesAITask(t *testing.T) {
+	artRepo := &mockArticleRepo{}
+	taskRepo := &mockTaskRepo{}
+	tagRepo := &mockTagRepo{}
+	catRepo := &mockCategoryRepo{}
+	quota := &mockQuotaService{}
+	enqueuer := &mockEnqueuer{}
+
+	svc := newTestArticleService(artRepo, taskRepo, tagRepo, catRepo, quota, enqueuer)
+
+	content := "Screenshot text about durable queues and backpressure."
+	clientID := "local-screenshot-1"
+	resp, err := svc.SubmitManualContent(context.Background(), "user-1", SubmitManualContentRequest{
+		Content:    content,
+		Title:      strPtr("Screenshot Note"),
+		TagIDs:     []string{"tag-1"},
+		ClientID:   &clientID,
+		SourceType: string(domain.SourceScreenshot),
+	})
+	if err != nil {
+		t.Fatalf("SubmitManualContent failed: %v", err)
+	}
+	if resp.ArticleID != "article-123" || resp.TaskID != "task-123" {
+		t.Fatalf("response = %+v, want article-123/task-123", resp)
+	}
+
+	p := artRepo.lastCreateP
+	if p == nil {
+		t.Fatal("articleRepo.Create was not called")
+	}
+	if p.URL != nil {
+		t.Fatalf("CreateArticleParams.URL = %v, want nil", *p.URL)
+	}
+	if p.SourceType != domain.SourceScreenshot {
+		t.Fatalf("CreateArticleParams.SourceType = %q, want %q", p.SourceType, domain.SourceScreenshot)
+	}
+	if p.MarkdownContent == nil || *p.MarkdownContent != content {
+		t.Fatalf("CreateArticleParams.MarkdownContent = %v, want %q", p.MarkdownContent, content)
+	}
+	if p.WordCount == nil || *p.WordCount == 0 {
+		t.Fatalf("CreateArticleParams.WordCount = %v, want non-zero", p.WordCount)
+	}
+	if p.ClientID == nil || *p.ClientID != clientID {
+		t.Fatalf("CreateArticleParams.ClientID = %v, want %q", p.ClientID, clientID)
+	}
+
+	if taskRepo.lastCreateP == nil {
+		t.Fatal("taskRepo.Create was not called")
+	}
+	if taskRepo.lastCreateP.URL != nil {
+		t.Fatalf("CreateTaskParams.URL = %v, want nil", *taskRepo.lastCreateP.URL)
+	}
+	if taskRepo.lastCreateP.SourceType != string(domain.SourceScreenshot) {
+		t.Fatalf("CreateTaskParams.SourceType = %q, want %q", taskRepo.lastCreateP.SourceType, domain.SourceScreenshot)
+	}
+	if len(tagRepo.attachCalls) != 1 {
+		t.Fatalf("tag attach calls = %d, want 1", len(tagRepo.attachCalls))
+	}
+	if len(enqueuer.enqueuedTasks) != 1 {
+		t.Fatalf("enqueued tasks = %d, want 1", len(enqueuer.enqueuedTasks))
+	}
+	task := enqueuer.enqueuedTasks[0]
+	if task.Type() != worker.TypeAIProcess {
+		t.Fatalf("task type = %q, want %q", task.Type(), worker.TypeAIProcess)
+	}
+
+	var payload worker.AIProcessPayload
+	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+		t.Fatalf("unmarshal AI payload: %v", err)
+	}
+	if payload.Source != string(domain.SourceScreenshot) {
+		t.Fatalf("payload.Source = %q, want %q", payload.Source, domain.SourceScreenshot)
+	}
+	if payload.Markdown != content {
+		t.Fatalf("payload.Markdown = %q, want %q", payload.Markdown, content)
+	}
+	if payload.Title != "Screenshot Note" {
+		t.Fatalf("payload.Title = %q, want Screenshot Note", payload.Title)
+	}
+}
+
+func TestSubmitManualContent_EnqueueErrorRollsBackQuota(t *testing.T) {
+	artRepo := &mockArticleRepo{}
+	taskRepo := &mockTaskRepo{}
+	tagRepo := &mockTagRepo{}
+	catRepo := &mockCategoryRepo{}
+	quota := &mockQuotaService{}
+	enqueuer := &mockEnqueuer{
+		enqueueFn: func(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
+			return nil, errors.New("redis unavailable")
+		},
+	}
+
+	svc := newTestArticleService(artRepo, taskRepo, tagRepo, catRepo, quota, enqueuer)
+
+	_, err := svc.SubmitManualContent(context.Background(), "user-rollback", SubmitManualContentRequest{
+		Content: "Manual note that should roll back quota when enqueue fails.",
+	})
+	if err == nil {
+		t.Fatal("expected enqueue error")
+	}
+	if quota.checkCalls != 1 {
+		t.Fatalf("quota checks = %d, want 1", quota.checkCalls)
+	}
+	if quota.decrementCalls != 1 {
+		t.Fatalf("quota rollbacks = %d, want 1", quota.decrementCalls)
+	}
+	if quota.lastDecrementID != "user-rollback" {
+		t.Fatalf("quota rollback user = %q, want user-rollback", quota.lastDecrementID)
 	}
 }
 

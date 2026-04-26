@@ -64,21 +64,13 @@ final class FTS5SearchManager: @unchecked Sendable {
     // MARK: - Index Operations
 
     func indexArticle(_ article: Article) throws {
+        try upsertArticle(article)
+    }
+
+    func upsertArticle(_ article: Article) throws {
         try queue.sync {
-            let sql = """
-            INSERT INTO article_fts(article_id, title, content, summary, tags, author, site_name)
-            VALUES(?, ?, ?, ?, ?, ?, ?);
-            """
-            let tagNames = article.tags.map(\.name).joined(separator: " ")
-            try execute(sql, bindings: [
-                article.id.uuidString,
-                article.title ?? "",
-                article.markdownContent ?? "",
-                article.summary ?? "",
-                tagNames,
-                article.author ?? "",
-                article.siteName ?? "",
-            ])
+            try deleteIndexedArticle(id: article.id)
+            try insertIndexedArticle(article)
         }
     }
 
@@ -90,46 +82,38 @@ final class FTS5SearchManager: @unchecked Sendable {
     }
 
     func updateIndex(_ article: Article) throws {
-        try queue.sync {
-            let sql = "DELETE FROM article_fts WHERE article_id = ?;"
-            try execute(sql, bindings: [article.id.uuidString])
-            let insertSQL = """
-            INSERT INTO article_fts(article_id, title, content, summary, tags, author, site_name)
-            VALUES(?, ?, ?, ?, ?, ?, ?);
-            """
-            let tagNames = article.tags.map(\.name).joined(separator: " ")
-            try execute(insertSQL, bindings: [
-                article.id.uuidString,
-                article.title ?? "",
-                article.markdownContent ?? "",
-                article.summary ?? "",
-                tagNames,
-                article.author ?? "",
-                article.siteName ?? "",
-            ])
-        }
+        try upsertArticle(article)
     }
 
     func rebuildAll(articles: [Article]) throws {
         try queue.sync {
             try execute("DELETE FROM article_fts;")
             for article in articles {
-                let sql = """
-                INSERT INTO article_fts(article_id, title, content, summary, tags, author, site_name)
-                VALUES(?, ?, ?, ?, ?, ?, ?);
-                """
-                let tagNames = article.tags.map(\.name).joined(separator: " ")
-                try execute(sql, bindings: [
-                    article.id.uuidString,
-                    article.title ?? "",
-                    article.markdownContent ?? "",
-                    article.summary ?? "",
-                    tagNames,
-                    article.author ?? "",
-                    article.siteName ?? "",
-                ])
+                try insertIndexedArticle(article)
             }
         }
+    }
+
+    private func insertIndexedArticle(_ article: Article) throws {
+        let sql = """
+        INSERT INTO article_fts(article_id, title, content, summary, tags, author, site_name)
+        VALUES(?, ?, ?, ?, ?, ?, ?);
+        """
+        let tagNames = article.tags.map(\.name).joined(separator: " ")
+        try execute(sql, bindings: [
+            article.id.uuidString,
+            article.title ?? "",
+            article.markdownContent ?? "",
+            article.summary ?? "",
+            tagNames,
+            article.author ?? "",
+            article.siteName ?? "",
+        ])
+    }
+
+    private func deleteIndexedArticle(id: UUID) throws {
+        let sql = "DELETE FROM article_fts WHERE article_id = ?;"
+        try execute(sql, bindings: [id.uuidString])
     }
 
     // MARK: - Helpers (Query Safety)

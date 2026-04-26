@@ -786,7 +786,7 @@ func isKnowledgeAnswerGrounded(answer *KnowledgeAnswer) bool {
 }
 
 func groundSparkResult(insights []KnowledgeSparkInsight, sources []KnowledgeSource) *KnowledgeSparkResult {
-	sourceByID := knowledgeSourceMap(sources)
+	grounding := newKnowledgeGrounding(sources)
 	grounded := make([]KnowledgeSparkInsight, 0, len(insights))
 	usedInsights := map[string]bool{}
 	usedSources := map[string]bool{}
@@ -801,7 +801,7 @@ func groundSparkResult(insights []KnowledgeSparkInsight, sources []KnowledgeSour
 		if key == "" || usedInsights[key] {
 			continue
 		}
-		sourceIDs := groundedSourceIDs(insight.SourceIDs, sourceByID)
+		sourceIDs := grounding.groundedSourceIDs(insight.SourceIDs)
 		if len(sourceIDs) < 2 {
 			continue
 		}
@@ -814,7 +814,7 @@ func groundSparkResult(insights []KnowledgeSparkInsight, sources []KnowledgeSour
 	}
 	return &KnowledgeSparkResult{
 		Insights: grounded,
-		Sources:  sourcesByUsedIDs(sources, usedSources),
+		Sources:  grounding.sourcesByUsedIDs(usedSources),
 	}
 }
 
@@ -823,7 +823,7 @@ func groundLearnResult(result *KnowledgeLearnResult, sources []KnowledgeSource) 
 		return &KnowledgeLearnResult{Summary: "目前还没有足够来源生成学习包。"}
 	}
 
-	sourceByID := knowledgeSourceMap(sources)
+	grounding := newKnowledgeGrounding(sources)
 	grounded := make([]KnowledgeLearnItem, 0, len(result.Items))
 	usedSources := map[string]bool{}
 	for _, item := range result.Items {
@@ -832,7 +832,7 @@ func groundLearnResult(result *KnowledgeLearnResult, sources []KnowledgeSource) 
 			strings.TrimSpace(item.Content) == "" {
 			continue
 		}
-		sourceIDs := groundedSourceIDs(item.SourceIDs, sourceByID)
+		sourceIDs := grounding.groundedSourceIDs(item.SourceIDs)
 		if len(sourceIDs) == 0 {
 			continue
 		}
@@ -850,45 +850,8 @@ func groundLearnResult(result *KnowledgeLearnResult, sources []KnowledgeSource) 
 	return &KnowledgeLearnResult{
 		Summary: summary,
 		Items:   grounded,
-		Sources: sourcesByUsedIDs(sources, usedSources),
+		Sources: grounding.sourcesByUsedIDs(usedSources),
 	}
-}
-
-func knowledgeSourceMap(sources []KnowledgeSource) map[string]KnowledgeSource {
-	sourceByID := make(map[string]KnowledgeSource, len(sources))
-	for _, source := range sources {
-		if source.ArticleID == "" || !knowledgeSourceHasEvidence(source) {
-			continue
-		}
-		sourceByID[source.ArticleID] = source
-	}
-	return sourceByID
-}
-
-func groundedSourceIDs(ids []string, sourceByID map[string]KnowledgeSource) []string {
-	seen := map[string]bool{}
-	result := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if id == "" || seen[id] {
-			continue
-		}
-		if _, ok := sourceByID[id]; !ok {
-			continue
-		}
-		seen[id] = true
-		result = append(result, id)
-	}
-	return result
-}
-
-func sourcesByUsedIDs(sources []KnowledgeSource, used map[string]bool) []KnowledgeSource {
-	result := make([]KnowledgeSource, 0, len(used))
-	for _, source := range sources {
-		if used[source.ArticleID] {
-			result = append(result, source)
-		}
-	}
-	return result
 }
 
 func knowledgeSourceHasEvidence(source KnowledgeSource) bool {

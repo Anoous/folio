@@ -18,10 +18,10 @@ final class SharedDataManagerExtractionTests: XCTestCase {
         manager = SharedDataManager(
             context: context,
             onArticleIndexed: { [searchIndexer] article in
-                searchIndexer?.index(article)
+                searchIndexer?.sync(article)
             },
             onArticleUpdated: { [searchIndexer] article in
-                searchIndexer?.update(article)
+                searchIndexer?.sync(article)
             }
         )
     }

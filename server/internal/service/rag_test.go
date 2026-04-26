@@ -1,8 +1,8 @@
 package service
 
 import (
-	"testing"
 	"slices"
+	"testing"
 )
 
 func TestExtractCitedIndices(t *testing.T) {
@@ -60,5 +60,28 @@ func TestExtractCitedIndices(t *testing.T) {
 				t.Errorf("extractCitedIndices(%q) = %v, want %v", tt.answer, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestKnowledgeSourcesToRAGSourcesPreservesEvidenceSnippet(t *testing.T) {
+	summary := "Summary"
+	evidenceSnippet := "Matched retrieval evidence"
+
+	sources := knowledgeSourcesToRAGSources([]KnowledgeSource{{
+		ArticleID:       "article-1",
+		Title:           "Grounded source",
+		Summary:         &summary,
+		EvidenceSnippet: &evidenceSnippet,
+		Relevance:       0.88,
+	}})
+
+	if len(sources) != 1 {
+		t.Fatalf("source count = %d, want 1", len(sources))
+	}
+	if sources[0].EvidenceSnippet == nil || *sources[0].EvidenceSnippet != evidenceSnippet {
+		t.Fatalf("evidence snippet = %v, want %q", sources[0].EvidenceSnippet, evidenceSnippet)
+	}
+	if sources[0].Summary == nil || *sources[0].Summary != summary {
+		t.Fatalf("summary = %v, want %q", sources[0].Summary, summary)
 	}
 }

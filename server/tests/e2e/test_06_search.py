@@ -1,6 +1,7 @@
 """Search endpoint tests."""
 
 import pytest
+from uuid import uuid4
 
 from helpers.assertions import assert_pagination, assert_error_response
 from helpers.polling import poll_until_done
@@ -60,3 +61,27 @@ class TestSearch:
         hits = [article for article in body["data"] if article["id"] == payload["article_id"]]
         assert hits
         assert "lunar spool latency pattern" in hits[0].get("search_snippet", "")
+
+    def test_search_drops_deleted_article(self, fresh_api):
+        """Search results should not retain articles after deletion."""
+        anchor = f"index consistency marker {uuid4().hex}"
+        resp = fresh_api.submit_manual(
+            f"Operational note containing the unique {anchor}.",
+            title="Search consistency note",
+        )
+        assert resp.status_code == 202
+        payload = resp.json()
+        poll_until_done(fresh_api, payload["task_id"], timeout=60)
+
+        search_resp = fresh_api.search(anchor)
+        assert search_resp.status_code == 200
+        body = search_resp.json()
+        assert any(article["id"] == payload["article_id"] for article in body["data"])
+
+        delete_resp = fresh_api.delete_article(payload["article_id"])
+        assert delete_resp.status_code == 200
+
+        search_resp = fresh_api.search(anchor)
+        assert search_resp.status_code == 200
+        body = search_resp.json()
+        assert all(article["id"] != payload["article_id"] for article in body["data"])

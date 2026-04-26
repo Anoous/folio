@@ -40,86 +40,14 @@ final class SyncService {
 
     /// Submit pending articles to the server. Returns a map of article UUID → success.
     func submitPendingArticles(_ articles: [Article]) async -> [UUID: Bool] {
-        var results: [UUID: Bool] = [:]
-
-        for article in articles {
-            do {
-                let response: SubmitArticleResponse
-                let textOnlyTypes: [SourceType] = [.manual, .screenshot, .voice]
-                if textOnlyTypes.contains(article.sourceType) {
-                    guard let content = article.markdownContent, !content.isEmpty else {
-                        article.status = .failed
-                        article.fetchError = "No content to submit"
-                        results[article.id] = false
-                        continue
-                    }
-                    response = try await apiClient.submitManualContent(
-                        content: content,
-                        title: article.title,
-                        clientId: article.id.uuidString,
-                        sourceType: article.sourceType.rawValue
-                    )
-                } else if article.extractionSource == .client {
-                    response = try await apiClient.submitArticle(
-                        url: article.url,
-                        title: article.title,
-                        author: article.author,
-                        siteName: article.siteName,
-                        markdownContent: article.markdownContent,
-                        wordCount: article.wordCount > 0 ? article.wordCount : nil
-                    )
-                } else {
-                    response = try await apiClient.submitArticle(url: article.url)
-                }
-                article.serverID = response.articleId
-                article.dirtyFields = []
-                article.syncState = .synced
-                if article.isFavorite {
-                    article.markPendingUpdateIfNeeded(for: .favorite)
-                }
-                if article.isArchived {
-                    article.markPendingUpdateIfNeeded(for: .archived)
-                }
-                if article.readProgress > 0 {
-                    article.markPendingUpdateIfNeeded(
-                        for: .readProgress,
-                        at: article.lastReadAt ?? article.updatedAt
-                    )
-                }
-                results[article.id] = true
-                FolioLogger.sync.info("article submitted: \(article.url ?? "manual")")
-
-                // Start background polling for this article
-                let localID = article.id
-                let taskId = response.taskId
-                let pollingTask = Task {
-                    await self.pollTask(taskId: taskId, articleLocalId: localID)
-                }
-                pollingTasks[localID] = pollingTask
-            } catch let error as APIError {
-                switch error {
-                case .conflict:
-                    // Server already has this URL (HTTP 409) — mark as synced
-                    article.syncState = .synced
-                    article.status = .processing
-                    results[article.id] = true
-                case .quotaExceeded:
-                    FolioLogger.sync.info("quota exceeded for article: \(article.url ?? "manual")")
-                    article.status = .failed
-                    article.fetchError = "Monthly quota exceeded"
-                    results[article.id] = false
-                default:
-                    FolioLogger.sync.error("submit failed: \(error) — \(article.url ?? "manual")")
-                    results[article.id] = false
-                }
-            } catch {
-                FolioLogger.sync.error("submit failed: \(error) — \(article.url ?? "manual")")
-                results[article.id] = false
+        let workflow = ArticleSyncWorkflow(apiClient: apiClient, context: context)
+        return await workflow.submitPendingArticles(articles) { [weak self] localID, taskID in
+            guard let self else { return }
+            let pollingTask = Task {
+                await self.pollTask(taskId: taskID, articleLocalId: localID)
             }
+            self.pollingTasks[localID] = pollingTask
         }
-
-        try? context.save()
-        return results
     }
 
     // MARK: - Submit Local Pending Articles
@@ -226,7 +154,7 @@ final class SyncService {
             try merger.resolveRelationships(for: article, from: dto)
 
             try context.save()
-            searchIndexCoordinator.update(article)
+            searchIndexCoordinator.sync(article)
         } catch {
             FolioLogger.sync.error("fetch article detail failed: \(serverID) — \(error)")
         }

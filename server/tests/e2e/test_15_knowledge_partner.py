@@ -86,6 +86,7 @@ class TestKnowledgePartner:
         assert "¹" in body["answer"] or "²" in body["answer"]
         for source in body["sources"]:
             assert source["article_id"] in knowledge_library
+            assert source["evidence_snippet"]
 
     def test_ask_folio_refuses_when_evidence_is_missing(self, knowledge_api, knowledge_library):
         response = knowledge_api.rag_query("文章库里有没有关于 CRISPR 临床试验的数据结论？")
@@ -118,6 +119,21 @@ class TestKnowledgePartner:
             normalized = "".join(insight["insight"].lower().split())
             assert normalized not in seen
             seen.add(normalized)
+
+    def test_grounding_keeps_source_ids_unique_and_supported(self, knowledge_api, knowledge_library):
+        response = knowledge_api.knowledge_spark("把 grounded AI 和 provenance 的关系整理成洞察")
+        assert response.status_code == 200, response.text
+        body = response.json()
+
+        response_source_ids = {source["article_id"] for source in body["sources"]}
+        assert response_source_ids
+
+        for insight in body["insights"]:
+            source_ids = insight["source_ids"]
+            assert len(source_ids) == len(set(source_ids))
+            for source_id in source_ids:
+                assert source_id in knowledge_library
+                assert source_id in response_source_ids
 
     def test_learn_returns_summary_and_cited_items(self, knowledge_api, knowledge_library):
         response = knowledge_api.knowledge_learn("围绕学习科学生成学习卡片")

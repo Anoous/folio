@@ -271,54 +271,15 @@ final class HomeViewModel {
     // MARK: - Retry Failed Article
 
     func retryArticle(_ article: Article) {
-        article.status = .pending
-        article.fetchError = nil
-        article.retryCount += 1
-        article.updatedAt = .now
-        ModelContext.safeSave(context)
+        let workflow = ArticleSyncWorkflow(apiClient: apiClient, context: context)
+        workflow.prepareForRetry(article)
         fetchArticles()
 
         showToastMessage(String(localized: "home.article.retrying", defaultValue: "Retrying..."), icon: "arrow.clockwise")
 
         if isAuthenticated {
             Task {
-                do {
-                    let response: SubmitArticleResponse
-                    let textOnlyTypes: [SourceType] = [.manual, .screenshot, .voice]
-                    if textOnlyTypes.contains(article.sourceType) {
-                        guard let content = article.markdownContent, !content.isEmpty else {
-                            article.status = .failed
-                            article.fetchError = "No content to submit"
-                            ModelContext.safeSave(context)
-                            fetchArticles()
-                            return
-                        }
-                        response = try await apiClient.submitManualContent(
-                            content: content,
-                            title: article.title,
-                            clientId: article.id.uuidString,
-                            sourceType: article.sourceType.rawValue
-                        )
-                    } else if article.extractionSource == .client {
-                        response = try await apiClient.submitArticle(
-                            url: article.url,
-                            title: article.title,
-                            author: article.author,
-                            siteName: article.siteName,
-                            markdownContent: article.markdownContent,
-                            wordCount: article.wordCount > 0 ? article.wordCount : nil
-                        )
-                    } else {
-                        response = try await apiClient.submitArticle(url: article.url)
-                    }
-                    article.serverID = response.articleId
-                    article.status = .processing
-                } catch {
-                    FolioLogger.sync.error("retryArticle failed: \(error) — \(article.url ?? SourceType.manual.rawValue)")
-                    article.status = .failed
-                    article.fetchError = (error as? UserFacingError)?.userMessage ?? error.localizedDescription
-                }
-                ModelContext.safeSave(context)
+                await workflow.submitRetry(article)
                 fetchArticles()
             }
         }

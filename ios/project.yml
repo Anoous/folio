@@ -53,6 +53,10 @@ targets:
           NSAllowsArbitraryLoads: true
         NSMicrophoneUsageDescription: "Folio uses microphone to capture your voice notes"
         NSSpeechRecognitionUsageDescription: "Folio uses speech recognition to transcribe your voice notes"
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.folio.article-processing
+        UIBackgroundModes:
+          - processing
         UILaunchScreen: {}
         UIAppFonts:
           - LXGWWenKaiTC-Regular.ttf

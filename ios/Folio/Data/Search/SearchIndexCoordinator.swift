@@ -17,20 +17,20 @@ final class SearchIndexCoordinator {
         self.searchManager = searchManager
     }
 
-    func index(_ article: Article) {
+    func sync(_ article: Article) {
         do {
-            try searchManager.indexArticle(article)
+            try searchManager.upsertArticle(article)
         } catch {
-            FolioLogger.data.error("search index insert failed for \(article.id): \(error.localizedDescription)")
+            FolioLogger.data.error("search index sync failed for \(article.id): \(error.localizedDescription)")
         }
     }
 
+    func index(_ article: Article) {
+        sync(article)
+    }
+
     func update(_ article: Article) {
-        do {
-            try searchManager.updateIndex(article)
-        } catch {
-            FolioLogger.data.error("search index update failed for \(article.id): \(error.localizedDescription)")
-        }
+        sync(article)
     }
 
     func remove(articleID: UUID) {

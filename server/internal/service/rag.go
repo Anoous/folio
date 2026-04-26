@@ -198,12 +198,13 @@ func knowledgeSourcesToRAGSources(sources []KnowledgeSource) []domain.RAGSource 
 	result := make([]domain.RAGSource, 0, len(sources))
 	for _, source := range sources {
 		result = append(result, domain.RAGSource{
-			ArticleID: source.ArticleID,
-			Title:     source.Title,
-			SiteName:  source.SiteName,
-			Summary:   source.Summary,
-			CreatedAt: source.CreatedAt,
-			Relevance: source.Relevance,
+			ArticleID:       source.ArticleID,
+			Title:           source.Title,
+			SiteName:        source.SiteName,
+			Summary:         source.Summary,
+			EvidenceSnippet: source.EvidenceSnippet,
+			CreatedAt:       source.CreatedAt,
+			Relevance:       source.Relevance,
 		})
 	}
 	return result

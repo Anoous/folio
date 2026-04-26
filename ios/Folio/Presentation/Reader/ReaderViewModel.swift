@@ -80,7 +80,7 @@ final class ReaderViewModel {
                 let dto = try await apiClient.getArticle(id: serverID)
                 article.updateFromDTO(dto)
                 ModelContext.safeSave(context)
-                searchIndexCoordinator.update(article)
+                searchIndexCoordinator.sync(article)
                 calculateWordCount()
                 FolioLogger.network.info("reader: content fetched from server for \(serverID)")
                 isLoadingContent = false
@@ -104,7 +104,7 @@ final class ReaderViewModel {
                 article.clientExtractedAt = Date()
                 article.status = .clientReady
                 ModelContext.safeSave(context)
-                searchIndexCoordinator.update(article)
+                searchIndexCoordinator.sync(article)
                 calculateWordCount()
                 FolioLogger.data.info("reader: client extraction succeeded for \(url.absoluteString)")
                 isLoadingContent = false

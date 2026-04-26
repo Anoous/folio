@@ -3,13 +3,14 @@ package domain
 import "time"
 
 type RAGSource struct {
-	ArticleID string
-	Title     string
-	SiteName  *string
-	Summary   *string
-	KeyPoints []string
-	CreatedAt time.Time
-	Relevance float64
+	ArticleID       string
+	Title           string
+	SiteName        *string
+	Summary         *string
+	EvidenceSnippet *string
+	KeyPoints       []string
+	CreatedAt       time.Time
+	Relevance       float64
 }
 
 type RAGResponse struct {
