@@ -5,6 +5,7 @@ import SwiftData
 private final class ArticleSyncWorkflowMockURLProtocol: URLProtocol {
     nonisolated(unsafe) static var requestHandler: ((URLRequest) throws -> (Data, HTTPURLResponse))?
     nonisolated(unsafe) static var requestPaths: [String] = []
+    nonisolated(unsafe) static var requestBodies: [Data?] = []
     nonisolated(unsafe) static var lastRequestBody: Data?
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -38,7 +39,9 @@ private final class ArticleSyncWorkflowMockURLProtocol: URLProtocol {
 
     override func startLoading() {
         Self.requestPaths.append(request.url?.path ?? "")
-        Self.lastRequestBody = requestBodyData()
+        let bodyData = requestBodyData()
+        Self.lastRequestBody = bodyData
+        Self.requestBodies.append(bodyData)
 
         guard let handler = Self.requestHandler else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
@@ -84,12 +87,14 @@ final class ArticleSyncWorkflowTests: XCTestCase {
 
         ArticleSyncWorkflowMockURLProtocol.requestHandler = nil
         ArticleSyncWorkflowMockURLProtocol.requestPaths = []
+        ArticleSyncWorkflowMockURLProtocol.requestBodies = []
         ArticleSyncWorkflowMockURLProtocol.lastRequestBody = nil
     }
 
     override func tearDown() {
         ArticleSyncWorkflowMockURLProtocol.requestHandler = nil
         ArticleSyncWorkflowMockURLProtocol.requestPaths = []
+        ArticleSyncWorkflowMockURLProtocol.requestBodies = []
         ArticleSyncWorkflowMockURLProtocol.lastRequestBody = nil
         try? keychainManager.clearTokens()
         keychainManager = nil
@@ -112,6 +117,14 @@ final class ArticleSyncWorkflowTests: XCTestCase {
     private func lastJSONBody() throws -> [String: Any] {
         let data = try XCTUnwrap(ArticleSyncWorkflowMockURLProtocol.lastRequestBody)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    private func requestURLs() throws -> [String] {
+        try ArticleSyncWorkflowMockURLProtocol.requestBodies.compactMap { body in
+            guard let body else { return nil }
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            return json["url"] as? String
+        }
     }
 
     @MainActor
@@ -192,5 +205,71 @@ final class ArticleSyncWorkflowTests: XCTestCase {
         XCTAssertEqual(ArticleSyncWorkflowMockURLProtocol.requestPaths, [])
         XCTAssertEqual(article.status, .failed)
         XCTAssertEqual(article.fetchError, "No content to submit")
+    }
+
+    @MainActor
+    func testSubmitLocalPendingArticlesSubmitsPendingAndClientReadyInCreatedOrder() async throws {
+        let older = Article(url: "https://example.com/older")
+        older.status = .pending
+        older.createdAt = Date(timeIntervalSince1970: 1)
+        context.insert(older)
+
+        let ready = Article(url: "https://example.com/ready")
+        ready.status = .ready
+        ready.createdAt = Date(timeIntervalSince1970: 2)
+        context.insert(ready)
+
+        let newer = Article(url: "https://example.com/newer")
+        newer.status = .clientReady
+        newer.createdAt = Date(timeIntervalSince1970: 3)
+        context.insert(newer)
+
+        try context.save()
+
+        ArticleSyncWorkflowMockURLProtocol.requestHandler = { _ in
+            let body = try self.lastJSONBody()
+            let url = try XCTUnwrap(body["url"] as? String)
+            let suffix = url.hasSuffix("older") ? "older" : "newer"
+            return (
+                self.submitResponse(articleID: "server-\(suffix)", taskID: "task-\(suffix)"),
+                self.makeResponse(statusCode: 202)
+            )
+        }
+
+        var startedTasks: [(UUID, String)] = []
+        let workflow = ArticleSyncWorkflow(apiClient: apiClient, context: context)
+        let result = await workflow.submitLocalPendingArticles { localID, taskID in
+            startedTasks.append((localID, taskID))
+        }
+
+        XCTAssertEqual(result[older.id], true)
+        XCTAssertEqual(result[newer.id], true)
+        XCTAssertNil(result[ready.id])
+        XCTAssertEqual(try requestURLs(), ["https://example.com/older", "https://example.com/newer"])
+        XCTAssertEqual(older.serverID, "server-older")
+        XCTAssertEqual(newer.serverID, "server-newer")
+        XCTAssertNil(ready.serverID)
+        XCTAssertEqual(startedTasks.map(\.0), [older.id, newer.id])
+        XCTAssertEqual(startedTasks.map(\.1), ["task-older", "task-newer"])
+    }
+
+    @MainActor
+    func testSubmitLocalPendingArticlesClearsStaleServerIDBeforeFailedSubmit() async throws {
+        let article = Article(url: "https://example.com/stale")
+        article.status = .pending
+        article.serverID = "stale-server-id"
+        context.insert(article)
+        try context.save()
+
+        ArticleSyncWorkflowMockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/articles")
+            return (Data(), self.makeResponse(statusCode: 500))
+        }
+
+        let workflow = ArticleSyncWorkflow(apiClient: apiClient, context: context)
+        let result = await workflow.submitLocalPendingArticles()
+
+        XCTAssertEqual(result[article.id], false)
+        XCTAssertNil(article.serverID)
     }
 }

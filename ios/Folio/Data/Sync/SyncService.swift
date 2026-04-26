@@ -34,35 +34,23 @@ final class SyncService {
 
     /// Submit pending articles to the server. Returns a map of article UUID → success.
     func submitPendingArticles(_ articles: [Article]) async -> [UUID: Bool] {
-        let workflow = ArticleSyncWorkflow(apiClient: apiClient, context: context)
-        return await workflow.submitPendingArticles(articles) { [weak self] localID, taskID in
+        await makeArticleSyncWorkflow()
+            .submitPendingArticles(articles, onTaskStarted: taskStartedHandler())
+    }
+
+    private func submitLocalPendingArticles() async {
+        _ = await makeArticleSyncWorkflow().submitLocalPendingArticles(onTaskStarted: taskStartedHandler())
+    }
+
+    private func makeArticleSyncWorkflow() -> ArticleSyncWorkflow {
+        ArticleSyncWorkflow(apiClient: apiClient, context: context)
+    }
+
+    private func taskStartedHandler() -> ArticleSyncWorkflow.TaskStartedHandler {
+        { [weak self] localID, taskID in
             guard let self else { return }
             self.articleProcessingSyncWorkflow.startPolling(taskID: taskID, articleLocalID: localID)
         }
-    }
-
-    // MARK: - Submit Local Pending Articles
-
-    /// Fetch and submit articles that are pending upload to the server.
-    private func submitLocalPendingArticles() async {
-        let pendingRaw = ArticleStatus.pending.rawValue
-        let clientReadyRaw = ArticleStatus.clientReady.rawValue
-        let descriptor = FetchDescriptor<Article>(
-            predicate: #Predicate<Article> { $0.statusRaw == pendingRaw || $0.statusRaw == clientReadyRaw },
-            sortBy: [SortDescriptor(\.createdAt)]
-        )
-        guard let pending = try? context.fetch(descriptor), !pending.isEmpty else { return }
-
-        // Clear stale serverIDs (article was 404'd but not deleted by merger,
-        // meaning it should be re-uploaded as a new article).
-        for article in pending {
-            if article.serverID != nil {
-                article.serverID = nil
-            }
-        }
-
-        FolioLogger.sync.info("submitting \(pending.count) local pending article(s)")
-        _ = await submitPendingArticles(pending)
     }
 
     private func cancelPollingTasks() {

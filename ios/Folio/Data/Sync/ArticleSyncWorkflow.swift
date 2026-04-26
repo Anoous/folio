@@ -55,6 +55,25 @@ final class ArticleSyncWorkflow {
         return results
     }
 
+    /// Fetch and submit articles that are pending upload to the server.
+    func submitLocalPendingArticles(onTaskStarted: TaskStartedHandler? = nil) async -> [UUID: Bool] {
+        let pendingRaw = ArticleStatus.pending.rawValue
+        let clientReadyRaw = ArticleStatus.clientReady.rawValue
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { $0.statusRaw == pendingRaw || $0.statusRaw == clientReadyRaw },
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        guard let pending = try? context.fetch(descriptor), !pending.isEmpty else { return [:] }
+
+        // Clear stale serverIDs from articles that the merger reset for upload after a server 404.
+        for article in pending where article.serverID != nil {
+            article.serverID = nil
+        }
+
+        FolioLogger.sync.info("submitting \(pending.count) local pending article(s)")
+        return await submitPendingArticles(pending, onTaskStarted: onTaskStarted)
+    }
+
     func prepareForRetry(_ article: Article) {
         article.status = .pending
         article.fetchError = nil
