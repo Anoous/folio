@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -120,63 +119,5 @@ func (h *CrawlHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		h.articleRepo.SetError(ctx, p.ArticleID, err.Error())
 		return nil
 	}
-	result := fetch.response
-
-	processed := crawlContentPostprocessor{}.apply(p.URL, result)
-
-	if err := h.articleRepo.UpdateCrawlResult(ctx, p.ArticleID, repository.CrawlResult{
-		Title:      processed.title,
-		Author:     result.Metadata.Author,
-		SiteName:   result.Metadata.SiteName,
-		Markdown:   processed.markdown,
-		CoverImage: result.Metadata.OGImage,
-		Language:   result.Metadata.Language,
-		FaviconURL: result.Metadata.Favicon,
-	}); err != nil {
-		failureErr := ensurePipelineErr(fetch.stage, fetch.provider, true, "persist crawl result", err)
-		logPipelineFailed(fetch.stage, fetch.provider, p.TaskID, p.ArticleID, p.UserID, p.URL, time.Since(start), failureErr)
-		h.taskRepo.SetFailed(ctx, p.TaskID, buildTaskFailure(failureErr, time.Since(start)))
-		return fmt.Errorf("update crawl result: %w", err)
-	}
-
-	source := result.Metadata.SiteName
-	if source == "" {
-		source = "web"
-	}
-	if err := h.aiHandoff().enqueue(ctx, crawlAIHandoffRequest{
-		payload:             p,
-		title:               processed.title,
-		markdown:            processed.markdown,
-		source:              source,
-		author:              result.Metadata.Author,
-		finishBeforeEnqueue: false,
-		setFinishedLabel:    "set crawl finished",
-		enqueueLabel:        "enqueue ai task",
-	}); err != nil {
-		return err
-	}
-
-	logPipelineSucceeded(fetch.stage, fetch.provider, p.TaskID, p.ArticleID, p.UserID, p.URL, time.Since(start))
-
-	// Enqueue image upload task (extract image URLs from markdown)
-	imageURLs := extractImageURLs(result.Markdown)
-	if h.enableImage && len(imageURLs) > 0 {
-		imgTask := NewImageUploadTask(p.ArticleID, imageURLs)
-		h.asynqClient.EnqueueContext(ctx, imgTask) // Non-blocking, errors OK
-	}
-
-	return nil
-}
-
-var imageURLRegex = regexp.MustCompile(`!\[.*?\]\((https?://[^\s)]+)\)`)
-
-func extractImageURLs(markdown string) []string {
-	matches := imageURLRegex.FindAllStringSubmatch(markdown, -1)
-	urls := make([]string, 0, len(matches))
-	for _, m := range matches {
-		if len(m) > 1 {
-			urls = append(urls, m[1])
-		}
-	}
-	return urls
+	return h.fetchedContentHandler().complete(ctx, p, fetch, start)
 }
