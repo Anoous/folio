@@ -4,7 +4,6 @@ import AuthenticationServices
 struct SignInView: View {
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: Spacing.xl) {
@@ -12,16 +11,16 @@ struct SignInView: View {
 
             Image(systemName: "book.pages")
                 .font(.system(size: 64))
-                .foregroundStyle(Color.folio.accent)
+                .foregroundStyle(FolioPaperPalette.accentBlue)
 
             VStack(spacing: Spacing.xs) {
                 Text(String(localized: "signin.title", defaultValue: "Sign in to Folio"))
                     .font(Typography.navTitle)
-                    .foregroundStyle(Color.folio.textPrimary)
+                    .foregroundStyle(FolioPaperPalette.primaryText)
 
                 Text(String(localized: "signin.subtitle", defaultValue: "Enable cloud sync and AI processing"))
                     .font(Typography.body)
-                    .foregroundStyle(Color.folio.textSecondary)
+                    .foregroundStyle(FolioPaperPalette.secondaryText)
                     .multilineTextAlignment(.center)
             }
 
@@ -50,7 +49,7 @@ struct SignInView: View {
                             }
                         }
                     }
-                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                    .signInWithAppleButtonStyle(.black)
                     .frame(height: 50)
                     .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
                 }
@@ -59,13 +58,13 @@ struct SignInView: View {
                 HStack {
                     Rectangle()
                         .frame(height: 1)
-                        .foregroundStyle(Color.folio.textTertiary.opacity(0.3))
+                        .foregroundStyle(FolioPaperPalette.listDivider)
                     Text(String(localized: "signin.or", defaultValue: "or"))
                         .font(Typography.caption)
-                        .foregroundStyle(Color.folio.textTertiary)
+                        .foregroundStyle(FolioPaperPalette.tertiaryText)
                     Rectangle()
                         .frame(height: 1)
-                        .foregroundStyle(Color.folio.textTertiary.opacity(0.3))
+                        .foregroundStyle(FolioPaperPalette.listDivider)
                 }
 
                 NavigationLink {
@@ -76,10 +75,15 @@ struct SignInView: View {
                         Text(String(localized: "signin.emailLogin", defaultValue: "Sign in with Email"))
                     }
                     .font(Typography.listTitle)
+                    .foregroundStyle(FolioPaperPalette.primaryText)
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)
-                    .background(Color.folio.textTertiary.opacity(0.1))
+                    .background(FolioPaperPalette.cardSurface)
                     .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: CornerRadius.medium)
+                            .stroke(FolioPaperPalette.listDivider.opacity(0.6), lineWidth: 1)
+                    }
                 }
                 .buttonStyle(.plain)
 
@@ -93,20 +97,32 @@ struct SignInView: View {
             .padding(.horizontal, Spacing.xl)
             .padding(.bottom, Spacing.xl)
         }
+        .background(FolioPaperPalette.background.ignoresSafeArea())
         .navigationTitle(String(localized: "signin.navTitle", defaultValue: "Sign In"))
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            dismissIfSignedIn(authViewModel?.isAuthenticated)
+        }
+        .onChange(of: authViewModel?.isAuthenticated) { _, isAuthenticated in
+            dismissIfSignedIn(isAuthenticated)
+        }
     }
 
     private func benefitRow(icon: String, text: String) -> some View {
         HStack(spacing: Spacing.sm) {
             Image(systemName: icon)
                 .font(.body)
-                .foregroundStyle(Color.folio.accent)
+                .foregroundStyle(FolioPaperPalette.accentBlue)
                 .frame(width: 28)
             Text(text)
                 .font(Typography.body)
-                .foregroundStyle(Color.folio.textSecondary)
+                .foregroundStyle(FolioPaperPalette.secondaryText)
         }
+    }
+
+    private func dismissIfSignedIn(_ isAuthenticated: Bool?) {
+        guard AuthNavigationPolicy.shouldDismissSignIn(isAuthenticated: isAuthenticated) else { return }
+        dismiss()
     }
 }
 

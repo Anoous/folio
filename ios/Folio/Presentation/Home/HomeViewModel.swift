@@ -1,5 +1,4 @@
 import Foundation
-import os
 import SwiftData
 import SwiftUI
 
@@ -54,11 +53,9 @@ final class HomeViewModel {
     private let context: ModelContext
     private let apiClient: APIClient
     private let searchIndexCoordinator: SearchIndexCoordinator
-
-    enum KnowledgePanelKind {
-        case spark
-        case learn
-    }
+    private let feedQuery: ArticleFeedQuery
+    private let articleActions: ArticleActionWorkflow
+    private let knowledgeSession: KnowledgeSession
 
     var articles: [Article] = []
     var echoCards: [EchoCardDTO] = []
@@ -67,12 +64,6 @@ final class HomeViewModel {
     var echoRemainingToday: Int?
     var echoWeeklyCount: Int?
     var echoWeeklyLimit: Int?
-    var activeKnowledgePanel: KnowledgePanelKind?
-    var isKnowledgeLoading = false
-    var sparkInsights: [SparkInsightDTO] = []
-    var learnSummary: String?
-    var learnItems: [LearnItemDTO] = []
-    var knowledgeError: String?
 
     var groupedArticles: [(group: TimeGroup, articles: [Article])] {
         TimeGroup.groupArticles(articles)
@@ -112,6 +103,14 @@ final class HomeViewModel {
             article.isKnowledgeReady && !continueReadingArticles.contains(where: { $0.id == article.id })
         }
         return Array(candidates.prefix(2))
+    }
+
+    var workbenchMetrics: HomeWorkbenchMetrics {
+        HomeWorkbenchMetrics(
+            processingCount: processingArticles.count,
+            continueReadingCount: continueReadingArticles.count,
+            askableCount: readyArticleCount
+        )
     }
 
     // MARK: - Feed Interleaving
@@ -154,11 +153,7 @@ final class HomeViewModel {
     var toastMessage = ""
     var toastIcon: String? = nil
 
-    private var currentPage = 0
-    /// Tracks the actual database fetch offset (may diverge from currentPage *
-    /// pageSize when tag filtering skips rows).
-    private var nextFetchOffset = 0
-    private let pageSize = 20
+    private static let pageSize = 20
     private var hasMorePages = true
 
     init(
@@ -170,12 +165,18 @@ final class HomeViewModel {
         self.context = context
         self.isAuthenticated = isAuthenticated
         self.apiClient = apiClient
-        self.searchIndexCoordinator = searchIndexCoordinator ?? .shared
+        let resolvedSearchIndexCoordinator = searchIndexCoordinator ?? .shared
+        self.searchIndexCoordinator = resolvedSearchIndexCoordinator
+        self.feedQuery = ArticleFeedQuery(context: context, pageSize: Self.pageSize)
+        self.articleActions = ArticleActionWorkflow(
+            apiClient: apiClient,
+            context: context,
+            searchIndexCoordinator: resolvedSearchIndexCoordinator
+        )
+        self.knowledgeSession = KnowledgeSession(client: apiClient)
     }
 
     func fetchArticles() {
-        currentPage = 0
-        nextFetchOffset = 0
         hasMorePages = true
         loadPage(reset: true)
     }
@@ -186,7 +187,7 @@ final class HomeViewModel {
     }
 
     func markAsRead(_ article: Article) {
-        article.markAsRead(in: context)
+        articleActions.markAsRead(article)
     }
 
     // MARK: - Server Refresh
@@ -297,21 +298,15 @@ final class HomeViewModel {
     // MARK: - Article Actions
 
     func toggleFavorite(_ article: Article) {
-        article.toggleFavoriteWithSync(
-            context: context, apiClient: apiClient,
-            isAuthenticated: isAuthenticated, showToast: showToastMessage
-        )
+        articleActions.toggleFavorite(article, isAuthenticated: isAuthenticated, showToast: showToastMessage)
     }
 
     func archiveArticle(_ article: Article) {
-        article.toggleArchiveWithSync(
-            context: context, apiClient: apiClient,
-            isAuthenticated: isAuthenticated, showToast: showToastMessage
-        )
+        articleActions.toggleArchive(article, isAuthenticated: isAuthenticated, showToast: showToastMessage)
     }
 
     func deleteArticle(_ article: Article) {
-        article.prepareForDeletion(context: context, searchIndexCoordinator: searchIndexCoordinator)
+        articleActions.delete(article)
         fetchArticles()
         showToastMessage(String(localized: "home.article.deleted", defaultValue: "Article deleted"), icon: "trash")
     }
@@ -347,151 +342,94 @@ final class HomeViewModel {
         showToast = true
     }
 
-    // MARK: - RAG State
+    // MARK: - Knowledge Session
 
-    var ragPartialAnswer: String = ""
-    var ragIsStreaming: Bool = false
-    var ragSources: RAGSourcesPayload?
-    var ragCitedIndices: [Int] = []
-    var ragFollowupSuggestions: [String] = []
-    var ragError: RAGErrorView.ErrorType?
-    var ragConversationId: String?
-    var ragThread: [RAGThreadEntry] = []
-    var ragStreamTask: Task<Void, Never>?
+    var activeKnowledgePanel: KnowledgePanelKind? {
+        knowledgeSession.activeKnowledgePanel
+    }
+
+    var isKnowledgeLoading: Bool {
+        knowledgeSession.isKnowledgeLoading
+    }
+
+    var sparkInsights: [SparkInsightDTO] {
+        knowledgeSession.sparkInsights
+    }
+
+    var learnSummary: String? {
+        knowledgeSession.learnSummary
+    }
+
+    var learnItems: [LearnItemDTO] {
+        knowledgeSession.learnItems
+    }
+
+    var knowledgeError: String? {
+        knowledgeSession.knowledgeError
+    }
+
+    var ragPartialAnswer: String {
+        knowledgeSession.ragPartialAnswer
+    }
+
+    var ragIsStreaming: Bool {
+        knowledgeSession.ragIsStreaming
+    }
+
+    var ragSources: RAGSourcesPayload? {
+        knowledgeSession.ragSources
+    }
+
+    var ragCitedIndices: [Int] {
+        knowledgeSession.ragCitedIndices
+    }
+
+    var ragFollowupSuggestions: [String] {
+        knowledgeSession.ragFollowupSuggestions
+    }
+
+    var ragError: RAGErrorView.ErrorType? {
+        knowledgeSession.ragError
+    }
+
+    var ragConversationId: String? {
+        knowledgeSession.ragConversationId
+    }
+
+    var ragThread: [RAGThreadEntry] {
+        knowledgeSession.ragThread
+    }
+
+    var ragStreamTask: Task<Void, Never>? {
+        knowledgeSession.ragStreamTask
+    }
 
     func isRAGQuery(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count > 10 else { return false }
-        // URLs contain "?" for query params — never treat a URL as a RAG question
-        if URLDetection.isURLOnly(trimmed) { return false }
-        let indicators = ["？", "?", "什么", "哪些", "如何", "为什么", "怎么", "怎样", "是否", "有没有", "能不能", "多少"]
-        return indicators.contains { trimmed.contains($0) }
+        knowledgeSession.isRAGQuery(text)
     }
 
     func submitRAGQuery(_ question: String) {
-        clearKnowledge()
-        ragStreamTask?.cancel()
-        ragStreamTask = Task {
-            try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled else { return }
-            await executeRAGQuery(question)
-        }
-    }
-
-    @MainActor
-    private func executeRAGQuery(_ question: String) async {
-        ragIsStreaming = true
-        ragPartialAnswer = ""
-        ragSources = nil
-        ragError = nil
-        ragCitedIndices = []
-        ragFollowupSuggestions = []
-
-        do {
-            let stream = apiClient.ragQueryStream(
-                question: question,
-                conversationId: ragConversationId
-            )
-            for try await event in stream {
-                switch event {
-                case .sources(let payload):
-                    ragSources = payload
-                    ragConversationId = payload.conversationId
-                case .delta(let text):
-                    ragPartialAnswer += text
-                case .done(let payload):
-                    ragCitedIndices = payload.citedIndices
-                    ragFollowupSuggestions = payload.followupSuggestions
-                case .error(let err):
-                    switch err.code {
-                    case "quota_exceeded":
-                        ragError = .quota
-                    case "no_articles":
-                        ragError = .noArticles
-                    default:
-                        ragError = .error
-                    }
-                }
-            }
-        } catch {
-            if !Task.isCancelled {
-                if ragPartialAnswer.isEmpty {
-                    ragError = .error
-                }
-            }
-        }
-        ragIsStreaming = false
+        knowledgeSession.submitRAGQuery(question)
     }
 
     func submitFollowup(_ question: String) {
-        if let sources = ragSources, !ragPartialAnswer.isEmpty {
-            ragThread.append(RAGThreadEntry(
-                question: question,
-                answer: ragPartialAnswer,
-                sources: sources.sources,
-                sourceCount: sources.sourceCount,
-                citedIndices: ragCitedIndices
-            ))
-        }
-        ragPartialAnswer = ""
-        ragSources = nil
-        ragCitedIndices = []
-        ragFollowupSuggestions = []
-        submitRAGQuery(question)
+        knowledgeSession.submitFollowup(question)
     }
 
     func clearRAG() {
-        ragPartialAnswer = ""
-        ragSources = nil
-        ragConversationId = nil
-        ragThread = []
-        ragError = nil
-        ragIsStreaming = false
-        ragCitedIndices = []
-        ragFollowupSuggestions = []
-        ragStreamTask?.cancel()
-        ragStreamTask = nil
+        knowledgeSession.clearRAG()
     }
 
     func loadSpark(prompt: String = "") async {
-        clearRAG()
-        activeKnowledgePanel = .spark
-        isKnowledgeLoading = true
-        knowledgeError = nil
-        sparkInsights = []
-        do {
-            let response = try await apiClient.knowledgeSpark(prompt: prompt)
-            sparkInsights = response.insights
-        } catch {
-            knowledgeError = (error as? UserFacingError)?.userMessage ?? error.localizedDescription
-        }
-        isKnowledgeLoading = false
+        await knowledgeSession.loadSpark(prompt: prompt)
     }
 
     func loadLearn(prompt: String = "") async {
-        clearRAG()
-        activeKnowledgePanel = .learn
-        isKnowledgeLoading = true
-        knowledgeError = nil
-        learnSummary = nil
-        learnItems = []
-        do {
-            let response = try await apiClient.knowledgeLearn(prompt: prompt)
-            learnSummary = response.summary
-            learnItems = response.items
-        } catch {
-            knowledgeError = (error as? UserFacingError)?.userMessage ?? error.localizedDescription
-        }
-        isKnowledgeLoading = false
+        await knowledgeSession.loadLearn(prompt: prompt)
     }
 
     func clearKnowledge() {
-        activeKnowledgePanel = nil
-        isKnowledgeLoading = false
-        sparkInsights = []
-        learnSummary = nil
-        learnItems = []
-        knowledgeError = nil
+        knowledgeSession.clearKnowledge()
     }
 
     // MARK: - Private
@@ -499,69 +437,30 @@ final class HomeViewModel {
     private func loadPage(reset: Bool) {
         isLoading = true
 
-        // When tag filtering is active, we must over-fetch because SwiftData
-        // #Predicate cannot filter on relationship collections. We keep
-        // fetching batches until we fill a page or exhaust the data source.
-        let needsTagFilter = !selectedTags.isEmpty
-        let tagIDs = needsTagFilter ? Set(selectedTags.map(\.id)) : []
-        var collected: [Article] = []
-        // Use the tracked offset directly instead of deriving it from
-        // currentPage, which drifts when tag filtering skips rows.
-        var fetchOffset = needsTagFilter ? nextFetchOffset : currentPage * pageSize
-        let batchSize = needsTagFilter ? pageSize * 3 : pageSize
-        var exhausted = false
-
-        repeat {
-            var descriptor = FetchDescriptor<Article>(
-                sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-            )
-
-            // Apply category filter at predicate level for correct pagination
-            if let categoryID = selectedCategory?.id {
-                descriptor.predicate = #Predicate<Article> { article in
-                    article.category?.id == categoryID
-                }
-            }
-
-            descriptor.fetchLimit = batchSize
-            descriptor.fetchOffset = fetchOffset
-
-            guard let batch = try? context.fetch(descriptor) else {
-                FolioLogger.data.error("vm-debug: loadPage fetch failed")
-                isLoading = false
-                return
-            }
-
-            if batch.count < batchSize {
-                exhausted = true
-            }
-            fetchOffset += batch.count
-
-            if needsTagFilter {
-                let filtered = batch.filter { article in
-                    tagIDs.isSubset(of: Set(article.tags.map(\.id)))
-                }
-                collected.append(contentsOf: filtered)
+        let page: ArticleFeedQuery.Page
+        do {
+            if reset {
+                page = try feedQuery.reset(filter: .init(category: selectedCategory, tags: selectedTags))
             } else {
-                collected.append(contentsOf: batch)
+                page = try feedQuery.next()
             }
-        } while needsTagFilter && collected.count < pageSize && !exhausted
-
-        FolioLogger.data.info("vm-debug: loadPage reset=\(reset), collected=\(collected.count), offset=\(self.currentPage * self.pageSize)")
+        } catch {
+            FolioLogger.data.error("home feed load failed: \(error)")
+            isLoading = false
+            return
+        }
 
         if reset {
             withAnimation(Motion.settle) {
-                articles = collected
+                articles = page.articles
             }
         } else {
             withAnimation(Motion.ink) {
-                articles.append(contentsOf: collected)
+                articles.append(contentsOf: page.articles)
             }
         }
 
-        hasMorePages = !exhausted
-        nextFetchOffset = fetchOffset
-        currentPage = fetchOffset / pageSize
+        hasMorePages = page.hasMore
         hasProcessingArticles = articles.contains { $0.status == .processing || $0.status == .clientReady }
         isLoading = false
     }

@@ -15,13 +15,13 @@ struct KnowledgeMapView: View {
                     .padding(.top, 60)
             } else if let error = errorMessage {
                 Text(error)
-                    .foregroundStyle(Color.folio.textTertiary)
+                    .foregroundStyle(FolioPaperPalette.tertiaryText)
                     .padding(.top, 60)
             } else {
                 statsContent
             }
         }
-        .background(Color.folio.background)
+        .background(FolioPaperPalette.background)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadStats() }
     }
@@ -46,11 +46,11 @@ struct KnowledgeMapView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("知识地图")
                 .font(Typography.v3PageTitle)
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
 
             Text(currentMonthLabel)
                 .font(.system(size: 13))
-                .foregroundStyle(Color.folio.textTertiary)
+                .foregroundStyle(FolioPaperPalette.tertiaryText)
         }
         .padding(.horizontal, Spacing.screenPadding)
         .padding(.top, Spacing.screenPadding)
@@ -67,8 +67,12 @@ struct KnowledgeMapView: View {
             statColumn(value: monthlyStats?.streakDays ?? 0, label: "天连续")
         }
         .padding(.vertical, Spacing.screenPadding)
-        .background(Color.folio.echoBg)
+        .background(FolioPaperPalette.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(FolioPaperPalette.listDivider.opacity(0.55), lineWidth: 1)
+        }
         .padding(.horizontal, Spacing.screenPadding)
         .padding(.top, Spacing.lg)
     }
@@ -77,11 +81,11 @@ struct KnowledgeMapView: View {
         VStack(spacing: 4) {
             Text("\(value)")
                 .font(.system(size: 28, weight: .bold))
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
 
             Text(label)
                 .font(.system(size: 13))
-                .foregroundStyle(Color.folio.textTertiary)
+                .foregroundStyle(FolioPaperPalette.tertiaryText)
         }
         .frame(maxWidth: .infinity)
     }
@@ -95,7 +99,7 @@ struct KnowledgeMapView: View {
             VStack(alignment: .leading, spacing: Spacing.md) {
                 Text("主题分布")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.folio.textPrimary)
+                    .foregroundStyle(FolioPaperPalette.primaryText)
 
                 let maxCount = topics.map(\.count).max() ?? 1
                 ForEach(Array(topics.enumerated()), id: \.offset) { index, topic in
@@ -111,7 +115,7 @@ struct KnowledgeMapView: View {
         HStack(spacing: Spacing.sm) {
             Text(topic.categoryName)
                 .font(.system(size: 15))
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
                 .frame(width: 60, alignment: .trailing)
 
             GeometryReader { geometry in
@@ -125,18 +129,18 @@ struct KnowledgeMapView: View {
 
             Text("\(topic.count)")
                 .font(.system(size: 13))
-                .foregroundStyle(Color.folio.textTertiary)
+                .foregroundStyle(FolioPaperPalette.tertiaryText)
                 .frame(width: 28, alignment: .leading)
         }
     }
 
     private func barColor(for index: Int) -> Color {
         switch index {
-        case 0: return Color.folio.textPrimary
-        case 1: return Color.folio.textSecondary
-        case 2: return Color.folio.textTertiary
-        case 3: return Color.folio.textQuaternary
-        default: return Color.folio.separator
+        case 0: return FolioPaperPalette.primaryText
+        case 1: return FolioPaperPalette.secondaryText
+        case 2: return FolioPaperPalette.tertiaryText
+        case 3: return FolioPaperPalette.quaternaryText
+        default: return FolioPaperPalette.listDivider
         }
     }
 
@@ -148,22 +152,26 @@ struct KnowledgeMapView: View {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 HStack(spacing: 6) {
                     Text("✦")
-                        .foregroundStyle(Color.folio.accent)
+                        .foregroundStyle(FolioPaperPalette.accentBlue)
                     Text("趋势洞察")
                         .tracking(1)
                         .textCase(.uppercase)
                 }
                 .font(.system(size: 13))
-                .foregroundStyle(Color.folio.textTertiary)
+                .foregroundStyle(FolioPaperPalette.tertiaryText)
 
                 Text(insight)
                     .font(Font.custom("LXGWWenKaiTC-Regular", size: 15))
-                    .foregroundStyle(Color.folio.textSecondary)
+                    .foregroundStyle(FolioPaperPalette.secondaryText)
                     .lineSpacing(6)
             }
             .padding(Spacing.screenPadding)
-            .background(Color.folio.echoBg)
+            .background(FolioPaperPalette.cardSurface)
             .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(FolioPaperPalette.listDivider.opacity(0.55), lineWidth: 1)
+            }
             .padding(.horizontal, Spacing.screenPadding)
             .padding(.top, Spacing.lg)
         }
@@ -177,7 +185,7 @@ struct KnowledgeMapView: View {
             VStack(alignment: .leading, spacing: Spacing.md) {
                 Text("Echo 吸收统计")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.folio.textPrimary)
+                    .foregroundStyle(FolioPaperPalette.primaryText)
 
                 HStack(spacing: Spacing.screenPadding) {
                     // Ring
@@ -187,19 +195,23 @@ struct KnowledgeMapView: View {
                     VStack(spacing: 0) {
                         echoDetailRow(label: "本月 Echo", value: "\(echo.totalReviews) 次")
                         Rectangle()
-                            .fill(Color.folio.separator)
+                            .fill(FolioPaperPalette.listDivider.opacity(0.65))
                             .frame(height: 0.5)
                         echoDetailRow(label: "记得", value: "\(echo.rememberedCount)", valueColor: Color.folio.success)
                         Rectangle()
-                            .fill(Color.folio.separator)
+                            .fill(FolioPaperPalette.listDivider.opacity(0.65))
                             .frame(height: 0.5)
                         echoDetailRow(label: "忘了", value: "\(echo.forgottenCount)")
                     }
                 }
             }
             .padding(Spacing.screenPadding)
-            .background(Color.folio.echoBg)
+            .background(FolioPaperPalette.cardSurface)
             .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(FolioPaperPalette.listDivider.opacity(0.55), lineWidth: 1)
+            }
             .padding(.horizontal, Spacing.screenPadding)
             .padding(.top, Spacing.xl)
         }
@@ -208,7 +220,7 @@ struct KnowledgeMapView: View {
     private func echoRing(rate: Int) -> some View {
         ZStack {
             Circle()
-                .stroke(Color.folio.textQuaternary, lineWidth: 6)
+                .stroke(FolioPaperPalette.quaternaryText.opacity(0.35), lineWidth: 6)
                 .frame(width: 80, height: 80)
 
             Circle()
@@ -219,15 +231,15 @@ struct KnowledgeMapView: View {
 
             Text("\(rate)%")
                 .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
         }
     }
 
-    private func echoDetailRow(label: String, value: String, valueColor: Color = Color.folio.textPrimary) -> some View {
+    private func echoDetailRow(label: String, value: String, valueColor: Color = FolioPaperPalette.primaryText) -> some View {
         HStack {
             Text(label)
                 .font(.system(size: 14))
-                .foregroundStyle(Color.folio.textSecondary)
+                .foregroundStyle(FolioPaperPalette.secondaryText)
             Spacer()
             Text(value)
                 .font(.system(size: 14, weight: .semibold))
@@ -241,7 +253,7 @@ struct KnowledgeMapView: View {
     private var footerSection: some View {
         Text("知识在积累，你正在变得更强。")
             .font(.system(size: 13))
-            .foregroundStyle(Color.folio.textTertiary)
+            .foregroundStyle(FolioPaperPalette.tertiaryText)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 40)
             .padding(.bottom, Spacing.screenPadding)

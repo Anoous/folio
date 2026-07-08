@@ -11,7 +11,7 @@ struct HomeWorkbenchStatusStrip: View {
                 metric(
                     systemImage: "progress.indicator",
                     value: "\(processingCount) 篇处理中",
-                    color: FolioPaperPalette.accentBlue
+                    color: FolioPaperPalette.freshMint
                 )
 
                 divider
@@ -27,7 +27,7 @@ struct HomeWorkbenchStatusStrip: View {
                 metric(
                     systemImage: "text.bubble",
                     value: "可向 \(askableCount) 篇资料提问",
-                    color: FolioPaperPalette.accentBlue
+                    color: FolioPaperPalette.freshMint
                 )
             }
             .padding(.horizontal, 12)
@@ -46,7 +46,7 @@ struct HomeWorkbenchStatusStrip: View {
 
             Text(value)
                 .font(.system(size: 12.5, weight: .regular))
-                .foregroundStyle(FolioPaperPalette.secondaryInk)
+                .foregroundStyle(FolioPaperPalette.secondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.70)
         }
@@ -56,7 +56,7 @@ struct HomeWorkbenchStatusStrip: View {
 
     private var divider: some View {
         Rectangle()
-            .fill(Color.black.opacity(0.10))
+            .fill(FolioPaperPalette.controlStroke)
             .frame(width: 1, height: 34)
             .padding(.horizontal, 5)
     }

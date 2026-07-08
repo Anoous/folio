@@ -17,6 +17,10 @@ struct HomeWorkbenchView: View {
     let onDismissSyncError: () -> Void
     let onRetryEcho: () -> Void
 
+    private var metrics: HomeWorkbenchMetrics {
+        viewModel.workbenchMetrics
+    }
+
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(spacing: 0) {
@@ -73,21 +77,26 @@ struct HomeWorkbenchView: View {
                     )
                 }
             )
-        } else {
-            EchoCardView(
-                card: .prototype,
-                onReview: { _, completion in
-                    completion(nil)
-                }
+        } else if viewModel.isEchoLoading || viewModel.echoError != nil || !isAuthenticated {
+            HomeEchoSummaryView(
+                isAuthenticated: isAuthenticated,
+                isLoading: viewModel.isEchoLoading,
+                errorMessage: viewModel.echoError,
+                remainingToday: viewModel.echoRemainingToday,
+                weeklyCount: viewModel.echoWeeklyCount,
+                weeklyLimit: viewModel.echoWeeklyLimit,
+                onRetry: onRetryEcho,
+                onOpenSettings: onOpenSettings
             )
+            .padding(.bottom, 30)
         }
     }
 
     private var workbenchMetricRows: some View {
         HomeWorkbenchStatusStrip(
-            processingCount: max(viewModel.processingArticles.count, 2),
-            continueReadingCount: max(viewModel.continueReadingArticles.count, 1),
-            askableCount: max(viewModel.readyArticleCount, 28)
+            processingCount: metrics.processingCount,
+            continueReadingCount: metrics.continueReadingCount,
+            askableCount: metrics.askableCount
         )
     }
 

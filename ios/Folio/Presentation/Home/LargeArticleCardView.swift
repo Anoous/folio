@@ -35,7 +35,7 @@ struct LargeArticleCardView: View {
             // Title
             Text(article.displayTitle)
                 .font(isUnread ? Typography.v3CardTitleUnread : Typography.v3CardTitle)
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
                 .lineSpacing(17 * 0.45)
                 .lineLimit(2)
                 .modifier(HeroGeometryModifier(id: "title-\(article.id)", namespace: heroNamespace))
@@ -44,11 +44,11 @@ struct LargeArticleCardView: View {
             if let summary = article.displaySummary, !summary.isEmpty {
                 HStack(alignment: .top, spacing: 0) {
                     RoundedRectangle(cornerRadius: 1)
-                        .fill(isUnread ? Color.folio.accent : Color.folio.textQuaternary)
+                        .fill(isUnread ? FolioPaperPalette.accentBlue : FolioPaperPalette.quaternaryText)
                         .frame(width: 2)
                     Text(summary)
                         .font(Typography.v3CardInsight)
-                        .foregroundStyle(isUnread ? Color.folio.textSecondary : Color.folio.textTertiary)
+                        .foregroundStyle(isUnread ? FolioPaperPalette.secondaryText : FolioPaperPalette.tertiaryText)
                         .lineLimit(2)
                         .padding(.leading, 14)
                 }
@@ -74,7 +74,7 @@ struct LargeArticleCardView: View {
         HStack(spacing: 0) {
             Text(metaLineText)
                 .font(.system(size: 12))
-                .foregroundStyle(Color.folio.textQuaternary)
+                .foregroundStyle(FolioPaperPalette.quaternaryText)
                 .lineLimit(1)
             Spacer(minLength: 0)
         }

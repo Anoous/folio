@@ -3,9 +3,11 @@ import SwiftUI
 struct SearchSuggestionsView: View {
     @Binding var searchText: String
     let recentSearches: [String]
+    var showsCaptureActions = true
     var onShowNoteSheet: () -> Void
     var onShowSpark: () -> Void
     var onShowLearn: () -> Void
+    var onSelectSearch: ((String) -> Void)?
 
     private var suggestedQuestions: [String] {
         [
@@ -30,7 +32,7 @@ struct SearchSuggestionsView: View {
 
                     ForEach(recentSearches, id: \.self) { search in
                         Button {
-                            searchText = search
+                            selectSearch(search)
                         } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: "clock.arrow.circlepath")
@@ -65,7 +67,7 @@ struct SearchSuggestionsView: View {
 
                 ForEach(suggestedQuestions, id: \.self) { question in
                     Button {
-                        searchText = question
+                        selectSearch(question)
                     } label: {
                         Text("\u{201C}\(question)\u{201D}")
                             .font(Font.custom("LXGWWenKaiTC-Regular", size: 15).italic())
@@ -89,23 +91,33 @@ struct SearchSuggestionsView: View {
                 }
                 .padding(.horizontal, Spacing.screenPadding)
 
-                // Quick actions
-                HStack(spacing: 12) {
-                    quickActionCard(icon: "link", title: "粘贴链接") {
-                        if let string = UIPasteboard.general.string,
-                           let url = URL(string: string.trimmingCharacters(in: .whitespacesAndNewlines)),
-                           url.scheme?.hasPrefix("http") == true
-                        {
-                            searchText = string.trimmingCharacters(in: .whitespacesAndNewlines)
+                if showsCaptureActions {
+                    // Quick actions
+                    HStack(spacing: 12) {
+                        quickActionCard(icon: "link", title: "粘贴链接") {
+                            if let string = UIPasteboard.general.string,
+                               let url = URL(string: string.trimmingCharacters(in: .whitespacesAndNewlines)),
+                               url.scheme?.hasPrefix("http") == true
+                            {
+                                selectSearch(string.trimmingCharacters(in: .whitespacesAndNewlines))
+                            }
+                        }
+                        quickActionCard(icon: "square.and.pencil", title: "记一条笔记") {
+                            onShowNoteSheet()
                         }
                     }
-                    quickActionCard(icon: "square.and.pencil", title: "记一条笔记") {
-                        onShowNoteSheet()
-                    }
+                    .padding(.horizontal, Spacing.screenPadding)
+                    .padding(.top, 24)
                 }
-                .padding(.horizontal, Spacing.screenPadding)
-                .padding(.top, 24)
             }
+        }
+    }
+
+    private func selectSearch(_ value: String) {
+        if let onSelectSearch {
+            onSelectSearch(value)
+        } else {
+            searchText = value
         }
     }
 

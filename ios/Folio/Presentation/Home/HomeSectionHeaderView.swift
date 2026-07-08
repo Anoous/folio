@@ -8,12 +8,12 @@ struct HomeSectionHeaderView: View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
             Text(title)
                 .font(.headline)
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
 
             if let subtitle, !subtitle.isEmpty {
                 Text(subtitle)
                     .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textTertiary)
+                    .foregroundStyle(FolioPaperPalette.tertiaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -1,6 +1,6 @@
 import Foundation
 import AuthenticationServices
-import os
+import Observation
 
 enum AuthState: Equatable {
     case unknown
@@ -15,6 +15,7 @@ final class AuthViewModel {
     var currentUser: UserDTO?
     var errorMessage: String?
     var isLoading = false
+    var actionState: ViewState<Void> = .idle
 
     var isAuthenticated: Bool {
         authState == .signedIn
@@ -62,17 +63,16 @@ final class AuthViewModel {
     // MARK: - Apple Sign-In
 
     func handleAppleSignIn(result: Result<ASAuthorization, Error>) async {
-        isLoading = true
-        errorMessage = nil
+        beginAction()
 
-        defer { isLoading = false }
+        defer { finishActionIfLoading() }
 
         switch result {
         case .success(let authorization):
             guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
                   let identityTokenData = credential.identityToken,
                   let identityToken = String(data: identityTokenData, encoding: .utf8) else {
-                errorMessage = String(localized: "auth.error.credentials", defaultValue: "Unable to verify your Apple ID. Please try again.")
+                failAction(String(localized: "auth.error.credentials", defaultValue: "Unable to verify your Apple ID. Please try again."))
                 return
             }
 
@@ -90,65 +90,66 @@ final class AuthViewModel {
                 )
                 currentUser = response.user
                 authState = .signedIn
+                actionState = .loaded(())
                 FolioLogger.auth.info("Apple sign-in succeeded")
             } catch {
                 FolioLogger.auth.error("Apple sign-in failed: \(error)")
-                errorMessage = String(localized: "auth.error.network", defaultValue: "Could not connect to the server. Please check your network and try again.")
+                failAction(String(localized: "auth.error.network", defaultValue: "Could not connect to the server. Please check your network and try again."))
             }
 
         case .failure:
-            errorMessage = String(localized: "auth.error.cancelled", defaultValue: "Sign-in was cancelled.")
+            failAction(String(localized: "auth.error.cancelled", defaultValue: "Sign-in was cancelled."))
         }
     }
 
     // MARK: - Email Auth
 
     func sendEmailCode(email: String) async {
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
+        beginAction()
+        defer { finishActionIfLoading() }
 
         do {
             try await apiClient.sendEmailCode(email: email)
+            actionState = .loaded(())
             FolioLogger.auth.info("verification code sent to \(email)")
         } catch let error as APIError {
             FolioLogger.auth.error("send code failed: \(error)")
-            errorMessage = sendCodeErrorMessage(for: error)
+            failAction(sendCodeErrorMessage(for: error))
         } catch {
             FolioLogger.auth.error("send code failed: \(error)")
-            errorMessage = Self.networkUnavailableMessage
+            failAction(Self.networkUnavailableMessage)
         }
     }
 
     func verifyEmailCode(email: String, code: String) async {
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
+        beginAction()
+        defer { finishActionIfLoading() }
 
         do {
             let response = try await apiClient.verifyEmailCode(email: email, code: code)
             currentUser = response.user
             authState = .signedIn
+            actionState = .loaded(())
             FolioLogger.auth.info("email login succeeded")
         } catch let error as APIError {
             FolioLogger.auth.error("email verify failed: \(error)")
             switch error {
             case .unauthorized:
-                errorMessage = "验证码无效或已过期，请重新输入。"
+                failAction("验证码无效或已过期，请重新输入。")
             case .networkError:
-                errorMessage = Self.networkUnavailableMessage
+                failAction(Self.networkUnavailableMessage)
             case .serverError:
-                errorMessage = "验证码服务暂时不可用，请稍后再试。"
+                failAction("验证码服务暂时不可用，请稍后再试。")
             case .quotaExceeded:
-                errorMessage = "尝试次数过多，请稍后再试。"
+                failAction("尝试次数过多，请稍后再试。")
             case .serverMessage(let message):
-                errorMessage = Self.localizedServerMessage(message)
+                failAction(Self.localizedServerMessage(message))
             default:
-                errorMessage = "无法完成验证，请稍后再试。"
+                failAction("无法完成验证，请稍后再试。")
             }
         } catch {
             FolioLogger.auth.error("email verify failed: \(error)")
-            errorMessage = Self.networkUnavailableMessage
+            failAction(Self.networkUnavailableMessage)
         }
     }
 
@@ -171,7 +172,26 @@ final class AuthViewModel {
         try? keychainManager.clearTokens()
         currentUser = nil
         authState = .signedOut
+        actionState = .idle
         FolioLogger.auth.info("user signed out")
+    }
+
+    private func beginAction() {
+        isLoading = true
+        errorMessage = nil
+        actionState = .loading
+    }
+
+    private func finishActionIfLoading() {
+        isLoading = false
+        if actionState.isLoading {
+            actionState = .idle
+        }
+    }
+
+    private func failAction(_ message: String) {
+        errorMessage = message
+        actionState = .error(message)
     }
 
     private func sendCodeErrorMessage(for error: APIError) -> String {

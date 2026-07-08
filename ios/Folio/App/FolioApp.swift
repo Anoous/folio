@@ -1,6 +1,6 @@
 import SwiftUI
 import SwiftData
-import os
+import UserNotifications
 
 @main
 struct FolioApp: App {
@@ -20,8 +20,6 @@ struct FolioApp: App {
     init() {
         do {
             let c = try DataManager.createSharedContainer()
-            let storeURL = c.configurations.first?.url.path ?? "unknown"
-            FolioLogger.data.info("app-debug: storeURL=\(storeURL)")
             container = c
             let ctx = container.mainContext
             _offlineQueueManager = State(initialValue: OfflineQueueManager(context: ctx))
@@ -118,7 +116,11 @@ struct FolioApp: App {
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
-                    UIApplication.shared.applicationIconBadgeNumber = 0
+                    UNUserNotificationCenter.current().setBadgeCount(0) { error in
+                        if let error {
+                            FolioLogger.data.error("badge reset failed: \(error)")
+                        }
+                    }
                     offlineQueueManager?.refreshPendingCount()
                     if authViewModel.authState == .signedIn, let sync = syncService {
                         Task { await sync.incrementalSync() }

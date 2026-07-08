@@ -20,9 +20,9 @@ struct EmailAuthActionButton: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
-            .foregroundStyle(isDisabled && !isLoading ? Color.folio.textTertiary : Color.white)
+            .foregroundStyle(isDisabled && !isLoading ? FolioPaperPalette.tertiaryText : Color.white)
             .frame(maxWidth: .infinity, minHeight: 50)
-            .background(isDisabled && !isLoading ? Color.folio.separator.opacity(0.5) : Color.folio.accent)
+            .background(isDisabled && !isLoading ? FolioPaperPalette.iconSurface : FolioPaperPalette.accentBlue)
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.large))
         }
         .buttonStyle(.plain)

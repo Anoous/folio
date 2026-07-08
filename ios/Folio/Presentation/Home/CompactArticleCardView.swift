@@ -14,13 +14,13 @@ struct CompactArticleCardView: View {
             // Source type icon
             Image(systemName: article.sourceType.iconName)
                 .font(.system(size: 13))
-                .foregroundStyle(Color.folio.textQuaternary)
+                .foregroundStyle(FolioPaperPalette.tertiaryText)
                 .frame(width: 20)
 
             // Title (single line)
             Text(article.displayTitle)
                 .font(isUnread ? Typography.v3CardTitleUnread : Typography.v3CardTitle)
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
                 .lineLimit(1)
                 .modifier(HeroGeometryModifier(id: "title-\(article.id)", namespace: heroNamespace))
 
@@ -36,8 +36,8 @@ struct CompactArticleCardView: View {
             // Time
             Text(article.createdAt.relativeFormatted())
                 .font(.system(size: 12))
-                .foregroundStyle(Color.folio.textQuaternary)
+                .foregroundStyle(FolioPaperPalette.secondaryText)
         }
-        .padding(.vertical, Spacing.sm)
+        .padding(.vertical, 14)
     }
 }

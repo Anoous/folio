@@ -1,6 +1,6 @@
 import Foundation
 import Network
-import os
+import Observation
 import SwiftData
 import BackgroundTasks
 import Combine

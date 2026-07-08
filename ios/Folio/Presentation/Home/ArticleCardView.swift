@@ -54,7 +54,7 @@ struct ArticleStatusWrapper<Content: View>: View {
             // Left status bar
             if article.status == .processing {
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color.folio.accent)
+                    .fill(FolioPaperPalette.accentBlue)
                     .frame(width: 3)
                     .opacity(breathe ? 0.4 : 1.0)
                     .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: breathe)
@@ -69,12 +69,12 @@ struct ArticleStatusWrapper<Content: View>: View {
                 if article.status == .processing {
                     Text(String(localized: "status.analyzing", defaultValue: "Analyzing..."))
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.folio.accent.opacity(0.8))
+                        .foregroundStyle(FolioPaperPalette.accentBlue)
                         .padding(.top, 2)
                 } else if article.status == .clientReady {
                     Text(String(localized: "status.localContent", defaultValue: "Local content"))
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.folio.success.opacity(0.7))
+                        .foregroundStyle(Color.folio.success.opacity(0.8))
                         .padding(.top, 2)
                 }
             }
@@ -115,11 +115,11 @@ struct StandardArticleCardContent: View {
                     if article.sourceType == .voice {
                         Image(systemName: "mic.fill")
                             .font(.system(size: 12))
-                            .foregroundStyle(Color.folio.textTertiary)
+                            .foregroundStyle(FolioPaperPalette.tertiaryText)
                     }
                     Text(article.displayTitle)
                         .font(isUnread ? Typography.v3CardTitleUnread : Typography.v3CardTitle)
-                        .foregroundStyle(article.status == .failed ? Color.folio.textTertiary : Color.folio.textPrimary)
+                        .foregroundStyle(article.status == .failed ? FolioPaperPalette.tertiaryText : FolioPaperPalette.primaryText)
                         .lineSpacing(17 * 0.45)
                         .lineLimit(2)
                         .modifier(HeroGeometryModifier(id: "title-\(article.id)", namespace: heroNamespace))
@@ -128,11 +128,11 @@ struct StandardArticleCardContent: View {
                 if let summary = article.displaySummary, !summary.isEmpty {
                     HStack(alignment: .top, spacing: 0) {
                         RoundedRectangle(cornerRadius: 1)
-                            .fill(isUnread ? Color.folio.accent : Color.folio.textQuaternary)
+                            .fill(isUnread ? FolioPaperPalette.accentBlue : FolioPaperPalette.quaternaryText)
                             .frame(width: 2)
                         Text(summary)
                             .font(Typography.v3CardInsight)
-                            .foregroundStyle(isUnread ? Color.folio.textSecondary : Color.folio.textTertiary)
+                            .foregroundStyle(isUnread ? FolioPaperPalette.secondaryText : FolioPaperPalette.tertiaryText)
                             .lineLimit(2)
                             .padding(.leading, 14)
                     }
@@ -185,7 +185,7 @@ struct StandardArticleCardContent: View {
         HStack(spacing: 0) {
             Text(metaLineText)
                 .font(.system(size: 12))
-                .foregroundStyle(Color.folio.textQuaternary)
+                .foregroundStyle(FolioPaperPalette.quaternaryText)
                 .lineLimit(1)
             Spacer(minLength: 0)
         }

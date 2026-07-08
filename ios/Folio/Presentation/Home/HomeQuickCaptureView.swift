@@ -14,7 +14,7 @@ struct HomeQuickCaptureView: View {
                 Button(action: onTextTap) {
                     Text("保存链接、文字或截图")
                         .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(Color.gray.opacity(0.72))
+                        .foregroundStyle(FolioPaperPalette.tertiaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.leading, 24)
                         .contentShape(Rectangle())
@@ -41,7 +41,7 @@ struct HomeQuickCaptureView: View {
                     Image(systemName: "camera")
                         .font(.system(size: 23, weight: .regular))
                         .symbolRenderingMode(.monochrome)
-                        .foregroundStyle(FolioPaperPalette.ink)
+                        .foregroundStyle(FolioPaperPalette.primaryText)
                         .frame(width: 64, height: 60)
                 }
                 .buttonStyle(.plain)
@@ -68,7 +68,7 @@ struct HomeQuickCaptureView: View {
             Image(systemName: systemImage)
                 .font(.system(size: 24, weight: .regular))
                 .symbolRenderingMode(.monochrome)
-                .foregroundStyle(FolioPaperPalette.ink)
+                .foregroundStyle(FolioPaperPalette.primaryText)
                 .frame(width: 64, height: 60)
         }
         .buttonStyle(.plain)
@@ -77,7 +77,7 @@ struct HomeQuickCaptureView: View {
 
     private var commandDivider: some View {
         Rectangle()
-            .fill(Color.black.opacity(0.10))
+            .fill(FolioPaperPalette.controlStroke)
             .frame(width: 1, height: 30)
     }
 
@@ -100,6 +100,6 @@ private struct CaptureTextIcon: View {
             Text("A")
                 .font(.system(size: 22, weight: .regular))
         }
-        .foregroundStyle(FolioPaperPalette.ink)
+        .foregroundStyle(FolioPaperPalette.primaryText)
     }
 }

@@ -61,6 +61,8 @@ struct HomeSearchResultsView: View {
             resultsSection
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(FolioPaperPalette.background)
     }
 
     // MARK: - Empty With Note Action
@@ -78,7 +80,7 @@ struct HomeSearchResultsView: View {
                 VStack(spacing: Spacing.sm) {
                     Text(String(localized: "search.noResults", defaultValue: "No matching articles"))
                         .font(Typography.cardMeta)
-                        .foregroundStyle(Color.folio.textTertiary)
+                        .foregroundStyle(FolioPaperPalette.tertiaryText)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Spacing.lg)
@@ -86,6 +88,8 @@ struct HomeSearchResultsView: View {
             .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(FolioPaperPalette.background)
     }
 
     // MARK: - Note Action Row
@@ -101,11 +105,11 @@ struct HomeSearchResultsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(String(localized: "search.saveAsNote", defaultValue: "Save as note"))
                         .font(Typography.body)
-                        .foregroundStyle(Color.folio.textPrimary)
+                        .foregroundStyle(FolioPaperPalette.primaryText)
                     let trimmedPreview = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
                     Text(trimmedPreview.prefix(60) + (trimmedPreview.count > 60 ? "..." : ""))
                         .font(Typography.cardMeta)
-                        .foregroundStyle(Color.folio.textSecondary)
+                        .foregroundStyle(FolioPaperPalette.secondaryText)
                         .lineLimit(1)
                 }
                 Spacer()
@@ -129,10 +133,10 @@ struct HomeSearchResultsView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(String(localized: "search.alreadySaved", defaultValue: "Already saved"))
                                     .font(Typography.body)
-                                    .foregroundStyle(Color.folio.textPrimary)
+                                    .foregroundStyle(FolioPaperPalette.primaryText)
                                 Text(article.displayTitle)
                                     .font(Typography.caption)
-                                    .foregroundStyle(Color.folio.textSecondary)
+                                    .foregroundStyle(FolioPaperPalette.secondaryText)
                                     .lineLimit(1)
                             }
                         }
@@ -150,10 +154,10 @@ struct HomeSearchResultsView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(String(localized: "search.saveLink", defaultValue: "Save this link"))
                                     .font(Typography.body)
-                                    .foregroundStyle(Color.folio.textPrimary)
+                                    .foregroundStyle(FolioPaperPalette.primaryText)
                                 Text(url.host() ?? url.absoluteString)
                                     .font(Typography.caption)
-                                    .foregroundStyle(Color.folio.textSecondary)
+                                    .foregroundStyle(FolioPaperPalette.secondaryText)
                                     .lineLimit(1)
                             }
                             Spacer()
@@ -169,6 +173,8 @@ struct HomeSearchResultsView: View {
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(FolioPaperPalette.background)
     }
 
     // MARK: - Results List
@@ -185,6 +191,8 @@ struct HomeSearchResultsView: View {
             resultsSection
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(FolioPaperPalette.background)
     }
 
     // MARK: - Shared Results Section
@@ -215,7 +223,7 @@ struct HomeSearchResultsView: View {
                 ? String(localized: "search.result", defaultValue: "result")
                 : String(localized: "search.results", defaultValue: "results")))
                 .font(Typography.caption)
-                .foregroundStyle(Color.folio.textTertiary)
+                .foregroundStyle(FolioPaperPalette.tertiaryText)
         }
     }
 
@@ -229,11 +237,11 @@ struct HomeSearchResultsView: View {
 
             Text(String(localized: "search.error", defaultValue: "Search failed"))
                 .font(Typography.listTitle)
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
 
             Text(error)
                 .font(Typography.caption)
-                .foregroundStyle(Color.folio.textTertiary)
+                .foregroundStyle(FolioPaperPalette.tertiaryText)
                 .multilineTextAlignment(.center)
 
             FolioButton(

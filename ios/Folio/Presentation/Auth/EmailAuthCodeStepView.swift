@@ -15,13 +15,13 @@ struct EmailAuthCodeStepView: View {
                 if form.code.isEmpty {
                     Text(verbatim: "000000")
                         .font(.system(.title3, design: .monospaced, weight: .semibold))
-                        .foregroundStyle(Color.folio.textTertiary)
+                        .foregroundStyle(FolioPaperPalette.tertiaryText)
                         .allowsHitTesting(false)
                 }
 
                 TextField("", text: $form.code)
                     .font(.system(.title3, design: .monospaced, weight: .semibold))
-                    .foregroundStyle(Color.folio.textPrimary)
+                    .foregroundStyle(FolioPaperPalette.primaryText)
                     .keyboardType(.numberPad)
                     .textContentType(.oneTimeCode)
                     .multilineTextAlignment(.center)
@@ -37,11 +37,11 @@ struct EmailAuthCodeStepView: View {
                     .accessibilityValue("\(form.code.count) 位，需 6 位")
             }
             .frame(minHeight: 56)
-            .background(Color.folio.cardBackground)
+            .background(FolioPaperPalette.cardSurface)
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.medium)
-                    .stroke(isCodeFocused ? Color.folio.accent : Color.folio.separator, lineWidth: 1)
+                    .stroke(isCodeFocused ? FolioPaperPalette.accentBlue : FolioPaperPalette.listDivider, lineWidth: 1)
             }
 
             EmailAuthActionButton(
@@ -64,7 +64,7 @@ struct EmailAuthCodeStepView: View {
                     .font(Typography.caption)
                     .disabled(isLoading)
             }
-            .foregroundStyle(Color.folio.textSecondary)
+            .foregroundStyle(FolioPaperPalette.secondaryText)
         }
     }
 
@@ -92,5 +92,5 @@ struct EmailAuthCodeStepView: View {
         onChangeEmail: {}
     )
     .padding()
-    .background(Color.folio.background)
+    .background(FolioPaperPalette.background)
 }

@@ -179,12 +179,14 @@ struct ArticleWebView: UIViewRepresentable {
         func handleHighlightFromMenu() {
             let js = """
             (function() {
+                var bridge = window.FolioReader;
+                if (!bridge) return null;
                 var sel = window.getSelection();
                 if (!sel || sel.isCollapsed || sel.toString().trim().length < 1) return null;
                 var range = sel.getRangeAt(0);
                 var text = sel.toString();
-                var start = getTextOffset(range.startContainer, range.startOffset);
-                var end = getTextOffset(range.endContainer, range.endOffset);
+                var start = bridge.getTextOffset(range.startContainer, range.startOffset);
+                var end = bridge.getTextOffset(range.endContainer, range.endOffset);
                 if (text.length > 500) { text = text.substring(0, 500); end = start + 500; }
                 // Create visual highlight
                 try {
@@ -192,7 +194,7 @@ struct ArticleWebView: UIViewRepresentable {
                     mark.className = 'hl';
                     mark.setAttribute('data-id', 'temp-' + Date.now());
                     range.surroundContents(mark);
-                    if (typeof attachHighlightPopup === 'function') attachHighlightPopup(mark);
+                    if (typeof bridge.attachHighlightPopup === 'function') bridge.attachHighlightPopup(mark);
                     sel.removeAllRanges();
                 } catch(ex) {}
                 return JSON.stringify({text: text, startOffset: start, endOffset: end});

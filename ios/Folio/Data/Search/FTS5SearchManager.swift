@@ -102,7 +102,7 @@ final class FTS5SearchManager: @unchecked Sendable {
         let tagNames = article.tags.map(\.name).joined(separator: " ")
         try execute(sql, bindings: [
             article.id.uuidString,
-            article.title ?? "",
+            article.title ?? article.displayTitle,
             article.markdownContent ?? "",
             article.summary ?? "",
             tagNames,

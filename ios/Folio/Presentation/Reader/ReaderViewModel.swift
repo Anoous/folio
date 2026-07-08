@@ -1,7 +1,7 @@
 import Foundation
-import os
+import Observation
 import SwiftData
-import SwiftUI
+import UIKit
 
 @MainActor
 @Observable
@@ -13,6 +13,7 @@ final class ReaderViewModel {
     private let apiClient: APIClient
     private let isAuthenticated: Bool
     private let searchIndexCoordinator: SearchIndexCoordinator
+    private let articleActions: ArticleActionWorkflow
 
     var wordCount: Int = 0
     var estimatedReadTimeMinutes: Int = 0
@@ -45,7 +46,13 @@ final class ReaderViewModel {
         self.context = context
         self.isAuthenticated = isAuthenticated
         self.apiClient = apiClient
-        self.searchIndexCoordinator = searchIndexCoordinator ?? .shared
+        let resolvedSearchIndexCoordinator = searchIndexCoordinator ?? .shared
+        self.searchIndexCoordinator = resolvedSearchIndexCoordinator
+        self.articleActions = ArticleActionWorkflow(
+            apiClient: apiClient,
+            context: context,
+            searchIndexCoordinator: resolvedSearchIndexCoordinator
+        )
         self.readingProgress = article.readProgress
         self.lastPersistedProgress = article.readProgress
         calculateWordCount()
@@ -125,7 +132,7 @@ final class ReaderViewModel {
     // MARK: - Mark as Read
 
     func markAsRead() {
-        article.markAsRead(in: context)
+        articleActions.markAsRead(article)
     }
 
     // MARK: - Reading Progress (local only)
@@ -158,25 +165,19 @@ final class ReaderViewModel {
     // MARK: - Favorite
 
     func toggleFavorite() {
-        article.toggleFavoriteWithSync(
-            context: context, apiClient: apiClient,
-            isAuthenticated: isAuthenticated, showToast: showToastMessage
-        )
+        articleActions.toggleFavorite(article, isAuthenticated: isAuthenticated, showToast: showToastMessage)
     }
 
     // MARK: - Archive
 
     func archiveArticle() {
-        article.toggleArchiveWithSync(
-            context: context, apiClient: apiClient,
-            isAuthenticated: isAuthenticated, showToast: showToastMessage
-        )
+        articleActions.toggleArchive(article, isAuthenticated: isAuthenticated, showToast: showToastMessage)
     }
 
     // MARK: - Delete
 
     func deleteArticle() {
-        article.prepareForDeletion(context: context, searchIndexCoordinator: searchIndexCoordinator)
+        articleActions.delete(article)
     }
 
     // MARK: - Copy Markdown

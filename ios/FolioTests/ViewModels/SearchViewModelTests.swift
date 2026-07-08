@@ -51,6 +51,10 @@ final class SearchViewModelTests: XCTestCase {
         vm.searchText = "Swift"
         vm.performSearch()
         XCTAssertEqual(vm.results.count, 1)
+        guard case .loaded(let results) = vm.state else {
+            return XCTFail("Expected loaded search state")
+        }
+        XCTAssertEqual(results.count, 1)
     }
 
     @MainActor
@@ -127,6 +131,9 @@ final class SearchViewModelTests: XCTestCase {
         vm.searchText = "nonexistentquery12345"
         vm.performSearch()
         XCTAssertTrue(vm.showsEmptyState)
+        guard case .empty = vm.state else {
+            return XCTFail("Expected empty search state")
+        }
     }
 
     // MARK: - History Edge Cases

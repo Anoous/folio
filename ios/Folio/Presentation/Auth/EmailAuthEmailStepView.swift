@@ -13,14 +13,14 @@ struct EmailAuthEmailStepView: View {
                 if form.email.isEmpty {
                     Text(verbatim: "邮箱地址")
                         .font(Typography.body)
-                        .foregroundStyle(Color.folio.textTertiary)
+                        .foregroundStyle(FolioPaperPalette.tertiaryText)
                         .padding(.horizontal, Spacing.md)
                         .allowsHitTesting(false)
                 }
 
                 TextField("", text: $form.email)
                     .font(Typography.body)
-                    .foregroundStyle(Color.folio.textPrimary)
+                    .foregroundStyle(FolioPaperPalette.primaryText)
                     .textContentType(.emailAddress)
                     .keyboardType(.emailAddress)
                     .autocorrectionDisabled()
@@ -33,7 +33,7 @@ struct EmailAuthEmailStepView: View {
                     .accessibilityLabel("邮箱地址")
             }
             .frame(minHeight: 54)
-            .background(Color.folio.cardBackground)
+            .background(FolioPaperPalette.cardSurface)
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.medium)
@@ -58,7 +58,7 @@ struct EmailAuthEmailStepView: View {
 
     private var fieldBorderColor: Color {
         if form.normalizedEmail.isEmpty || form.isEmailValid {
-            return isEmailFocused ? Color.folio.accent : Color.folio.separator
+            return isEmailFocused ? FolioPaperPalette.accentBlue : FolioPaperPalette.listDivider
         }
 
         return Color.folio.error.opacity(0.65)
@@ -75,5 +75,5 @@ struct EmailAuthEmailStepView: View {
         isLoading: false
     ) {}
         .padding()
-        .background(Color.folio.background)
+        .background(FolioPaperPalette.background)
 }

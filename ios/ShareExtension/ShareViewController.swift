@@ -2,8 +2,6 @@ import UIKit
 import SwiftUI
 import UniformTypeIdentifiers
 import SwiftData
-import Vision
-import os
 
 class ShareViewController: UIViewController {
     private var hostingController: UIHostingController<CompactShareView>?
@@ -85,34 +83,23 @@ class ShareViewController: UIViewController {
 
     @MainActor
     private func saveURL(_ urlString: String) {
-        let domain = URL(string: urlString).flatMap { $0.host()?.replacingOccurrences(of: "www.", with: "") } ?? urlString
-
-        let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
-        guard SharedDataManager.canSave(isPro: isPro) else {
-            FolioLogger.data.info("share: quota exceeded — \(urlString)")
-            showAndDismiss(.quotaExceeded, delay: 1.5)
-            return
-        }
-
         guard let container = modelContainer else {
             FolioLogger.data.error("share: ModelContainer unavailable")
             showAndDismiss(.error, delay: 1.2)
             return
         }
 
-        do {
-            let manager = SharedDataManager(context: container.mainContext)
-
-            _ = try manager.saveArticle(url: urlString)
-            SharedDataManager.incrementQuota()
-            UserDefaults.appGroup.set(true, forKey: AppConstants.shareExtensionDidSaveKey)
+        switch makeIntakeWorkflow(container: container).saveURL(urlString) {
+        case .saved(let receipt):
             FolioLogger.data.info("share: saved — \(urlString)")
-
-            showAndDismiss(.saved(domain: domain))
-        } catch SharedDataError.duplicateURL {
+            showAndDismiss(.saved(domain: receipt.displayName))
+        case .duplicate(let receipt):
             FolioLogger.data.info("share: duplicate — \(urlString)")
-            showAndDismiss(.duplicate(domain: domain))
-        } catch {
+            showAndDismiss(.duplicate(domain: receipt.displayName))
+        case .quotaExceeded:
+            FolioLogger.data.info("share: quota exceeded — \(urlString)")
+            showAndDismiss(.quotaExceeded, delay: 1.5)
+        case .error(let error):
             FolioLogger.data.error("share: failed — \(error)")
             showAndDismiss(.error, delay: 1.2)
         }
@@ -120,29 +107,23 @@ class ShareViewController: UIViewController {
 
     @MainActor
     private func saveManualContent(_ text: String) {
-        let isPro = UserDefaults.appGroup.bool(forKey: SharedDataManager.isProUserKey)
-        guard SharedDataManager.canSave(isPro: isPro) else {
-            FolioLogger.data.info("share: quota exceeded — manual content")
-            showAndDismiss(.quotaExceeded, delay: 1.5)
-            return
-        }
-
         guard let container = modelContainer else {
             FolioLogger.data.error("share: ModelContainer unavailable")
             showAndDismiss(.error, delay: 1.2)
             return
         }
 
-        do {
-            let manager = SharedDataManager(context: container.mainContext)
-            _ = try manager.saveManualContent(content: text)
-            SharedDataManager.incrementQuota()
-            UserDefaults.appGroup.set(true, forKey: AppConstants.shareExtensionDidSaveKey)
-
+        switch makeIntakeWorkflow(container: container).saveManualContent(text) {
+        case .saved(let receipt):
             let preview = String(text.prefix(20))
             FolioLogger.data.info("share: saved manual content — \(preview)")
-            showAndDismiss(.saved(domain: String(localized: "source.thought", defaultValue: "My Thought")))
-        } catch {
+            showAndDismiss(.saved(domain: receipt.displayName))
+        case .duplicate(let receipt):
+            showAndDismiss(.duplicate(domain: receipt.displayName))
+        case .quotaExceeded:
+            FolioLogger.data.info("share: quota exceeded — manual content")
+            showAndDismiss(.quotaExceeded, delay: 1.5)
+        case .error(let error):
             FolioLogger.data.error("share: manual content failed — \(error)")
             showAndDismiss(.error, delay: 1.2)
         }
@@ -170,11 +151,8 @@ class ShareViewController: UIViewController {
         var savedCount = 0
         for provider in providers {
             guard let image = await loadImage(from: provider) else { continue }
-            do {
-                try await processImage(image, container: container)
+            if await processImage(image, container: container) {
                 savedCount += 1
-            } catch {
-                FolioLogger.data.error("share: image processing failed — \(error)")
             }
         }
 
@@ -213,58 +191,31 @@ class ShareViewController: UIViewController {
     }
 
     @MainActor
-    private func processImage(_ image: UIImage, container: ModelContainer) async throws {
-        // Compress for storage (1920px max, 0.8 quality)
-        guard let storageData = image.compressed(maxWidth: 1920, quality: 0.8) else {
-            FolioLogger.data.error("share: image compression failed")
-            throw SharedDataError.invalidInput
+    private func processImage(_ image: UIImage, container: ModelContainer) async -> Bool {
+        let result = await makeIntakeWorkflow(container: container).saveScreenshotAfterOCR(image)
+        switch result {
+        case .saved(let receipt):
+            FolioLogger.data.info("share: screenshot saved — \(receipt.article.displayTitle)")
+            return true
+        case .quotaExceeded:
+            FolioLogger.data.info("share: quota exceeded — image")
+            return false
+        case .duplicate:
+            return false
+        case .error(let error):
+            FolioLogger.data.error("share: image processing failed — \(error)")
+            return false
         }
+    }
 
-        // Save image to App Group container
-        guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) else {
-            FolioLogger.data.error("share: App Group container unavailable")
-            throw SharedDataError.containerUnavailable
-        }
-
-        let imagesDir = groupURL.appendingPathComponent("Images", isDirectory: true)
-        try FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
-        let imageFilename = "\(UUID().uuidString).jpg"
-        let imagePath = imagesDir.appendingPathComponent(imageFilename)
-        try storageData.write(to: imagePath)
-
-        // Run OCR (compress to 1280px for OCR processing)
-        var ocrText: String?
-        if let ocrData = image.compressed(maxWidth: 1280, quality: 0.9),
-           let ocrImage = UIImage(data: ocrData) {
-            ocrText = try? await ImageOCRExtractor().extract(from: ocrImage)
-        }
-
-        // Generate title
-        let title: String
-        if let firstLine = ocrText?.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
-            title = String(firstLine.prefix(40))
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "MM/dd HH:mm"
-            title = "截图 · \(formatter.string(from: .now))"
-        }
-
-        // Create article
-        let relativePath = "Images/\(imageFilename)"
-        let article = Article(url: nil, title: title, sourceType: .screenshot)
-        article.localImagePath = relativePath
-        article.markdownContent = ocrText
-        article.wordCount = ocrText.map { Article.countWords($0) } ?? 0
-        article.status = .clientReady
-        article.extractionSource = .client
-        article.clientExtractedAt = .now
-
-        container.mainContext.insert(article)
-        try container.mainContext.save()
-
-        SharedDataManager.incrementQuota()
-        UserDefaults.appGroup.set(true, forKey: AppConstants.shareExtensionDidSaveKey)
-        FolioLogger.data.info("share: screenshot saved — \(title)")
+    @MainActor
+    private func makeIntakeWorkflow(container: ModelContainer) -> ContentIntakeWorkflow {
+        ContentIntakeWorkflow(
+            context: container.mainContext,
+            onSaveCompleted: {
+                UserDefaults.appGroup.set(true, forKey: AppConstants.shareExtensionDidSaveKey)
+            }
+        )
     }
 
     @MainActor

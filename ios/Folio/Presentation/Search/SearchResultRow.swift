@@ -32,12 +32,12 @@ struct SearchResultRow: View {
                 if let snippet = item.snippet {
                     highlightedTextView(snippet)
                         .font(Typography.body)
-                        .foregroundStyle(Color.folio.textSecondary)
+                        .foregroundStyle(FolioPaperPalette.secondaryText)
                         .lineLimit(2)
                 } else if let summary = item.article.summary {
                     Text(summary)
                         .font(Typography.body)
-                        .foregroundStyle(Color.folio.textSecondary)
+                        .foregroundStyle(FolioPaperPalette.secondaryText)
                         .lineLimit(2)
                 }
 
@@ -47,13 +47,13 @@ struct SearchResultRow: View {
                     if let siteName = item.article.siteName {
                         Text(siteName)
                             .font(Typography.caption)
-                            .foregroundStyle(Color.folio.textTertiary)
+                            .foregroundStyle(FolioPaperPalette.tertiaryText)
                     }
                     Text("\u{00B7}")
-                        .foregroundStyle(Color.folio.textTertiary)
+                        .foregroundStyle(FolioPaperPalette.tertiaryText)
                     Text(item.article.createdAt.relativeFormatted())
                         .font(Typography.caption)
-                        .foregroundStyle(Color.folio.textTertiary)
+                        .foregroundStyle(FolioPaperPalette.tertiaryText)
                 }
 
                 // Tags
@@ -70,7 +70,7 @@ struct SearchResultRow: View {
         }
         .padding(.vertical, Spacing.xs)
         .padding(.horizontal, Spacing.screenPadding)
-        .background(Color.folio.cardBackground)
+        .background(FolioPaperPalette.paper.opacity(0.45))
     }
 
     // MARK: - Highlighted Title
@@ -79,10 +79,10 @@ struct SearchResultRow: View {
     private var highlightedTitleView: some View {
         if let hlTitle = item.highlightedTitle {
             highlightedTextView(hlTitle)
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
         } else {
             Text(item.article.displayTitle)
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
         }
     }
 
@@ -117,7 +117,7 @@ struct SearchResultRow: View {
     private var sourceIcon: some View {
         Image(systemName: item.article.sourceType.iconName)
             .font(.caption2)
-            .foregroundStyle(Color.folio.textTertiary)
+            .foregroundStyle(FolioPaperPalette.tertiaryText)
             .accessibilityLabel(item.article.sourceType.displayName)
     }
 }

@@ -92,7 +92,7 @@ struct SettingsView: View {
             .padding(.horizontal, Spacing.screenPadding)
             .padding(.vertical, Spacing.md)
         }
-        .background(Color.folio.background)
+        .background(FolioPaperPalette.background)
         .sensoryFeedback(.impact(weight: .medium), trigger: logoutTrigger)
         .sheet(isPresented: $showUpgradeComparison) {
             UpgradeComparisonView()
@@ -111,16 +111,16 @@ struct SettingsView: View {
         VStack(spacing: Spacing.md) {
             Image(systemName: "person.crop.circle")
                 .font(.system(size: 56))
-                .foregroundStyle(Color.folio.textQuaternary.opacity(0.5))
+                .foregroundStyle(FolioPaperPalette.quaternaryText.opacity(0.7))
                 .padding(.top, Spacing.lg)
 
             Text("登录以同步知识")
                 .font(Typography.v3LoginPromptTitle)
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
 
             Text("登录后可使用 AI 摘要、云端同步等全部功能")
                 .font(.system(size: 13))
-                .foregroundStyle(Color.folio.textSecondary)
+                .foregroundStyle(FolioPaperPalette.secondaryText)
                 .multilineTextAlignment(.center)
 
             NavigationLink {
@@ -131,14 +131,18 @@ struct SettingsView: View {
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(Color.folio.textPrimary)
+                    .background(FolioPaperPalette.primaryText)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .padding(.top, Spacing.xs)
         }
         .padding(Spacing.screenPadding)
-        .background(Color.folio.echoBg)
+        .background(FolioPaperPalette.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(FolioPaperPalette.listDivider.opacity(0.6), lineWidth: 1)
+        }
     }
 
     // MARK: - Profile Card
@@ -148,41 +152,45 @@ struct SettingsView: View {
             // Avatar
             ZStack {
                 Circle()
-                    .fill(isPro ? Color.folio.accent : Color.folio.echoBg)
+                    .fill(isPro ? FolioPaperPalette.accentBlue : FolioPaperPalette.iconSurface)
                     .frame(width: 52, height: 52)
                 Text("F")
                     .font(.system(size: 20))
-                    .foregroundStyle(isPro ? .white : Color.folio.textPrimary)
+                    .foregroundStyle(isPro ? .white : FolioPaperPalette.primaryText)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: Spacing.xs) {
                     Text(user.nickname ?? user.email ?? "User")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Color.folio.textPrimary)
+                        .foregroundStyle(FolioPaperPalette.primaryText)
 
                     // Badge
                     Text(isPro ? "PRO" : "FREE")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(isPro ? .white : Color.folio.textTertiary)
+                        .foregroundStyle(isPro ? .white : FolioPaperPalette.tertiaryText)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(isPro ? Color.folio.accent : Color.folio.echoBg)
+                        .background(isPro ? FolioPaperPalette.accentBlue : FolioPaperPalette.iconSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                 }
 
                 if let email = user.email {
                     Text(email)
                         .font(.system(size: 13))
-                        .foregroundStyle(Color.folio.textTertiary)
+                        .foregroundStyle(FolioPaperPalette.tertiaryText)
                 }
             }
 
             Spacer()
         }
         .padding(Spacing.md)
-        .background(Color.folio.echoBg)
+        .background(FolioPaperPalette.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(FolioPaperPalette.listDivider.opacity(0.6), lineWidth: 1)
+        }
     }
 
     // MARK: - State 1: Pro Upgrade Card (Free User)
@@ -191,11 +199,11 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text("升级 Pro，解锁全部能力")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
 
             Text("每日 Echo · 无限问答 · 语义搜索 · 知识地图")
                 .font(.system(size: 13))
-                .foregroundStyle(Color.folio.textSecondary)
+                .foregroundStyle(FolioPaperPalette.secondaryText)
 
             Button {
                 showUpgradeComparison = true
@@ -205,14 +213,18 @@ struct SettingsView: View {
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
-                    .background(Color.folio.textPrimary)
+                    .background(FolioPaperPalette.primaryText)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .padding(.top, Spacing.xxs)
         }
         .padding(Spacing.screenPadding)
-        .background(Color.folio.echoBg)
+        .background(FolioPaperPalette.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(FolioPaperPalette.listDivider.opacity(0.6), lineWidth: 1)
+        }
     }
 
     // MARK: - State 2: Pro Info Card (Pro User)
@@ -222,23 +234,27 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Pro 订阅")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.folio.accent)
+                    .foregroundStyle(FolioPaperPalette.accentBlue)
 
                 if let expiresAt = user.subscriptionExpiresAt {
                     Text("有效期至 \(expiresAt.formatted(.dateTime.year().month().day())) · 自动续费")
                         .font(.system(size: 13))
-                        .foregroundStyle(Color.folio.textSecondary)
+                        .foregroundStyle(FolioPaperPalette.secondaryText)
                 } else {
                     Text("自动续费")
                         .font(.system(size: 13))
-                        .foregroundStyle(Color.folio.textSecondary)
+                        .foregroundStyle(FolioPaperPalette.secondaryText)
                 }
             }
             Spacer()
         }
         .padding(Spacing.md)
-        .background(Color.folio.accentSoft)
+        .background(FolioPaperPalette.accentSurface)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(FolioPaperPalette.accentBlue.opacity(0.18), lineWidth: 1)
+        }
     }
 
     // MARK: - Settings Sections
@@ -261,20 +277,20 @@ struct SettingsView: View {
                     HStack(spacing: Spacing.sm) {
                         Image(systemName: "map")
                             .font(.system(size: 14))
-                            .foregroundStyle(Color.folio.textSecondary)
+                            .foregroundStyle(FolioPaperPalette.secondaryText)
                             .frame(width: 28, height: 28)
-                            .background(Color.folio.background)
+                            .background(FolioPaperPalette.iconSurface)
                             .clipShape(RoundedRectangle(cornerRadius: 6))
 
                         Text("知识地图")
                             .font(.system(size: 16))
-                            .foregroundStyle(Color.folio.textPrimary)
+                            .foregroundStyle(FolioPaperPalette.primaryText)
 
                         Spacer()
 
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(Color.folio.textQuaternary)
+                            .foregroundStyle(FolioPaperPalette.quaternaryText)
                     }
                     .padding(.vertical, 14)
                     .padding(.horizontal, 16)
@@ -329,7 +345,7 @@ struct SettingsView: View {
             if let header {
                 Text(header)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.folio.textQuaternary)
+                    .foregroundStyle(FolioPaperPalette.quaternaryText)
                     .tracking(1.5)
                     .textCase(.uppercase)
                     .padding(.bottom, Spacing.xs)
@@ -338,8 +354,12 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 content()
             }
-            .background(Color.folio.echoBg)
+            .background(FolioPaperPalette.cardSurface)
             .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(FolioPaperPalette.listDivider.opacity(0.55), lineWidth: 1)
+            }
         }
     }
 
@@ -350,7 +370,7 @@ struct SettingsView: View {
         label: String,
         sublabel: String? = nil,
         value: String? = nil,
-        valueColor: Color = Color.folio.textTertiary,
+        valueColor: Color = FolioPaperPalette.tertiaryText,
         isPlaceholder: Bool = false,
         action: (() -> Void)? = nil
     ) -> some View {
@@ -361,20 +381,20 @@ struct SettingsView: View {
                 // Icon
                 Image(systemName: icon)
                     .font(.system(size: 14))
-                    .foregroundStyle(Color.folio.textSecondary)
+                    .foregroundStyle(FolioPaperPalette.secondaryText)
                     .frame(width: 28, height: 28)
-                    .background(Color.folio.background)
+                    .background(FolioPaperPalette.iconSurface)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(label)
                         .font(.system(size: 16))
-                        .foregroundStyle(Color.folio.textPrimary)
+                        .foregroundStyle(FolioPaperPalette.primaryText)
 
                     if let sublabel {
                         Text(sublabel)
                             .font(.system(size: 12))
-                            .foregroundStyle(Color.folio.textTertiary)
+                            .foregroundStyle(FolioPaperPalette.tertiaryText)
                     }
                 }
 
@@ -388,7 +408,7 @@ struct SettingsView: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color.folio.textQuaternary)
+                    .foregroundStyle(FolioPaperPalette.quaternaryText)
             }
             .padding(.vertical, 14)
             .padding(.horizontal, 16)
@@ -400,7 +420,7 @@ struct SettingsView: View {
 
     private var sectionSeparator: some View {
         Rectangle()
-            .fill(Color.folio.separator)
+            .fill(FolioPaperPalette.listDivider.opacity(0.65))
             .frame(height: 0.5)
             .padding(.leading, 56) // icon (28) + spacing (12) + padding (16)
     }
@@ -427,7 +447,7 @@ struct SettingsView: View {
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
         return Text("Folio v\(version) (Build \(build))")
             .font(.system(size: 12))
-            .foregroundStyle(Color.folio.textQuaternary)
+            .foregroundStyle(FolioPaperPalette.quaternaryText)
             .frame(maxWidth: .infinity, alignment: .center)
     }
 

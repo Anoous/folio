@@ -75,4 +75,28 @@ final class HomeQuotaSnapshotTests: XCTestCase {
         XCTAssertFalse(pro.shouldShowOnWorkbench)
         XCTAssertFalse(signedOut.shouldShowOnWorkbench)
     }
+
+    func testWorkbenchMetricsUseActualZeroCounts() {
+        let metrics = HomeWorkbenchMetrics(
+            processingCount: 0,
+            continueReadingCount: 0,
+            askableCount: 0
+        )
+
+        XCTAssertEqual(metrics.processingCount, 0)
+        XCTAssertEqual(metrics.continueReadingCount, 0)
+        XCTAssertEqual(metrics.askableCount, 0)
+    }
+
+    func testWorkbenchMetricsAreDerivedWithoutPadding() {
+        let metrics = HomeWorkbenchMetrics(
+            processingCount: 1,
+            continueReadingCount: 2,
+            askableCount: 3
+        )
+
+        XCTAssertEqual(metrics.processingCount, 1)
+        XCTAssertEqual(metrics.continueReadingCount, 2)
+        XCTAssertEqual(metrics.askableCount, 3)
+    }
 }

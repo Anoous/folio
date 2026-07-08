@@ -212,6 +212,15 @@ final class ReaderViewModelTests: XCTestCase {
         XCTAssertNil(url)
     }
 
+    func testOriginalLinkPolicyOpensSocialHostsExternally() throws {
+        XCTAssertTrue(ReaderOriginalLinkPolicy.shouldOpenExternally(URL(string: "https://x.com/example/status/1")!))
+        XCTAssertTrue(ReaderOriginalLinkPolicy.shouldOpenExternally(URL(string: "https://mobile.twitter.com/example/status/1")!))
+    }
+
+    func testOriginalLinkPolicyKeepsRegularHostsInWebView() throws {
+        XCTAssertFalse(ReaderOriginalLinkPolicy.shouldOpenExternally(URL(string: "https://example.com/article")!))
+    }
+
     // MARK: - Word Count Edge Cases
 
     @MainActor

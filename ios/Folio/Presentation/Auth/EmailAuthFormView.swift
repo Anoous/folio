@@ -38,5 +38,5 @@ struct EmailAuthFormView: View {
         onChangeEmail: {}
     )
     .padding()
-    .background(Color.folio.background)
+    .background(FolioPaperPalette.background)
 }

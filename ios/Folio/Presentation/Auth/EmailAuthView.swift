@@ -13,12 +13,12 @@ struct EmailAuthView: View {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     Text(title)
                         .font(Typography.pageTitle)
-                        .foregroundStyle(Color.folio.textPrimary)
+                        .foregroundStyle(FolioPaperPalette.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
 
                     Text(subtitle)
                         .font(Typography.body)
-                        .foregroundStyle(Color.folio.textSecondary)
+                        .foregroundStyle(FolioPaperPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.top, Spacing.xl)
@@ -45,12 +45,12 @@ struct EmailAuthView: View {
 
                 Text("继续即表示使用此邮箱登录或创建账号。")
                     .font(Typography.caption)
-                    .foregroundStyle(Color.folio.textTertiary)
+                    .foregroundStyle(FolioPaperPalette.tertiaryText)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
             .padding(.horizontal, Spacing.screenPadding)
         }
-        .background(Color.folio.background.ignoresSafeArea())
+        .background(FolioPaperPalette.background.ignoresSafeArea())
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("邮箱登录")
         .navigationBarTitleDisplayMode(.inline)

@@ -86,11 +86,11 @@ struct EchoCardView: View {
                 Image(systemName: "sparkle")
                     .font(.system(size: 25, weight: .semibold))
                     .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(FolioPaperPalette.accentBlue)
+                    .foregroundStyle(FolioPaperPalette.freshMint)
 
                 Text("今日 Echo")
                     .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(FolioPaperPalette.ink)
+                    .foregroundStyle(FolioPaperPalette.primaryText)
 
                 Spacer()
             }
@@ -103,7 +103,7 @@ struct EchoCardView: View {
 
             Text(card.question)
                 .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(FolioPaperPalette.ink)
+                .foregroundStyle(FolioPaperPalette.primaryText)
                 .lineSpacing(8)
                 .multilineTextAlignment(.leading)
                 .lineLimit(3)
@@ -130,14 +130,14 @@ struct EchoCardView: View {
                                 .fill(
                                     LinearGradient(
                                         colors: [
-                                            Color(red: 0.310, green: 0.596, blue: 1.000),
-                                            Color(red: 0.073, green: 0.390, blue: 0.895),
+                                            Color(red: 0.270, green: 0.680, blue: 0.920),
+                                            Color(red: 0.110, green: 0.500, blue: 0.835),
                                         ],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .shadow(color: FolioPaperPalette.accentBlue.opacity(0.28), radius: 10, x: 0, y: 5)
+                                .shadow(color: FolioPaperPalette.accentBlue.opacity(0.20), radius: 12, x: 0, y: 6)
                         }
                 }
                 .buttonStyle(.plain)
@@ -160,12 +160,12 @@ struct EchoCardView: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "doc.text")
                 .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(Color.gray.opacity(0.72))
+                .foregroundStyle(FolioPaperPalette.quaternaryText)
                 .padding(.top, 2)
 
             Text(sourceTitle)
                 .font(.system(size: 16, weight: .regular))
-                .foregroundStyle(Color.gray.opacity(0.76))
+                .foregroundStyle(FolioPaperPalette.tertiaryText)
                 .lineLimit(2)
                 .lineSpacing(3)
         }
@@ -194,11 +194,11 @@ struct EchoCardView: View {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Label("答案", systemImage: "checkmark.circle")
                     .font(.headline)
-                    .foregroundStyle(FolioPaperPalette.ink)
+                    .foregroundStyle(FolioPaperPalette.primaryText)
 
                 Text(card.answer)
                     .font(.body)
-                    .foregroundStyle(FolioPaperPalette.ink)
+                    .foregroundStyle(FolioPaperPalette.primaryText)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
                     .opacity(answerVisible ? 1 : 0)
@@ -245,7 +245,7 @@ struct EchoCardView: View {
                     systemImage: result == "remembered" ? "checkmark.circle" : "arrow.counterclockwise.circle"
                 )
                 .font(.body)
-                .foregroundStyle(FolioPaperPalette.ink)
+                .foregroundStyle(FolioPaperPalette.primaryText)
             }
 
             if let response = reviewResponse {

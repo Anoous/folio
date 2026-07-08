@@ -20,8 +20,8 @@ struct PaperSheetView<Content: View>: View {
                 .frame(width: 48, height: 48)
         }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: Color.black.opacity(0.045), radius: 2, x: 0, y: 1)
-        .shadow(color: Color.black.opacity(0.105), radius: 18, x: 0, y: 14)
+        .shadow(color: FolioPaperPalette.shadowTint.opacity(0.08), radius: 2, x: 0, y: 1)
+        .shadow(color: FolioPaperPalette.shadowTint.opacity(0.14), radius: 22, x: 0, y: 15)
     }
 
     private var paperBody: some View {
@@ -33,11 +33,11 @@ struct PaperSheetView<Content: View>: View {
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.72), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.78), lineWidth: 1)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.black.opacity(0.045), lineWidth: 1)
+                    .stroke(FolioPaperPalette.listDivider.opacity(0.55), lineWidth: 1)
             }
     }
 }
@@ -57,9 +57,9 @@ private struct BinderHoleColumn: View {
                         .frame(width: 22, height: 22)
                         .overlay {
                             Circle()
-                                .stroke(Color.black.opacity(0.035), lineWidth: 1)
+                                .stroke(FolioPaperPalette.listDivider.opacity(0.5), lineWidth: 1)
                         }
-                        .shadow(color: Color.black.opacity(0.045), radius: 1.5, x: 0.8, y: 0.8)
+                        .shadow(color: FolioPaperPalette.shadowTint.opacity(0.08), radius: 1.5, x: 0.8, y: 0.8)
                         .position(x: 14, y: 20 + CGFloat(index) * spacing)
                 }
             }
@@ -115,7 +115,7 @@ private struct PaperFoldView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                .shadow(color: Color.black.opacity(0.08), radius: 5, x: -3, y: -3)
+                .shadow(color: FolioPaperPalette.shadowTint.opacity(0.10), radius: 5, x: -3, y: -3)
 
             PaperFoldShape()
                 .stroke(Color.white.opacity(0.76), lineWidth: 1)

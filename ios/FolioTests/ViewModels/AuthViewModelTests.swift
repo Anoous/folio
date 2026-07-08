@@ -156,6 +156,7 @@ final class AuthViewModelTests: XCTestCase {
         await authViewModel.sendEmailCode(email: "reader@example.com")
 
         XCTAssertNil(authViewModel.errorMessage)
+        XCTAssertFalse(authViewModel.actionState.isLoading)
         XCTAssertFalse(authViewModel.isLoading)
     }
 
@@ -167,6 +168,7 @@ final class AuthViewModelTests: XCTestCase {
         await authViewModel.sendEmailCode(email: "reader@example.com")
 
         XCTAssertEqual(authViewModel.errorMessage, "无法连接本地 Folio API，请先启动后端服务。")
+        XCTAssertEqual(authViewModel.actionState.errorMessage, "无法连接本地 Folio API，请先启动后端服务。")
         XCTAssertFalse(authViewModel.isLoading)
     }
 

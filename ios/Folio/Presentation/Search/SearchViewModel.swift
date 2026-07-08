@@ -1,7 +1,6 @@
 import Foundation
-import os
+import Observation
 import SwiftData
-import SwiftUI
 import Combine
 
 @MainActor
@@ -20,6 +19,7 @@ final class SearchViewModel {
     var popularTags: [Tag] = []
     var searchHistory: [String] = []
     var syncedArticleCount: Int = 0
+    var state: ViewState<[SearchResultItem]> = .idle
 
     // MARK: - Dependencies
 
@@ -29,7 +29,7 @@ final class SearchViewModel {
     private let searchTextSubject = PassthroughSubject<String, Never>()
     private var cancellables = Set<AnyCancellable>()
 
-    static let historyKey = AppConstants.searchHistoryKey
+    nonisolated static let historyKey = AppConstants.searchHistoryKey
     private static let maxHistoryCount = 10
 
     // MARK: - Search Result Item
@@ -76,9 +76,7 @@ final class SearchViewModel {
             .sink { [weak self] query in
                 guard let self else { return }
                 if query.trimmingCharacters(in: .whitespaces).isEmpty {
-                    self.results = []
-                    self.showsEmptyState = false
-                    self.isSearching = false
+                    self.applyState(.idle)
                 } else {
                     self.performSearch()
                 }
@@ -91,17 +89,11 @@ final class SearchViewModel {
     func performSearch() {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else {
-            results = []
-            showsEmptyState = false
-            searchError = nil
-            resultCount = 0
-            isSearching = false
+            applyState(.idle)
             return
         }
 
-        isSearching = true
-        showsEmptyState = false
-        searchError = nil
+        applyState(.loading)
 
         do {
             let searchResults = try searchManager.searchWithSnippet(query: query, limit: 20)
@@ -119,18 +111,49 @@ final class SearchViewModel {
                 }
             }
 
-            results = items
-            resultCount = items.count
-            showsEmptyState = items.isEmpty
+            applyState(items.isEmpty ? .empty : .loaded(items))
         } catch {
             FolioLogger.data.error("search failed: \(error)")
+            let message = (error as? UserFacingError)?.userMessage ?? error.localizedDescription
+            applyState(.error(message))
+        }
+    }
+
+    private func applyState(_ newState: ViewState<[SearchResultItem]>) {
+        state = newState
+
+        switch newState {
+        case .idle:
             results = []
             resultCount = 0
+            isSearching = false
             showsEmptyState = false
-            searchError = error.localizedDescription
+            searchError = nil
+        case .loading:
+            results = []
+            resultCount = 0
+            isSearching = true
+            showsEmptyState = false
+            searchError = nil
+        case .loaded(let items):
+            results = items
+            resultCount = items.count
+            isSearching = false
+            showsEmptyState = false
+            searchError = nil
+        case .empty:
+            results = []
+            resultCount = 0
+            isSearching = false
+            showsEmptyState = true
+            searchError = nil
+        case .error(let message):
+            results = []
+            resultCount = 0
+            isSearching = false
+            showsEmptyState = false
+            searchError = message
         }
-
-        isSearching = false
     }
 
     // MARK: - Search History

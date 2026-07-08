@@ -28,11 +28,11 @@ struct UpgradeComparisonView: View {
                     VStack(spacing: Spacing.xs) {
                         Text("Folio Pro")
                             .font(Typography.v3ComparisonTitle)
-                            .foregroundStyle(Color.folio.textPrimary)
+                            .foregroundStyle(FolioPaperPalette.primaryText)
 
                         Text("解锁 Folio 的全部能力")
                             .font(.system(size: 15))
-                            .foregroundStyle(Color.folio.textSecondary)
+                            .foregroundStyle(FolioPaperPalette.secondaryText)
                     }
                     .padding(.top, Spacing.lg)
 
@@ -53,7 +53,7 @@ struct UpgradeComparisonView: View {
                                     .tint(.white)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 16)
-                                    .background(Color.folio.textPrimary)
+                                    .background(FolioPaperPalette.primaryText)
                                     .clipShape(RoundedRectangle(cornerRadius: 14))
                             } else {
                                 Text("升级 Pro — \(yearlyPriceText)")
@@ -61,7 +61,7 @@ struct UpgradeComparisonView: View {
                                     .foregroundStyle(.white)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 16)
-                                    .background(Color.folio.textPrimary)
+                                    .background(FolioPaperPalette.primaryText)
                                     .clipShape(RoundedRectangle(cornerRadius: 14))
                             }
                         }
@@ -75,18 +75,18 @@ struct UpgradeComparisonView: View {
 
                         Text("或 \(monthlyPriceText) · 随时取消")
                             .font(.system(size: 13))
-                            .foregroundStyle(Color.folio.textTertiary)
+                            .foregroundStyle(FolioPaperPalette.tertiaryText)
 
                         Text("7 天免费试用 · 试用期内取消不收费")
                             .font(.system(size: 12))
-                            .foregroundStyle(Color.folio.textQuaternary)
+                            .foregroundStyle(FolioPaperPalette.quaternaryText)
 
                         Button {
                             Task { await subscriptionManager?.restorePurchases() }
                         } label: {
                             Text("恢复购买")
                                 .font(.system(size: 13))
-                                .foregroundStyle(Color.folio.textSecondary)
+                                .foregroundStyle(FolioPaperPalette.secondaryText)
                         }
                         .padding(.top, Spacing.xxs)
                     }
@@ -95,7 +95,7 @@ struct UpgradeComparisonView: View {
                 .padding(.horizontal, Spacing.screenPadding)
                 .padding(.bottom, Spacing.xl)
             }
-            .background(Color.folio.background)
+            .background(FolioPaperPalette.background)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -103,7 +103,7 @@ struct UpgradeComparisonView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 24))
-                            .foregroundStyle(Color.folio.textQuaternary)
+                            .foregroundStyle(FolioPaperPalette.quaternaryText)
                     }
                 }
             }
@@ -119,18 +119,18 @@ struct UpgradeComparisonView: View {
                 Spacer()
                 Text("Free")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.folio.textTertiary)
+                    .foregroundStyle(FolioPaperPalette.tertiaryText)
                     .frame(width: 56, alignment: .center)
                 Text("Pro")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.folio.accent)
+                    .foregroundStyle(FolioPaperPalette.accentBlue)
                     .frame(width: 56, alignment: .center)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
 
             Rectangle()
-                .fill(Color.folio.separator)
+                .fill(FolioPaperPalette.listDivider.opacity(0.65))
                 .frame(height: 0.5)
 
             // Rows
@@ -143,21 +143,25 @@ struct UpgradeComparisonView: View {
 
                 if index < comparisonRows.count - 1 {
                     Rectangle()
-                        .fill(Color.folio.separator)
+                        .fill(FolioPaperPalette.listDivider.opacity(0.65))
                         .frame(height: 0.5)
                         .padding(.leading, 16)
                 }
             }
         }
-        .background(Color.folio.echoBg)
+        .background(FolioPaperPalette.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(FolioPaperPalette.listDivider.opacity(0.55), lineWidth: 1)
+        }
     }
 
     private func comparisonRow(feature: String, freeValue: ComparisonValue, proValue: ComparisonValue) -> some View {
         HStack {
             Text(feature)
                 .font(.system(size: 15))
-                .foregroundStyle(Color.folio.textPrimary)
+                .foregroundStyle(FolioPaperPalette.primaryText)
 
             Spacer()
 
@@ -180,11 +184,11 @@ struct UpgradeComparisonView: View {
         case .dash:
             Text("—")
                 .font(.system(size: 14))
-                .foregroundStyle(Color.folio.textQuaternary)
+                .foregroundStyle(FolioPaperPalette.quaternaryText)
         case .text(let string):
             Text(string)
                 .font(.system(size: 13))
-                .foregroundStyle(Color.folio.textSecondary)
+                .foregroundStyle(FolioPaperPalette.secondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }

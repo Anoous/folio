@@ -1,54 +1,55 @@
 import SwiftUI
 
 struct FolioTabBarView: View {
-    enum Selection {
-        case today
-        case library
-        case ask
-        case me
-    }
+    let selection: HomeTab
+    let onSelect: (HomeTab) -> Void
 
-    let selection: Selection
-    let onSelect: (Selection) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selectionNamespace
 
     var body: some View {
-        GlassPillView(cornerRadius: 34) {
+        GlassPillView(cornerRadius: 31) {
             HStack(spacing: 0) {
-                tabItem(.today, title: "今日", systemImage: "house.fill")
-                tabItem(.library, title: "资料库", systemImage: "books.vertical")
-                tabItem(.ask, title: "提问", systemImage: "bubble.left")
-                tabItem(.me, title: "我", systemImage: "person")
+                ForEach(HomeTab.allCases) { item in
+                    tabItem(item)
+                }
             }
-            .padding(.horizontal, 10)
-            .frame(height: 64)
+            .padding(.horizontal, 8)
+            .frame(height: 58)
         }
         .frame(maxWidth: .infinity)
+        .animation(Motion.resolved(.spring(duration: 0.26, bounce: 0.08), reduceMotion: reduceMotion), value: selection)
+        .sensoryFeedback(.selection, trigger: selection)
     }
 
-    private func tabItem(_ item: Selection, title: String, systemImage: String) -> some View {
+    private func tabItem(_ item: HomeTab) -> some View {
         Button {
+            guard item != selection else { return }
             onSelect(item)
         } label: {
             VStack(spacing: 3) {
-                Image(systemName: systemImage)
-                    .font(.system(size: item == .today ? 21 : 21, weight: .regular))
+                Image(systemName: item.systemImage)
+                    .font(.system(size: 20, weight: .regular))
                     .symbolRenderingMode(.monochrome)
-                    .frame(height: 28)
+                    .frame(height: 26)
 
-                Text(title)
-                    .font(.system(size: 12, weight: item == selection ? .semibold : .regular))
+                Text(item.title)
+                    .font(.system(size: 11, weight: item == selection ? .semibold : .regular))
             }
-            .foregroundStyle(item == selection ? FolioPaperPalette.accentBlue : Color.gray.opacity(0.92))
-            .frame(maxWidth: .infinity, minHeight: 56)
+            .foregroundStyle(item == selection ? FolioPaperPalette.accentBlue : FolioPaperPalette.tabInactive)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             .background {
                 if item == selection {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(Color.white.opacity(0.28))
+                        .fill(Color.white.opacity(0.34))
                         .blur(radius: 0.1)
+                        .matchedGeometryEffect(id: "selected-tab-background", in: selectionNamespace)
                 }
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(title)
+        .accessibilityLabel(item.title)
+        .accessibilityAddTraits(item == selection ? .isSelected : [])
     }
 }

@@ -28,4 +28,28 @@ final class MarkdownToHTMLTests: XCTestCase {
         XCTAssertFalse(html.contains("var pct = window.scrollY / Math.max(1, document.body.scrollHeight - window.innerHeight);"))
         XCTAssertFalse(html.contains("window.scrollTo(0, (document.body.scrollHeight - window.innerHeight) * pct);"))
     }
+
+    func testConvertWithHeader_exposesReaderBridgeForNativeSelectionMenu() {
+        let html = MarkdownToHTML.convertWithHeader(
+            markdown: "Selectable body paragraph",
+            header: .init(
+                title: "Title",
+                siteName: nil,
+                author: nil,
+                readingTime: "1 min read",
+                dateLabel: "today",
+                summary: nil,
+                keyPoints: []
+            ),
+            highlights: [],
+            fontSize: 17,
+            lineSpacing: 11.9,
+            fontFamily: .notoSerif,
+            theme: .system
+        )
+
+        XCTAssertTrue(html.contains("window.FolioReader"))
+        XCTAssertTrue(html.contains("getTextOffset: getTextOffset"))
+        XCTAssertTrue(html.contains("attachHighlightPopup: attachHighlightPopup"))
+    }
 }

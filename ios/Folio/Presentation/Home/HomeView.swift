@@ -4,13 +4,15 @@ import SwiftUI
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AuthViewModel.self) private var authViewModel: AuthViewModel?
     @Environment(OfflineQueueManager.self) private var offlineQueueManager: OfflineQueueManager?
     @Environment(SyncService.self) private var syncService: SyncService?
+    @State private var tabCoordinator = HomeTabCoordinator()
     @State private var viewModel: HomeViewModel?
     @State private var searchViewModel: SearchViewModel?
-    @State private var searchText = ""
-    @State private var isSearchActive = false
+    @State private var librarySearchText = ""
+    @State private var askText = ""
     @State private var showNoteSheet = false
     @State private var noteSheetText = ""
     @State private var articleToDelete: Article?
@@ -23,7 +25,6 @@ struct HomeView: View {
     @State private var refreshTrigger = false
     @State private var recentSearchesVersion = 0
     @State private var saveService: ContentSaveService?
-    @State private var showSettings = false
     @AppStorage(AppConstants.dismissedMilestonesKey) private var dismissedMilestonesRaw = ""
 
     // MARK: - Milestone Helpers
@@ -74,23 +75,17 @@ struct HomeView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                if !isSearchActive { topBar }
+                topBar
                 mainContent
             }
 
-            if !isSearchActive {
-                FolioTabBarView(selection: .today) { selection in
-                    handleTabSelection(selection)
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 2)
-                .offset(y: 10)
+            FolioTabBarView(selection: tabCoordinator.selection) { selection in
+                handleTabSelection(selection)
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
         }
         .navigationBarHidden(true)
-        .navigationDestination(isPresented: $showSettings) {
-            SettingsView()
-        }
         .toast(isPresented: showToastBinding, message: viewModel?.toastMessage ?? "", icon: viewModel?.toastIcon)
         .alert(
             deleteConfirmTitle,
@@ -115,7 +110,8 @@ struct HomeView: View {
                 } else {
                     saveManualContent(content)
                 }
-                searchText = ""
+                librarySearchText = ""
+                askText = ""
             }
         }
         .sheet(isPresented: $showShareSheet) {
@@ -143,8 +139,8 @@ struct HomeView: View {
 
     private var topBar: some View {
         HStack(alignment: .center) {
-            Text("页集")
-                .font(.custom("LXGWWenKaiTC-Medium", size: 52))
+            Text(tabCoordinator.selection.pageTitle)
+                .font(.custom("LXGWWenKaiTC-Medium", size: 46))
                 .foregroundStyle(FolioPaperPalette.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.9)
@@ -152,19 +148,27 @@ struct HomeView: View {
             Spacer()
 
             HStack(spacing: 14) {
-                GlassCircleButton(title: "搜索", systemImage: "magnifyingglass") {
-                    isSearchActive = true
+                if tabCoordinator.selection != .library {
+                    GlassCircleButton(title: "搜索", systemImage: "magnifyingglass") {
+                        withTabAnimation {
+                            tabCoordinator.openLibrarySearch()
+                        }
+                    }
                 }
 
-                GlassCircleButton(title: "设置", systemImage: "gearshape") {
-                    showSettings = true
+                if tabCoordinator.selection != .me {
+                    GlassCircleButton(title: "我", systemImage: "gearshape") {
+                        withTabAnimation {
+                            tabCoordinator.select(.me)
+                        }
+                    }
                 }
             }
         }
-        .frame(height: 74)
+        .frame(height: 68)
         .padding(.horizontal, 29)
-        .padding(.top, 7)
-        .padding(.bottom, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 10)
         .background(FolioPaperPalette.background)
     }
 
@@ -172,32 +176,70 @@ struct HomeView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        if isSearchActive, let vm = viewModel {
-            HomeSearchView(
-                searchText: $searchText,
-                viewModel: vm,
-                searchViewModel: searchViewModel,
-                recentSearches: recentSearches,
-                onDismiss: { isSearchActive = false },
-                onSaveURL: { url in saveURL(url) },
-                onSaveNote: { content in
-                    noteSheetText = content
-                    showNoteSheet = true
-                },
-                onShowNoteSheet: {
-                    noteSheetText = ""
-                    showNoteSheet = true
-                    isSearchActive = false
-                },
-                onSaveRecentSearch: { query in saveRecentSearch(query) },
-                findExistingArticle: { text in findExistingArticle(for: text) }
-            )
-        } else if let vm = viewModel {
-            workbenchView(vm)
+        if let vm = viewModel {
+            ZStack {
+                tabLayer(.today) {
+                    workbenchView(vm)
+                }
+
+                tabLayer(.library) {
+                    HomeLibraryView(
+                        viewModel: vm,
+                        searchViewModel: searchViewModel,
+                        searchText: $librarySearchText,
+                        focusRequest: tabCoordinator.focusRequest,
+                        onSaveURL: { url in saveURL(url) },
+                        onSaveNote: { content in
+                            noteSheetText = content
+                            showNoteSheet = true
+                        },
+                        findExistingArticle: { text in findExistingArticle(for: text) },
+                        onArticleAction: { action, article in
+                            handleArticleAction(action, article: article, vm: vm)
+                        }
+                    )
+                }
+
+                tabLayer(.ask) {
+                    HomeAskView(
+                        viewModel: vm,
+                        query: $askText,
+                        recentSearches: recentSearches,
+                        isAuthenticated: authViewModel?.isAuthenticated ?? false,
+                        focusRequest: tabCoordinator.focusRequest,
+                        onSaveRecentSearch: saveRecentSearch,
+                        onOpenAccount: {
+                            withTabAnimation {
+                                tabCoordinator.select(.me)
+                            }
+                        }
+                    )
+                }
+
+                tabLayer(.me) {
+                    SettingsView()
+                        .safeAreaInset(edge: .bottom) {
+                            Color.clear.frame(height: 112)
+                        }
+                }
+            }
+            .animation(Motion.resolved(Motion.ink, reduceMotion: reduceMotion), value: tabCoordinator.selection)
         } else {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func tabLayer<Content: View>(
+        _ tab: HomeTab,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let isSelected = tabCoordinator.selection == tab
+        return content()
+            .opacity(isSelected ? 1 : 0)
+            .offset(y: isSelected || reduceMotion ? 0 : 6)
+            .allowsHitTesting(isSelected)
+            .accessibilityHidden(!isSelected)
     }
 
     private func workbenchView(_ vm: HomeViewModel) -> some View {
@@ -209,11 +251,15 @@ struct HomeView: View {
             activeMilestone: activeMilestone,
             onDismissMilestone: dismissMilestone,
             onOpenSearch: {
-                searchText = ""
-                isSearchActive = true
+                librarySearchText = ""
+                withTabAnimation {
+                    tabCoordinator.openLibrarySearch()
+                }
             },
             onOpenSettings: {
-                showSettings = true
+                withTabAnimation {
+                    tabCoordinator.select(.me)
+                }
             },
             onPasteURL: { url in
                 saveURL(url.absoluteString)
@@ -265,18 +311,17 @@ struct HomeView: View {
         }
     }
 
-    private func handleTabSelection(_ selection: FolioTabBarView.Selection) {
-        switch selection {
-        case .today:
-            break
-        case .library:
-            searchText = ""
-            isSearchActive = true
-        case .ask:
-            searchText = ""
-            isSearchActive = true
-        case .me:
-            showSettings = true
+    private func handleTabSelection(_ selection: HomeTab) {
+        withTabAnimation {
+            tabCoordinator.select(selection)
+        }
+    }
+
+    private func withTabAnimation(_ updates: () -> Void) {
+        if reduceMotion {
+            updates()
+        } else {
+            withAnimation(Motion.ink, updates)
         }
     }
 
@@ -425,13 +470,11 @@ struct HomeView: View {
     private func handleScenePhaseChange(_ newPhase: ScenePhase) {
         if newPhase == .active {
             let flag = UserDefaults.appGroup.bool(forKey: AppConstants.shareExtensionDidSaveKey)
-            FolioLogger.data.info("home-debug: scenePhase=active, shareFlag=\(flag)")
             if flag {
                 UserDefaults.appGroup.set(false, forKey: AppConstants.shareExtensionDidSaveKey)
                 viewModel?.fetchArticles()
                 SearchIndexCoordinator.shared.rebuild(context: modelContext)
                 searchViewModel?.refreshSyncedCount(context: modelContext)
-                FolioLogger.data.info("home-debug: fetchArticles called, vm.articles.count=\(viewModel?.articles.count ?? -1)")
             }
         }
     }

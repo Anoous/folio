@@ -1,5 +1,5 @@
 import Foundation
-import os
+import Observation
 import SwiftData
 
 @MainActor
@@ -74,8 +74,8 @@ final class SyncService {
     // MARK: - Full Sync
 
     func performFullSync() async {
-        cancelPollingTasks()
         guard !isSyncing else {
+            cancelPollingTasks()
             FolioLogger.sync.debug("full sync skipped — already syncing")
             return
         }
@@ -83,35 +83,73 @@ final class SyncService {
         defer { isSyncing = false }
 
         FolioLogger.sync.info("starting full sync")
-        await syncDeletions()
-        await syncPendingUpdates()
-        await syncCategories()
-        await syncTags()
-        await fullSyncArticles()           // Pull server state (including deletions)
-        await submitLocalPendingArticles()  // THEN submit remaining pending articles
-        await syncUserQuota()
-        cleanupOldDeletionRecords()
-        searchIndexCoordinator.rebuild(context: context)
+        await makeSyncRunWorkflow().run(.full)
         FolioLogger.sync.info("full sync completed")
     }
 
     // MARK: - Incremental Sync (public entry point)
 
     func incrementalSync() async {
-        cancelPollingTasks()
         guard !isSyncing else {
+            cancelPollingTasks()
             FolioLogger.sync.debug("incremental sync skipped — already syncing")
             return
         }
         isSyncing = true
         defer { isSyncing = false }
 
-        await syncDeletions()
-        await syncPendingUpdates()
-        await incrementalSyncArticles()     // Pull server state (including deletions)
-        await submitLocalPendingArticles()  // THEN submit remaining pending articles
-        await fetchProcessingArticles()
-        searchIndexCoordinator.rebuild(context: context)
+        await makeSyncRunWorkflow().run(.incremental)
+    }
+
+    private func makeSyncRunWorkflow() -> SyncRunWorkflow {
+        SyncRunWorkflow(operations: .init(
+            cancelPollingTasks: { [weak self] in
+                self?.cancelPollingTasks()
+            },
+            syncDeletions: { [weak self] in
+                guard let self else { return }
+                await self.syncDeletions()
+            },
+            syncPendingUpdates: { [weak self] in
+                guard let self else { return }
+                await self.syncPendingUpdates()
+            },
+            syncCategories: { [weak self] in
+                guard let self else { return }
+                await self.syncCategories()
+            },
+            syncTags: { [weak self] in
+                guard let self else { return }
+                await self.syncTags()
+            },
+            fullSyncArticles: { [weak self] in
+                guard let self else { return }
+                await self.fullSyncArticles()
+            },
+            incrementalSyncArticles: { [weak self] in
+                guard let self else { return }
+                await self.incrementalSyncArticles()
+            },
+            submitLocalPendingArticles: { [weak self] in
+                guard let self else { return }
+                await self.submitLocalPendingArticles()
+            },
+            syncUserQuota: { [weak self] in
+                guard let self else { return }
+                await self.syncUserQuota()
+            },
+            cleanupOldDeletionRecords: { [weak self] in
+                self?.cleanupOldDeletionRecords()
+            },
+            fetchProcessingArticles: { [weak self] in
+                guard let self else { return }
+                await self.fetchProcessingArticles()
+            },
+            rebuildSearchIndex: { [weak self] in
+                guard let self else { return }
+                self.searchIndexCoordinator.rebuild(context: self.context)
+            }
+        ))
     }
 
     // MARK: - Quota Sync

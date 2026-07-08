@@ -55,6 +55,8 @@ targets:
           - com.folio.article-processing
         UIBackgroundModes:
           - processing
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UILaunchScreen: {}
         UIAppFonts:
           - LXGWWenKaiTC-Regular.ttf
@@ -95,6 +97,7 @@ targets:
           - "Article+Actions.swift"
       - path: Folio/Data/SwiftData/DataManager.swift
       - path: Folio/Data/SwiftData/SharedDataManager.swift
+      - path: Folio/Data/SwiftData/ContentIntakeWorkflow.swift
       - path: Folio/Presentation/Components/Spacing.swift
       - path: Folio/Presentation/Components/Typography.swift
       - path: Folio/Presentation/Components/CornerRadius.swift
