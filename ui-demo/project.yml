@@ -1,0 +1,70 @@
+name: FolioUIDemo
+options:
+  bundleIdPrefix: com.folio
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "26.0"
+  generateEmptyDirectories: true
+  knownRegions:
+    - en
+    - zh-Hans
+
+settings:
+  base:
+    SWIFT_VERSION: "6.2"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  FolioUIDemo:
+    type: application
+    platform: iOS
+    sources:
+      - path: FolioUIDemo
+    info:
+      path: FolioUIDemo/Info.plist
+      properties:
+        CFBundleDisplayName: Folio UI Demo
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIAppFonts:
+          - NotoSerifSC-Variable.ttf
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.folio.uidemo
+        PRODUCT_NAME: FolioUIDemo
+        GENERATE_INFOPLIST_FILE: false
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+
+  FolioUIDemoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: FolioUIDemoUITests
+    dependencies:
+      - target: FolioUIDemo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.folio.uidemo.uitests
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        GENERATE_INFOPLIST_FILE: true
+
+schemes:
+  FolioUIDemo:
+    build:
+      targets:
+        FolioUIDemo: all
+    run:
+      config: Debug
+    test:
+      targets:
+        - FolioUIDemoUITests
+    archive:
+      config: Release
