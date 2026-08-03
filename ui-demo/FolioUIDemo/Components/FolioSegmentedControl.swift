@@ -8,10 +8,29 @@ struct FolioSegmentedControl: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        GlassEffectContainer(spacing: 0) {
-            HStack(spacing: 0) {
-                ForEach(titles.indices, id: \.self) { index in
-                    Button(action: { select(index) }) {
+        HStack(spacing: 0) {
+            ForEach(titles.indices, id: \.self) { index in
+                Button(action: { select(index) }) {
+                    ZStack {
+                        if selectedIndex == index {
+                            if reduceMotion {
+                                Capsule()
+                                    .fill(selectionFill)
+                                    .overlay(selectionHighlight)
+                                    .shadow(color: selectionShadow, radius: 3, y: 1)
+                                    .transition(.opacity)
+                            } else {
+                                Capsule()
+                                    .fill(selectionFill)
+                                    .overlay(selectionHighlight)
+                                    .shadow(color: selectionShadow, radius: 3, y: 1)
+                                    .matchedGeometryEffect(
+                                        id: "selected-segment-indicator",
+                                        in: selectionNamespace
+                                    )
+                            }
+                        }
+
                         Text(titles[index])
                             .font(FolioTypography.editorial(15, relativeTo: .subheadline))
                             .foregroundStyle(
@@ -19,38 +38,29 @@ struct FolioSegmentedControl: View {
                                     ? FolioPalette.inkGreenDeep
                                     : FolioPalette.secondaryText
                             )
-                            .frame(maxWidth: .infinity)
-                            .frame(minHeight: FolioMetrics.segmentedControlVisualHeight)
-                            .contentShape(.capsule)
-                            .glassEffect(
-                                selectedIndex == index ? selectedGlass : .identity,
-                                in: .capsule
-                            )
-                            .glassEffectID(
-                                selectedIndex == index ? "selected-segment" : nil,
-                                in: selectionNamespace
-                            )
-                            .glassEffectTransition(.matchedGeometry)
                     }
-                        .frame(minHeight: FolioMetrics.minimumTapTarget)
-                        .contentShape(.rect)
-                        .buttonStyle(FolioPressButtonStyle())
-                        .accessibilityAddTraits(selectedIndex == index ? .isSelected : [])
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: FolioMetrics.segmentedControlVisualHeight)
+                    .contentShape(.capsule)
                 }
-            }
-            .frame(maxWidth: FolioMetrics.segmentedControlMaxWidth)
-            .background {
-                Capsule()
-                    .fill(
-                        reduceTransparency
-                            ? FolioPalette.surface.opacity(0.96)
-                            : FolioPalette.evidence.opacity(0.24)
-                    )
-                    .frame(height: FolioMetrics.segmentedControlVisualHeight)
+                    .frame(minHeight: FolioMetrics.minimumTapTarget)
+                    .contentShape(.rect)
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(selectedIndex == index ? .isSelected : [])
             }
         }
+        .frame(maxWidth: FolioMetrics.segmentedControlMaxWidth)
+        .background {
+            Capsule()
+                .fill(
+                    reduceTransparency
+                        ? FolioPalette.surface.opacity(0.96)
+                        : FolioPalette.evidence.opacity(0.24)
+                )
+                .frame(height: FolioMetrics.segmentedControlVisualHeight)
+        }
         .frame(maxWidth: .infinity)
-        .animation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion), value: selectedIndex)
+        .animation(FolioMotion.segmentSelection(reduceMotion: reduceMotion), value: selectedIndex)
         .sensoryFeedback(.selection, trigger: selectedIndex)
     }
 
@@ -58,7 +68,18 @@ struct FolioSegmentedControl: View {
         selectedIndex = index
     }
 
-    private var selectedGlass: Glass {
-        reduceTransparency ? .identity : .clear.tint(FolioPalette.subtleGreen).interactive()
+    private var selectionFill: Color {
+        reduceTransparency
+            ? FolioPalette.surface
+            : FolioPalette.subtleGreen.opacity(0.82)
+    }
+
+    private var selectionHighlight: some View {
+        Capsule()
+            .stroke(Color.white.opacity(reduceTransparency ? 0.4 : 0.72), lineWidth: 0.75)
+    }
+
+    private var selectionShadow: Color {
+        Color.black.opacity(reduceTransparency ? 0.04 : 0.07)
     }
 }

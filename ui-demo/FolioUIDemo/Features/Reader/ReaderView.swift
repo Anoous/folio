@@ -2,30 +2,33 @@ import SwiftUI
 
 struct ReaderContentView: View {
     let article: DemoArticle
+    let fontChoice: ReaderFontChoice
+    let theme: ReaderTheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(article.readerTitle)
-                .font(FolioTypography.editorialBold(28, relativeTo: .title))
-                .foregroundStyle(FolioPalette.inkGreenDeep)
+                .font(fontChoice.emphasizedFont(28, relativeTo: .title))
+                .foregroundStyle(theme.headingColor)
                 .lineSpacing(8)
                 .padding(.top, FolioMetrics.articleContentTopSpacing)
 
             ForEach(Array(article.originalParagraphs.enumerated()), id: \.offset) { index, paragraph in
-                ReaderParagraph(text: paragraph)
+                ReaderParagraph(text: paragraph, fontChoice: fontChoice, theme: theme)
                     .padding(.top, index == 0 ? 25 : 26)
 
                 if index == 1 {
                     Text(article.pullQuote)
-                        .font(FolioTypography.editorial(18, relativeTo: .body))
+                        .font(fontChoice.regularFont(18, relativeTo: .body))
+                        .foregroundStyle(theme.textColor)
                         .lineSpacing(9)
                         .padding(20)
                         .overlay(alignment: .leading) {
                             Rectangle()
-                                .fill(Color(.sRGB, red: 0.67, green: 0.43, blue: 0.12))
+                                .fill(theme.quoteRuleColor)
                                 .frame(width: 2)
                         }
-                        .background(FolioPalette.evidence.opacity(0.58))
+                        .background(theme.quoteBackgroundColor)
                         .clipShape(.rect(cornerRadius: 12))
                         .padding(.top, 25)
                 }
@@ -37,8 +40,12 @@ struct ReaderContentView: View {
 
 #Preview {
     ScrollView {
-        ReaderContentView(article: DemoContent.primaryArticle)
+        ReaderContentView(
+            article: DemoContent.primaryArticle,
+            fontChoice: .notoSerif,
+            theme: .paper
+        )
             .padding(.horizontal, FolioMetrics.readingInset)
     }
-    .background(FolioPalette.canvas)
+    .background(ReaderTheme.paper.backgroundColor)
 }

@@ -4,6 +4,8 @@ struct InsightPointRow: View {
     let number: Int
     let text: String
     let citation: String
+    let fontChoice: ReaderFontChoice
+    let theme: ReaderTheme
     let action: () -> Void
 
     var body: some View {
@@ -16,8 +18,8 @@ struct InsightPointRow: View {
                 .clipShape(.circle)
 
             Button(action: action) {
-                Text("\(Text(text).foregroundStyle(.primary)) \(Text(citation).foregroundStyle(FolioPalette.inkGreenDeep))")
-                    .font(FolioTypography.editorial(13, relativeTo: .body))
+                Text("\(Text(text).foregroundStyle(theme.textColor)) \(Text(citation).foregroundStyle(theme.headingColor))")
+                    .font(fontChoice.regularFont(13, relativeTo: .body))
                     .lineSpacing(3)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)

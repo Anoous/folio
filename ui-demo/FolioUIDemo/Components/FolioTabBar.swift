@@ -6,6 +6,7 @@ struct FolioTabBar: View {
     var onSelect: ((DemoTab) -> Void)?
     var onQuickSave: (() -> Void)?
     @Namespace private var glassNamespace
+    @Namespace private var selectionNamespace
     @State private var isQuickSaveExpanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -25,26 +26,26 @@ struct FolioTabBar: View {
     var body: some View {
         GlassEffectContainer(spacing: FolioMetrics.tabBarSpacing) {
             HStack(spacing: FolioMetrics.tabBarSpacing) {
-                FolioTabButton(
-                    title: "资料库",
-                    symbol: "books.vertical",
-                    isSelected: selectedTab == .library,
-                    action: selectLibrary
-                )
-                .background(reduceTransparency ? FolioPalette.surface.opacity(0.96) : .clear, in: .capsule)
-                .glassEffect(tabGlass(isSelected: selectedTab == .library), in: .capsule)
-                .glassEffectID("folio-library", in: glassNamespace)
-                .glassEffectTransition(.matchedGeometry)
+                HStack(spacing: 0) {
+                    FolioTabButton(
+                        title: "阅读",
+                        symbol: "books.vertical",
+                        isSelected: selectedTab == .library,
+                        selectionNamespace: selectionNamespace,
+                        action: selectLibrary
+                    )
 
-                FolioTabButton(
-                    title: "提问",
-                    symbol: "sparkles",
-                    isSelected: selectedTab == .ask,
-                    action: selectAsk
-                )
+                    FolioTabButton(
+                        title: "问答",
+                        symbol: "sparkles",
+                        isSelected: selectedTab == .ask,
+                        selectionNamespace: selectionNamespace,
+                        action: selectAsk
+                    )
+                }
                 .background(reduceTransparency ? FolioPalette.surface.opacity(0.96) : .clear, in: .capsule)
-                .glassEffect(tabGlass(isSelected: selectedTab == .ask), in: .capsule)
-                .glassEffectID("folio-ask", in: glassNamespace)
+                .glassEffect(navigationGlass, in: .capsule)
+                .glassEffectID("folio-navigation", in: glassNamespace)
                 .glassEffectTransition(.matchedGeometry)
 
                 if onQuickSave != nil {
@@ -59,7 +60,7 @@ struct FolioTabBar: View {
             .fixedSize(horizontal: true, vertical: false)
         }
         .frame(maxWidth: .infinity)
-        .animation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion), value: selectedTab)
+        .animation(FolioMotion.segmentSelection(reduceMotion: reduceMotion), value: selectedTab)
         .sensoryFeedback(.selection, trigger: selectedTab)
     }
 
@@ -87,10 +88,7 @@ struct FolioTabBar: View {
         onQuickSave?()
     }
 
-    private func tabGlass(isSelected: Bool) -> Glass {
-        guard !reduceTransparency else { return .identity }
-        return isSelected
-            ? .regular.tint(FolioPalette.subtleGreen).interactive()
-            : .regular.interactive()
+    private var navigationGlass: Glass {
+        reduceTransparency ? .identity : .regular.interactive()
     }
 }

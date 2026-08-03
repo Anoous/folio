@@ -12,5 +12,6 @@ enum FolioMetrics {
     static let articleContentTopSpacing = 20.0
     static let tabBarHeight = 44.0
     static let tabBarItemHeight = 44.0
+    static let tabBarItemWidth = 76.0
     static let tabBarSpacing = 7.0
 }

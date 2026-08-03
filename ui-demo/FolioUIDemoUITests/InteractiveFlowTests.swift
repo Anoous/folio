@@ -13,14 +13,14 @@ final class InteractiveFlowTests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
 
-        app.buttons["提问"].tap()
+        app.buttons["问答"].tap()
         XCTAssertTrue(app.staticTexts["问问你保存过的内容"].waitForExistence(timeout: 3))
 
         app.buttons["我保存的内容如何定义 AI 可信度？"].tap()
         XCTAssertTrue(app.staticTexts["回答"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["来源"].exists)
 
-        app.buttons["资料库"].tap()
+        app.buttons["阅读"].tap()
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
     }
 
@@ -57,6 +57,50 @@ final class InteractiveFlowTests: XCTestCase {
 
         app.buttons["返回"].tap()
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testReaderAppearanceChangesFontAndBackground() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demoScreen", "reader"]
+        app.launch()
+
+        let appearanceButton = app.buttons["阅读外观"]
+        XCTAssertTrue(appearanceButton.waitForExistence(timeout: 3))
+        appearanceButton.tap()
+
+        XCTAssertTrue(app.staticTexts["阅读外观"].waitForExistence(timeout: 3))
+        app.buttons["薄荷"].tap()
+
+        let roundedFontButton = app.buttons["系统圆体"]
+        var scrollAttempts = 0
+        while !roundedFontButton.isHittable && scrollAttempts < 3 {
+            app.swipeUp()
+            scrollAttempts += 1
+        }
+        XCTAssertTrue(roundedFontButton.isHittable)
+        roundedFontButton.tap()
+        app.buttons["完成"].tap()
+
+        let updatedAppearance = NSPredicate(format: "value == %@", "薄荷，系统圆体")
+        expectation(for: updatedAppearance, evaluatedWith: appearanceButton)
+        waitForExpectations(timeout: 3)
+        XCTAssertTrue(app.staticTexts["为什么可信是 AI 产品的\n核心体验"].exists)
+
+        app.buttons["洞察"].tap()
+        let insightBody = app.staticTexts["insight-body"]
+        XCTAssertTrue(insightBody.waitForExistence(timeout: 3))
+        XCTAssertEqual(insightBody.value as? String, "薄荷，系统圆体")
+
+        let firstInsightPoint = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "可信来自边界清晰")
+        ).firstMatch
+        XCTAssertTrue(firstInsightPoint.waitForExistence(timeout: 3))
+        firstInsightPoint.tap()
+        let evidenceQuote = app.staticTexts["evidence-quote"]
+        XCTAssertTrue(evidenceQuote.waitForExistence(timeout: 3))
+        XCTAssertEqual(evidenceQuote.value as? String, "薄荷，系统圆体")
     }
 
     @MainActor

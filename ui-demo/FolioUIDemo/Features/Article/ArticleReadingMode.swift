@@ -1,4 +1,4 @@
 enum ArticleReadingMode: Int {
-    case insight
     case original
+    case insight
 }

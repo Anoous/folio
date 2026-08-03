@@ -13,6 +13,20 @@ enum FolioMotion {
         blendDuration: 0.08
     )
 
+    static let segmentSelection = Animation.spring(
+        response: 0.24,
+        dampingFraction: 1,
+        blendDuration: 0.04
+    )
+
+    static let articleContentSwitch = Animation.timingCurve(
+        0.23,
+        1,
+        0.32,
+        1,
+        duration: 0.2
+    )
+
     static let press = Animation.easeOut(duration: 0.12)
     static let reduced = Animation.easeOut(duration: 0.18)
 
@@ -22,5 +36,13 @@ enum FolioMotion {
 
     static func pageSwitch(reduceMotion: Bool) -> Animation {
         reduceMotion ? reduced : pageSwitch
+    }
+
+    static func segmentSelection(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeOut(duration: 0.12) : segmentSelection
+    }
+
+    static func articleContentSwitch(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeOut(duration: 0.1) : articleContentSwitch
     }
 }

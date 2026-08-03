@@ -19,7 +19,8 @@ open FolioUIDemo.xcodeproj
 - 底部导航使用 `GlassEffectContainer`、`glassEffectID` 和 matched glass transition；当前 Tab 是短胶囊，未选中项与“＋”保持等大的圆形比例。
 - “＋”会连续变形成“链接 / 笔记 / 关闭”，再从同一位置缩放进入保存结果页。
 - 资料库卡片使用 matched navigation transition 展开为文章详情页，默认显示原文，返回时沿原路径收回。
-- 洞察/原文属于同一个文章详情页：顶部信息保持原位，仅正文以 12pt 位移加交叉淡化切换；证据面板支持半屏与全屏拖拽。
+- 文章阅读外观支持四种柔和背景色与三种字体即时切换，并统一覆盖原文、洞察和证据内容；思源宋体随 App 打包并保留 SIL OFL 1.1 许可证，系统黑体和系统圆体直接使用 iOS 系统字体。
+- 原文/洞察属于同一个文章详情页：默认原文在左，洞察作为增强层在右；顶部信息保持原位，仅正文以 12pt 位移加交叉淡化切换，证据面板支持半屏与全屏拖拽。
 - 按压反馈、选择触觉和 Reduce Motion / Reduce Transparency 已统一处理。
 
 ## 逐屏验收入口
