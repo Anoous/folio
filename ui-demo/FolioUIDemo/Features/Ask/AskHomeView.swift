@@ -89,13 +89,10 @@ struct AskHomeView: View {
 }
 
 #Preview {
-    @Previewable @Namespace var transitionNamespace
-
     AskHomeView(onOpenSettings: {}, onAnswer: {}, onInsufficientEvidence: {})
         .safeAreaInset(edge: .bottom, spacing: 0) {
             FolioTabBar(
-                selectedTab: .constant(.ask),
-                navigationNamespace: transitionNamespace
+                selectedTab: .constant(.ask)
             )
             .padding(.horizontal, FolioMetrics.compactInset)
             .padding(.vertical, 8)

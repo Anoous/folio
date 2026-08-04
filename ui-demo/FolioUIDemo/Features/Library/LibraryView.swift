@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct LibraryView: View {
+    let articles: [DemoArticle]
     let onOpenArticle: (DemoArticle) -> Void
     let onOpenSettings: () -> Void
     let transitionNamespace: Namespace.ID
@@ -59,11 +60,11 @@ struct LibraryView: View {
     private var filteredArticles: [DemoArticle] {
         switch selectedFilter {
         case .all:
-            DemoContent.articles
+            articles
         case .processing:
-            DemoContent.articles.filter { $0.status == .processing }
+            articles.filter { $0.status == .processing }
         case .limited:
-            DemoContent.articles.filter { $0.status == .limited }
+            articles.filter { $0.status == .limited }
         }
     }
 
@@ -88,14 +89,14 @@ struct LibraryView: View {
     @Previewable @Namespace var transitionNamespace
 
     LibraryView(
+        articles: DemoContent.articles,
         onOpenArticle: { _ in },
         onOpenSettings: {},
         transitionNamespace: transitionNamespace
     )
         .safeAreaInset(edge: .bottom, spacing: 0) {
             FolioTabBar(
-                selectedTab: .constant(.library),
-                navigationNamespace: transitionNamespace
+                selectedTab: .constant(.library)
             )
                 .padding(.horizontal, FolioMetrics.compactInset)
                 .padding(.vertical, 8)

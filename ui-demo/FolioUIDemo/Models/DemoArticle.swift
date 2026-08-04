@@ -42,3 +42,30 @@ struct DemoArticle: Identifiable, Hashable {
         self.insightPoints = insightPoints
     }
 }
+
+extension DemoArticle {
+    static func processingURL(_ url: URL) -> DemoArticle {
+        let host = url.host() ?? "新链接"
+        let path = url.path == "/" ? "" : url.path
+        let displayURL = host + path
+
+        return DemoArticle(
+            monogram: String(host.prefix(2)).lowercased(),
+            title: displayURL,
+            source: host,
+            age: "刚刚",
+            summary: "已接收 · 正在获取正文…",
+            status: .processing,
+            readerTitle: displayURL,
+            originalParagraphs: [
+                "Folio 已经接收这个链接，正在云端获取并整理正文。处理完成前，你可以先离开当前页面。"
+            ],
+            pullQuote: "链接已经可靠接收，正文仍在处理中。",
+            insight: "正在理解这篇内容，\n完成后会在这里展示核心洞察。",
+            insightPoints: [
+                "链接已进入你的资料库。",
+                "正文获取和内容理解会在云端继续完成。"
+            ]
+        )
+    }
+}

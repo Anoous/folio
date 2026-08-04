@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 
 @Observable
@@ -5,6 +6,11 @@ final class DemoStore {
     var isSignedIn = false
     var selectedTab = DemoTab.library
     var path: [DemoRoute] = []
+    private(set) var savedArticles: [DemoArticle] = []
+
+    var libraryArticles: [DemoArticle] {
+        savedArticles + DemoContent.articles
+    }
 
     init(initialScreen: DemoScreen? = nil) {
         guard let initialScreen else { return }
@@ -54,6 +60,10 @@ final class DemoStore {
 
     func open(_ route: DemoRoute) {
         path.append(route)
+    }
+
+    func saveURL(_ url: URL) {
+        savedArticles.insert(.processingURL(url), at: 0)
     }
 
     func pop() {

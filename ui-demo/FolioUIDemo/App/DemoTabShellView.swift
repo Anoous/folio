@@ -8,6 +8,7 @@ struct DemoTabShellView: View {
     var body: some View {
         ZStack {
             LibraryView(
+                articles: store.libraryArticles,
                 onOpenArticle: { article in store.open(.article(article)) },
                 onOpenSettings: { store.open(.settings) },
                 transitionNamespace: articleTransition
@@ -34,9 +35,8 @@ struct DemoTabShellView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             FolioTabBar(
                 selectedTab: $store.selectedTab,
-                navigationNamespace: articleTransition,
                 onSelect: store.selectTab,
-                onQuickSave: { store.open(.shareSuccess) }
+                onQuickSave: store.saveURL
             )
             .padding(.horizontal, FolioMetrics.compactInset)
             .padding(.vertical, 8)

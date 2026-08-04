@@ -50,9 +50,8 @@ struct DemoNavigationView: View {
                         .safeAreaInset(edge: .bottom, spacing: 0) {
                             FolioTabBar(
                                 selectedTab: $store.selectedTab,
-                                navigationNamespace: articleTransition,
                                 onSelect: store.selectTab,
-                                onQuickSave: { store.open(.shareSuccess) }
+                                onQuickSave: store.saveURL
                             )
                             .padding(.horizontal, FolioMetrics.compactInset)
                             .padding(.vertical, 8)
@@ -62,18 +61,14 @@ struct DemoNavigationView: View {
                             .safeAreaInset(edge: .bottom, spacing: 0) {
                                 FolioTabBar(
                                     selectedTab: $store.selectedTab,
-                                    navigationNamespace: articleTransition,
                                     onSelect: store.selectTab,
-                                    onQuickSave: { store.open(.shareSuccess) }
+                                    onQuickSave: store.saveURL
                                 )
                                 .padding(.horizontal, FolioMetrics.compactInset)
                                 .padding(.vertical, 8)
                             }
                     case .shareSuccess:
                         ShareSaveSuccessView(onDone: store.pop)
-                            .navigationTransition(
-                                .zoom(sourceID: "quick-save", in: articleTransition)
-                            )
                     }
                 }
         }

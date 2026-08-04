@@ -1,93 +1,222 @@
 import SwiftUI
 
 struct FolioQuickSaveControl: View {
-    @Binding var isExpanded: Bool
+    @Binding var phase: QuickSavePhase
+    @Binding var text: String
     let glassNamespace: Namespace.ID
-    let navigationNamespace: Namespace.ID
-    let onSave: () -> Void
+    let onSave: (URL) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @State private var feedbackTrigger = 0
+    @FocusState private var isURLFieldFocused: Bool
+    @State private var impactFeedbackTrigger = 0
+    @State private var successFeedbackTrigger = 0
+    @State private var pendingURL: URL?
 
     var body: some View {
-        HStack(spacing: 2) {
-            if isExpanded {
-                Button("链接", systemImage: "link", action: saveLink)
-                    .labelStyle(.titleAndIcon)
-                    .accessibilityIdentifier("quick-save-link")
-
-                Button("笔记", systemImage: "square.and.pencil", action: saveNote)
-                    .labelStyle(.titleAndIcon)
-                    .accessibilityIdentifier("quick-save-note")
-
-                Button("收起快速收藏", systemImage: "xmark", action: collapse)
+        Group {
+            switch phase {
+            case .idle:
+                Button("收藏链接", systemImage: "plus", action: expand)
                     .labelStyle(.iconOnly)
-                    .accessibilityIdentifier("quick-save-close")
-            } else {
-                Button(action: expand) {
-                    ZStack {
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(
+                        width: FolioMetrics.tabBarHeight,
+                        height: FolioMetrics.tabBarHeight
+                    )
+                    .background {
                         FolioGlassLens(
                             shape: Circle(),
                             tint: FolioPalette.inkGreen,
                             isProminent: true
                         )
-
-                        Image(systemName: "plus")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(.white)
                     }
-                    .frame(
-                        width: FolioMetrics.tabBarHeight,
-                        height: FolioMetrics.tabBarHeight
-                    )
-                }
-                    .accessibilityLabel("展开快速收藏")
                     .accessibilityIdentifier("quick-save")
+
+            case .editing:
+                HStack(spacing: 3) {
+                    Button("取消收藏", systemImage: "xmark", action: collapse)
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 14, weight: .medium))
+                        .frame(
+                            width: FolioMetrics.minimumTapTarget,
+                            height: FolioMetrics.minimumTapTarget
+                        )
+
+                    Image(systemName: "link")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(FolioPalette.secondaryText)
+                        .accessibilityHidden(true)
+
+                    TextField("粘贴链接，收藏到 Folio", text: $text)
+                        .font(.body)
+                        .foregroundStyle(FolioPalette.inkGreenDeep)
+                        .textInputAutocapitalization(.never)
+                        .textContentType(.URL)
+                        .keyboardType(.URL)
+                        .autocorrectionDisabled()
+                        .submitLabel(.send)
+                        .focused($isURLFieldFocused)
+                        .onSubmit(save)
+                        .accessibilityIdentifier("quick-save-url-field")
+
+                    Button("发送收藏", systemImage: "arrow.up", action: save)
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(
+                            width: FolioMetrics.minimumTapTarget,
+                            height: FolioMetrics.minimumTapTarget
+                        )
+                        .background(
+                            isValidURL
+                                ? FolioPalette.inkGreenDeep
+                                : FolioPalette.tertiaryText.opacity(0.28),
+                            in: .circle
+                        )
+                        .disabled(!isValidURL)
+                        .accessibilityIdentifier("quick-save-send")
+                }
+
+            case .saving:
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(FolioPalette.inkGreen)
+
+                    Text("正在收藏 \(displayHost)…")
+                        .font(.body)
+                        .foregroundStyle(FolioPalette.secondaryText)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("正在收藏链接")
+
+            case .saved:
+                Label("已收藏 · 正在处理", systemImage: "checkmark")
+                    .font(.body)
+                    .foregroundStyle(FolioPalette.inkGreenDeep)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("quick-save-success")
             }
         }
-        .font(.system(size: isExpanded ? 13 : 17, weight: .regular))
-        .foregroundStyle(FolioPalette.inkGreenDeep)
         .buttonStyle(FolioPressButtonStyle())
-        .padding(.horizontal, isExpanded ? 6 : 0)
-        .frame(minWidth: FolioMetrics.tabBarHeight, minHeight: FolioMetrics.tabBarHeight)
+        .padding(.horizontal, phase.isExpanded ? 6 : 0)
+        .frame(
+            maxWidth: phase.isExpanded ? .infinity : nil,
+            minHeight: FolioMetrics.tabBarHeight
+        )
         .contentShape(.capsule)
-        .background(reduceTransparency ? FolioPalette.surface.opacity(0.96) : .clear, in: .capsule)
+        .background(
+            reduceTransparency ? FolioPalette.surface.opacity(0.96) : .clear,
+            in: .capsule
+        )
         .glassEffect(controlGlass, in: .capsule)
         .glassEffectID("folio-save", in: glassNamespace)
         .glassEffectTransition(.matchedGeometry)
-        .matchedTransitionSource(id: "quick-save", in: navigationNamespace)
-        .animation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion), value: isExpanded)
-        .sensoryFeedback(.impact(weight: .light, intensity: 0.72), trigger: feedbackTrigger)
+        .animation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion), value: phase)
+        .sensoryFeedback(
+            .impact(weight: .light, intensity: 0.72),
+            trigger: impactFeedbackTrigger
+        )
+        .sensoryFeedback(.success, trigger: successFeedbackTrigger)
+        .onChange(of: phase, focusURLField)
+        .task(id: phase, advanceDemoPhase)
+    }
+
+    private var isValidURL: Bool {
+        QuickSaveURLValidator.normalizedURL(from: text) != nil
+    }
+
+    private var displayHost: String {
+        QuickSaveURLValidator.displayHost(from: text)
     }
 
     private func expand() {
-        feedbackTrigger += 1
+        impactFeedbackTrigger += 1
         withAnimation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion)) {
-            isExpanded = true
+            phase = .editing
         }
     }
 
     private func collapse() {
-        feedbackTrigger += 1
+        impactFeedbackTrigger += 1
+        isURLFieldFocused = false
+        text = ""
+        pendingURL = nil
         withAnimation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion)) {
-            isExpanded = false
+            phase = .idle
         }
     }
 
-    private func saveLink() {
-        feedbackTrigger += 1
-        onSave()
+    private func save() {
+        guard let normalizedURL = QuickSaveURLValidator.normalizedURL(from: text) else { return }
+        impactFeedbackTrigger += 1
+        isURLFieldFocused = false
+        pendingURL = normalizedURL
+        withAnimation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion)) {
+            phase = .saving
+        }
     }
 
-    private func saveNote() {
-        feedbackTrigger += 1
-        onSave()
+    private func focusURLField(_ oldPhase: QuickSavePhase, _ newPhase: QuickSavePhase) {
+        guard oldPhase != .editing, newPhase == .editing else { return }
+        isURLFieldFocused = true
+    }
+
+    private func advanceDemoPhase() async {
+        switch phase {
+        case .saving:
+            do {
+                try await Task.sleep(for: .milliseconds(550))
+            } catch {
+                return
+            }
+            guard phase == .saving, let pendingURL else { return }
+            onSave(pendingURL)
+            successFeedbackTrigger += 1
+            withAnimation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion)) {
+                phase = .saved
+            }
+
+        case .saved:
+            do {
+                try await Task.sleep(for: .milliseconds(1_200))
+            } catch {
+                return
+            }
+            guard phase == .saved else { return }
+            text = ""
+            pendingURL = nil
+            withAnimation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion)) {
+                phase = .idle
+            }
+
+        case .idle, .editing:
+            break
+        }
     }
 
     private var controlGlass: Glass {
         guard !reduceTransparency else { return .identity }
-        return isExpanded
+        return phase.isExpanded
             ? .regular.interactive()
             : .regular.tint(FolioPalette.inkGreen.opacity(0.16)).interactive()
     }
+}
+
+#Preview("Quick save composer") {
+    @Previewable @Namespace var glassNamespace
+    @Previewable @State var phase = QuickSavePhase.editing
+    @Previewable @State var text = "example.com/article"
+
+    FolioQuickSaveControl(
+        phase: $phase,
+        text: $text,
+        glassNamespace: glassNamespace,
+        onSave: { _ in }
+    )
+    .padding(FolioMetrics.compactInset)
+    .background(FolioPalette.canvas)
 }

@@ -171,22 +171,33 @@ final class InteractiveFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testLiquidToolbarExpandsAndCompletesQuickSave() {
+    func testLiquidToolbarMorphsIntoURLComposerAndCompletesQuickSave() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demoScreen", "library"]
         app.launch()
 
-        let expandButton = app.buttons["展开快速收藏"]
-        XCTAssertTrue(expandButton.waitForExistence(timeout: 3))
-        expandButton.tap()
+        let newExpandButton = app.buttons["收藏链接"]
+        XCTAssertTrue(newExpandButton.waitForExistence(timeout: 3))
+        newExpandButton.tap()
 
-        let saveLinkButton = app.buttons["链接"]
-        XCTAssertTrue(saveLinkButton.waitForExistence(timeout: 3))
-        saveLinkButton.tap()
+        let urlField = app.textFields["quick-save-url-field"]
+        XCTAssertTrue(urlField.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["问答"].exists)
+        urlField.typeText("example.com/article")
 
-        XCTAssertTrue(app.staticTexts["已保存"].waitForExistence(timeout: 3))
-        app.buttons["完成"].tap()
+        let composerScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        composerScreenshot.name = "quick-save-composer"
+        composerScreenshot.lifetime = .keepAlways
+        add(composerScreenshot)
+
+        let sendButton = app.buttons["quick-save-send"]
+        XCTAssertTrue(sendButton.isEnabled)
+        sendButton.tap()
+
+        XCTAssertTrue(app.staticTexts["quick-save-success"].waitForExistence(timeout: 3))
+        XCTAssertTrue(newExpandButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["example.com/article"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
     }
 }
