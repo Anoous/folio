@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		01ACC36208F6EB33FFCF0B0D /* CitationChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B92DCFBC5051FF19AB04261 /* CitationChip.swift */; };
 		075E6A7A89F4A45F5400F2C3 /* FolioQuickSaveControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67D2E39A2789C0DD15993A14 /* FolioQuickSaveControl.swift */; };
+		2C60B29C4E734A43AEE124A1 /* FolioGlassLens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A83D1C7F20B4BB18EF46D21 /* FolioGlassLens.swift */; };
 		0A657A6EADBBF45C430AB685 /* FolioMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B4D376CB93F8F7C6B2666A /* FolioMetrics.swift */; };
 		0BBD213BAE8078332D873D07 /* InsufficientSuggestionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0A495C49C40D2CAC438559F /* InsufficientSuggestionRow.swift */; };
 		1521B7079833546CD6672C00 /* FolioAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A617C417342D2909E1AA5C51 /* FolioAvatar.swift */; };
@@ -119,6 +120,7 @@
 		6307351282276300CB005A8D /* AskInsufficientView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskInsufficientView.swift; sourceTree = "<group>"; };
 		67AFFDF73C024EC1F48C2FF4 /* DemoRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoRoute.swift; sourceTree = "<group>"; };
 		67D2E39A2789C0DD15993A14 /* FolioQuickSaveControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioQuickSaveControl.swift; sourceTree = "<group>"; };
+		8A83D1C7F20B4BB18EF46D21 /* FolioGlassLens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioGlassLens.swift; sourceTree = "<group>"; };
 		67FE1D9A9E5047E606972984 /* ReaderAppearanceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderAppearanceSheet.swift; sourceTree = "<group>"; };
 		68941E63750567EF2F39F53C /* AskHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHomeView.swift; sourceTree = "<group>"; };
 		69B188CF9C638D0F490A21A2 /* FolioBackButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioBackButton.swift; sourceTree = "<group>"; };
@@ -206,6 +208,7 @@
 				C9BD3E2C4398EFDA579E12B7 /* FolioBrandIcon.swift */,
 				8D8474676EDD9140BA013263 /* FolioFilterButton.swift */,
 				C1958CA5B203C13CFC1D935D /* FolioInputBar.swift */,
+				8A83D1C7F20B4BB18EF46D21 /* FolioGlassLens.swift */,
 				BE7CEC9C6641DBBADD6705B2 /* FolioPressButtonStyle.swift */,
 				67D2E39A2789C0DD15993A14 /* FolioQuickSaveControl.swift */,
 				DFCCD9AA08825F3D78B7D9CB /* FolioSectionTitle.swift */,
@@ -530,6 +533,7 @@
 				0A657A6EADBBF45C430AB685 /* FolioMetrics.swift in Sources */,
 				87626E6F30F09BC0289E9CFA /* FolioMotion.swift in Sources */,
 				F7D36DFDEAB86D4D61BA9623 /* FolioPalette.swift in Sources */,
+				2C60B29C4E734A43AEE124A1 /* FolioGlassLens.swift in Sources */,
 				AFCBEC99BC1DFD0AE11A89BB /* FolioPressButtonStyle.swift in Sources */,
 				075E6A7A89F4A45F5400F2C3 /* FolioQuickSaveControl.swift in Sources */,
 				76B2547FFF8E89E5D0614B09 /* FolioSectionTitle.swift in Sources */,

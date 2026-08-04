@@ -24,8 +24,24 @@ struct FolioQuickSaveControl: View {
                     .labelStyle(.iconOnly)
                     .accessibilityIdentifier("quick-save-close")
             } else {
-                Button("展开快速收藏", systemImage: "plus", action: expand)
-                    .labelStyle(.iconOnly)
+                Button(action: expand) {
+                    ZStack {
+                        FolioGlassLens(
+                            shape: Circle(),
+                            tint: FolioPalette.inkGreen,
+                            isProminent: true
+                        )
+
+                        Image(systemName: "plus")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(
+                        width: FolioMetrics.tabBarHeight,
+                        height: FolioMetrics.tabBarHeight
+                    )
+                }
+                    .accessibilityLabel("展开快速收藏")
                     .accessibilityIdentifier("quick-save")
             }
         }
@@ -69,6 +85,9 @@ struct FolioQuickSaveControl: View {
     }
 
     private var controlGlass: Glass {
-        reduceTransparency ? .identity : .regular.interactive()
+        guard !reduceTransparency else { return .identity }
+        return isExpanded
+            ? .regular.interactive()
+            : .regular.tint(FolioPalette.inkGreen.opacity(0.16)).interactive()
     }
 }

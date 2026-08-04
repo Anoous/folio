@@ -7,7 +7,6 @@ struct FolioTabButton: View {
     let selectionNamespace: Namespace.ID
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         Button(action: action) {
@@ -54,17 +53,10 @@ struct FolioTabButton: View {
     }
 
     private var selectionCapsule: some View {
-        Capsule()
-            .fill(
-                reduceTransparency
-                    ? FolioPalette.surface
-                    : FolioPalette.subtleGreen.opacity(0.82)
-            )
-            .overlay {
-                Capsule()
-                    .stroke(Color.white.opacity(reduceTransparency ? 0.4 : 0.7), lineWidth: 0.75)
-            }
-            .shadow(color: Color.black.opacity(0.06), radius: 3, y: 1)
+        FolioGlassLens(
+            shape: Capsule(),
+            tint: FolioPalette.inkGreen
+        )
             .padding(3)
     }
 }
