@@ -13,16 +13,18 @@ struct WelcomeView: View {
                     .font(FolioTypography.wordmark(66))
                     .foregroundStyle(FolioPalette.inkGreenDeep)
 
-                Text("保存你不想忘记的内容")
+                Text(.welcomeHeadline)
                     .font(FolioTypography.editorialBold(27, relativeTo: .title))
                     .foregroundStyle(FolioPalette.inkGreenDeep)
                     .padding(.top, 29)
+                    .accessibilityIdentifier("welcome.headline")
 
-                Text("Folio 会提炼有出处的洞察，并只根据\n你的资料回答问题。资料不足时，\n会明确说明。")
+                Text(.welcomeValueProposition)
                     .font(FolioTypography.editorial(17, relativeTo: .body))
                     .foregroundStyle(.primary)
                     .lineSpacing(7)
                     .padding(.top, 21)
+                    .accessibilityIdentifier("welcome.valueProposition")
 
                 Image(.onboardingEditorial)
                     .resizable()
@@ -39,7 +41,7 @@ struct WelcomeView: View {
                 )
                 .padding(.top, 8)
 
-                Text("内容保存在你的个人云端资料库中，\n你可以随时删除。")
+                Text(.welcomePrivacy)
                     .font(FolioTypography.editorial(14, relativeTo: .footnote))
                     .foregroundStyle(FolioPalette.secondaryText)
                     .multilineTextAlignment(.center)
@@ -47,6 +49,7 @@ struct WelcomeView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 22)
                     .padding(.bottom, 25)
+                    .accessibilityIdentifier("welcome.privacy")
             }
             .padding(.horizontal, 48)
         }

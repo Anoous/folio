@@ -7,7 +7,11 @@ struct WelcomeLoginButtons: View {
     var body: some View {
         VStack(spacing: 13) {
             Button(action: onAppleLogin) {
-                Label("使用 Apple 登录", systemImage: "apple.logo")
+                Label {
+                    Text(.welcomeContinueWithApple)
+                } icon: {
+                    Image(systemName: "apple.logo")
+                }
                     .font(FolioTypography.editorial(19, relativeTo: .headline))
                     .frame(maxWidth: .infinity, minHeight: 56)
                     .foregroundStyle(.white)
@@ -15,8 +19,11 @@ struct WelcomeLoginButtons: View {
                     .clipShape(.rect(cornerRadius: 9))
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("welcome.continueWithApple")
 
-            Button("使用邮箱登录", action: onEmailLogin)
+            Button(action: onEmailLogin) {
+                Text(.welcomeContinueWithEmail)
+            }
                 .font(FolioTypography.editorial(19, relativeTo: .headline))
                 .foregroundStyle(FolioPalette.inkGreenDeep)
                 .frame(maxWidth: .infinity, minHeight: 56)
@@ -26,6 +33,7 @@ struct WelcomeLoginButtons: View {
                     RoundedRectangle(cornerRadius: 9)
                         .stroke(FolioPalette.inkGreenDeep, lineWidth: 1)
                 }
+                .accessibilityIdentifier("welcome.continueWithEmail")
         }
     }
 }

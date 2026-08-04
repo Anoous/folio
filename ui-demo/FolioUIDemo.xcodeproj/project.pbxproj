@@ -28,6 +28,7 @@
 		48FA506FD4E10BF54F09B6DF /* ShareSaveSuccessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EC9130F92DAE1B28D86A3B6 /* ShareSaveSuccessView.swift */; };
 		5100D2B64141608606E031EE /* AskSourceRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE3D1631831A8FAF2245D392 /* AskSourceRow.swift */; };
 		523470E4DAA9727777C1E215 /* FolioBackButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69B188CF9C638D0F490A21A2 /* FolioBackButton.swift */; };
+		52BD75ABF99A67B7EABA3AA7 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 10DF08344A8D61E858FA3C20 /* Localizable.xcstrings */; };
 		542ED5AFDE7548FD36636C90 /* EvidenceSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD8674B3DC6420BE1D401A8 /* EvidenceSheetView.swift */; };
 		5FED3F5B1B26E356DF0BBFBB /* DemoArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97D7552FCFEDADC35ED802CE /* DemoArticle.swift */; };
 		6B51FEEDA18540198105CDE1 /* QuickSavePhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 590B7729DBDC3B12A67E50B1 /* QuickSavePhase.swift */; };
@@ -100,6 +101,7 @@
 		09EE29ECF8BE74B8AD035740 /* FolioTabButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioTabButton.swift; sourceTree = "<group>"; };
 		0EC9130F92DAE1B28D86A3B6 /* ShareSaveSuccessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSaveSuccessView.swift; sourceTree = "<group>"; };
 		0FE41A9B800FB96D170B5376 /* InsightPointRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightPointRow.swift; sourceTree = "<group>"; };
+		10DF08344A8D61E858FA3C20 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		13D3ED667D7A928ADB902A2E /* DemoTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoTab.swift; sourceTree = "<group>"; };
 		148F6644AE93EC066F22B6C2 /* SettingsRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRow.swift; sourceTree = "<group>"; };
 		17D833C94EB6CF18B3E79846 /* SettingsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCard.swift; sourceTree = "<group>"; };
@@ -178,6 +180,7 @@
 			isa = PBXGroup;
 			children = (
 				FBCE09F9E7A8C57893EF69BD /* Assets.xcassets */,
+				10DF08344A8D61E858FA3C20 /* Localizable.xcstrings */,
 				D20931E9E2ED879965C4B00A /* Fonts */,
 				1B5F1A436D902D95F960C583 /* Licenses */,
 			);
@@ -469,6 +472,7 @@
 			knownRegions = (
 				Base,
 				en,
+				"zh-Hans",
 			);
 			mainGroup = E3D10861114BC5AFADCF08EF;
 			minimizedProjectReferenceProxies = 1;
@@ -488,6 +492,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AE6229A755E147ED7F310417 /* Assets.xcassets in Resources */,
+				52BD75ABF99A67B7EABA3AA7 /* Localizable.xcstrings in Resources */,
 				DE838DC5124C2DCCACDAE711 /* NotoSerifSC-OFL.txt in Resources */,
 				74BD68F32835A472231DE4C2 /* NotoSerifSC-Variable.ttf in Resources */,
 			);
@@ -689,9 +694,12 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.folio.uidemo;
 				PRODUCT_NAME = FolioUIDemo;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
@@ -707,9 +715,12 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.folio.uidemo;
 				PRODUCT_NAME = FolioUIDemo;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;

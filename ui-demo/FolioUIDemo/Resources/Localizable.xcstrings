@@ -1,0 +1,96 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "welcomeContinueWithApple" : {
+      "comment" : "Primary welcome-screen button that continues authentication with Apple.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue with Apple"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Apple 继续"
+          }
+        }
+      }
+    },
+    "welcomeContinueWithEmail" : {
+      "comment" : "Secondary welcome-screen button that continues authentication with email.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue with Email"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用邮箱继续"
+          }
+        }
+      }
+    },
+    "welcomeHeadline" : {
+      "comment" : "Short brand promise shown beneath the Folio wordmark on the welcome screen.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep what's worth returning to."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读有所藏，问有所据。"
+          }
+        }
+      }
+    },
+    "welcomePrivacy" : {
+      "comment" : "Concise privacy and ownership reassurance below the welcome-screen login buttons.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your library. Yours alone."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所藏皆私有，去留皆由你。"
+          }
+        }
+      }
+    },
+    "welcomeValueProposition" : {
+      "comment" : "Compact welcome-screen value proposition describing save, ask, and source traceability.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every answer leads back to its source."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "留下读过的，也留下它的来处。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.1"
+}

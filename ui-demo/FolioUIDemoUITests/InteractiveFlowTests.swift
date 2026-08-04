@@ -2,12 +2,39 @@ import XCTest
 
 final class InteractiveFlowTests: XCTestCase {
     @MainActor
+    private func assertWelcomeCopy(
+        language: String,
+        locale: String,
+        headline: String,
+        valueProposition: String,
+        privacy: String
+    ) {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-demoScreen", "welcome",
+            "-AppleLanguages", "(\(language))",
+            "-AppleLocale", locale
+        ]
+        app.launch()
+
+        let headlineText = app.staticTexts["welcome.headline"]
+        XCTAssertTrue(headlineText.waitForExistence(timeout: 3))
+        XCTAssertEqual(headlineText.label, headline)
+        XCTAssertEqual(app.staticTexts["welcome.valueProposition"].label, valueProposition)
+        XCTAssertEqual(app.staticTexts["welcome.privacy"].label, privacy)
+
+        XCTAssertTrue(app.buttons["welcome.continueWithApple"].exists)
+        XCTAssertTrue(app.buttons["welcome.continueWithEmail"].exists)
+        app.terminate()
+    }
+
+    @MainActor
     func testDefaultLaunchSupportsPrimaryNavigation() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launch()
 
-        let loginButton = app.buttons["使用 Apple 登录"]
+        let loginButton = app.buttons["welcome.continueWithApple"]
         XCTAssertTrue(loginButton.waitForExistence(timeout: 3))
         loginButton.tap()
 
@@ -22,6 +49,25 @@ final class InteractiveFlowTests: XCTestCase {
 
         app.buttons["阅读"].tap()
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testWelcomeCopySupportsEnglishAndSimplifiedChinese() {
+        assertWelcomeCopy(
+            language: "en",
+            locale: "en_US",
+            headline: "Keep what's worth returning to.",
+            valueProposition: "Every answer leads back to its source.",
+            privacy: "Your library. Yours alone."
+        )
+
+        assertWelcomeCopy(
+            language: "zh-Hans",
+            locale: "zh_CN",
+            headline: "读有所藏，问有所据。",
+            valueProposition: "留下读过的，也留下它的来处。",
+            privacy: "所藏皆私有，去留皆由你。"
+        )
     }
 
     @MainActor
