@@ -8,30 +8,37 @@ struct FolioInputBar: View {
     let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            TextField(placeholder, text: $text)
-                .font(FolioTypography.editorial(17, relativeTo: .body))
-                .textInputAutocapitalization(.never)
+        HStack(alignment: .bottom, spacing: 10) {
+            TextField(placeholder, text: $text, axis: .vertical)
+                .font(.body)
+                .lineLimit(1...4)
+                .textInputAutocapitalization(.sentences)
                 .submitLabel(.send)
                 .onSubmit(action)
+                .padding(.leading, 6)
+                .padding(.vertical, 10)
+                .accessibilityIdentifier("ask-question-field")
 
             Button("发送", systemImage: sendSymbol, action: action)
                 .labelStyle(.iconOnly)
-                .font(.system(size: 21, weight: .medium))
-                .foregroundStyle(.white)
-                .frame(width: 42, height: 42)
-                .background(isEnabled ? FolioPalette.inkGreenDeep : FolioPalette.tertiaryText.opacity(0.25))
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(isEnabled ? .white : FolioPalette.tertiaryText)
+                .frame(width: FolioMetrics.minimumTapTarget, height: FolioMetrics.minimumTapTarget)
+                .background(isEnabled ? FolioPalette.inkGreenDeep : FolioPalette.evidence.opacity(0.8))
                 .clipShape(.circle)
                 .disabled(!isEnabled)
+                .accessibilityIdentifier("ask-send")
         }
-        .padding(.leading, 18)
-        .padding(.trailing, 8)
-        .frame(height: 56)
-        .background(FolioPalette.surface.opacity(0.96))
-        .clipShape(.rect(cornerRadius: 28))
+        .padding(.leading, 12)
+        .padding(.trailing, 7)
+        .padding(.vertical, 7)
+        .frame(minHeight: 56)
+        .background(FolioPalette.surface)
+        .clipShape(.rect(cornerRadius: 29))
         .overlay {
-            RoundedRectangle(cornerRadius: 28)
+            RoundedRectangle(cornerRadius: 29)
                 .stroke(FolioPalette.paperLine, lineWidth: 0.8)
         }
+        .shadow(color: FolioPalette.inkGreenDeep.opacity(0.06), radius: 14, y: 6)
     }
 }

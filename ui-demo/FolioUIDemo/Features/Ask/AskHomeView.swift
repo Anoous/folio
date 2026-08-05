@@ -8,70 +8,82 @@ struct AskHomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            ZStack {
+                Text("问 Folio")
+                    .font(.headline)
+
+                HStack {
+                    Color.clear
+                        .frame(width: FolioMetrics.minimumTapTarget, height: FolioMetrics.minimumTapTarget)
+
+                    Spacer()
+
+                    Button(action: onOpenSettings) {
+                        FolioAvatar(size: FolioMetrics.minimumTapTarget)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("打开设置")
+                }
+            }
+            .padding(.horizontal, FolioMetrics.libraryInset)
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Text("提问")
-                            .font(FolioTypography.editorialBold(43, relativeTo: .largeTitle))
+                    VStack(spacing: 12) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 22, weight: .medium))
                             .foregroundStyle(FolioPalette.inkGreenDeep)
-
-                        Spacer()
-
-                        Button(action: onOpenSettings) {
-                            FolioAvatar(size: 48)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("打开设置")
-                    }
-                    .padding(.top, 48)
-
-                    VStack(spacing: 17) {
-                        Image(systemName: "questionmark.bubble")
-                            .font(.system(size: 66, weight: .light))
-                            .foregroundStyle(FolioPalette.inkGreenDeep)
+                            .frame(width: 48, height: 48)
+                            .background(FolioPalette.subtleGreen)
+                            .clipShape(.circle)
                             .accessibilityHidden(true)
 
-                        Text("问问你保存过的内容")
-                            .font(FolioTypography.editorialBold(23, relativeTo: .title2))
+                        Text("问问你的收藏")
+                            .font(.title2.bold())
                             .foregroundStyle(FolioPalette.inkGreenDeep)
 
-                        Text("Folio 只根据你的资料回答，并附上来源。\n资料不足时，会明确说明。")
-                            .font(.system(size: 16))
+                        Text("答案只来自你保存的内容，并附上来源。")
+                            .font(.subheadline)
                             .foregroundStyle(FolioPalette.secondaryText)
                             .multilineTextAlignment(.center)
-                            .lineSpacing(7)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 74)
+                    .padding(.top, 58)
 
-                    VStack(spacing: 12) {
+                    VStack(spacing: 4) {
                         AskSuggestionButton(
+                            symbol: "checkmark.shield",
                             title: "我保存的内容如何定义 AI 可信度？",
                             action: onAnswer
                         )
                         AskSuggestionButton(
+                            symbol: "book.closed",
                             title: "我读过哪些关于深度阅读的观点？",
                             action: onAnswer
                         )
                         AskSuggestionButton(
+                            symbol: "speedometer",
                             title: "SwiftUI 性能优化有哪些共同建议？",
                             action: onInsufficientEvidence
                         )
                     }
-                    .padding(.top, 47)
-                    .padding(.bottom, 30)
+                    .padding(.top, 52)
+                    .padding(.bottom, 24)
                 }
-                .padding(.horizontal, FolioMetrics.pageInset)
+                .padding(.horizontal, FolioMetrics.libraryInset)
             }
             .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
 
             FolioInputBar(
                 text: $question,
-                placeholder: "输入你的问题…",
-                isEnabled: true,
+                placeholder: "问问你的收藏",
+                isEnabled: hasQuestion,
                 action: submitQuestion
             )
-            .padding(.horizontal, FolioMetrics.pageInset)
+            .padding(.horizontal, FolioMetrics.libraryInset)
             .padding(.vertical, 10)
         }
         .background(FolioPalette.canvas)
@@ -85,6 +97,10 @@ struct AskHomeView: View {
         } else {
             onAnswer()
         }
+    }
+
+    private var hasQuestion: Bool {
+        !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 

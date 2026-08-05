@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AskInsufficientView: View {
+    let onBack: () -> Void
     let onSuggestion: () -> Void
     @State private var question = ""
     @State private var showsFilters = false
@@ -8,27 +9,29 @@ struct AskInsufficientView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            HStack {
+                FolioBackButton(action: onBack)
+                Spacer()
+                Text("问答")
+                    .font(.headline)
+                Spacer()
+                FolioFilterButton(action: showFilters)
+            }
+            .padding(.horizontal, FolioMetrics.libraryInset)
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 13) {
-                        Text("提问")
-                            .font(FolioTypography.editorialBold(43, relativeTo: .largeTitle))
-                            .foregroundStyle(FolioPalette.inkGreenDeep)
-                        Spacer()
-                        FolioFilterButton(action: showFilters)
-                        FolioAvatar(size: 48)
-                    }
-                    .padding(.top, 48)
-
                     Text("哪些行业最适合使用 AI 解释功能？")
-                        .font(FolioTypography.editorial(12.5, relativeTo: .body))
-                        .padding(.horizontal, 18)
-                        .frame(minHeight: 59)
-                        .background(FolioPalette.subtleGreen.opacity(0.58))
-                        .clipShape(.rect(cornerRadius: 22, style: .continuous))
+                        .font(.body)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(FolioPalette.subtleGreen)
+                        .clipShape(.rect(cornerRadius: 20))
                         .frame(maxWidth: .infinity, alignment: .trailing)
-                        .padding(.leading, 72)
-                        .padding(.top, 39)
+                        .padding(.leading, 54)
+                        .padding(.top, 24)
 
                     InsufficientEvidenceCard(onSuggestion: onSuggestion)
                         .padding(.top, 18)
@@ -40,18 +43,18 @@ struct AskInsufficientView: View {
                         .padding(.top, 20)
                         .padding(.bottom, 30)
                 }
-                .padding(.horizontal, FolioMetrics.pageInset)
+                .padding(.horizontal, FolioMetrics.readingInset)
             }
             .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
 
             FolioInputBar(
                 text: $question,
                 placeholder: "提出基于你资料的问题…",
-                isEnabled: !question.isEmpty,
-                sendSymbol: "paperplane",
+                isEnabled: hasQuestion,
                 action: onSuggestion
             )
-            .padding(.horizontal, 24)
+            .padding(.horizontal, FolioMetrics.libraryInset)
             .padding(.vertical, 8)
         }
         .background(FolioPalette.canvas)
@@ -77,5 +80,9 @@ struct AskInsufficientView: View {
 
     private func dismissFilters() {
         showsFilters = false
+    }
+
+    private var hasQuestion: Bool {
+        !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }

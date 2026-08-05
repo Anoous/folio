@@ -41,7 +41,7 @@ final class InteractiveFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
 
         app.buttons["问答"].tap()
-        XCTAssertTrue(app.staticTexts["问问你保存过的内容"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["问问你的收藏"].waitForExistence(timeout: 3))
 
         app.buttons["我保存的内容如何定义 AI 可信度？"].tap()
         XCTAssertTrue(app.staticTexts["回答"].waitForExistence(timeout: 3))
@@ -49,6 +49,29 @@ final class InteractiveFlowTests: XCTestCase {
 
         app.buttons["阅读"].tap()
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testAskHomeUsesTextOnlyComposer() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demoScreen", "ask-home"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["问 Folio"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["语音输入"].exists)
+
+        let sendButton = app.buttons["ask-send"]
+        XCTAssertFalse(sendButton.isEnabled)
+
+        let questionField = app.textFields["ask-question-field"]
+        XCTAssertTrue(questionField.exists)
+        questionField.tap()
+        questionField.typeText("为什么解释会降低可信度？")
+
+        XCTAssertTrue(sendButton.isEnabled)
+        sendButton.tap()
+        XCTAssertTrue(app.staticTexts["回答"].waitForExistence(timeout: 3))
     }
 
     @MainActor

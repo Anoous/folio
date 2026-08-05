@@ -57,7 +57,10 @@ struct DemoNavigationView: View {
                             .padding(.vertical, 8)
                         }
                     case .askInsufficient:
-                        AskInsufficientView(onSuggestion: { store.open(.askAnswer) })
+                        AskInsufficientView(
+                            onBack: store.pop,
+                            onSuggestion: { store.open(.askAnswer) }
+                        )
                             .safeAreaInset(edge: .bottom, spacing: 0) {
                                 FolioTabBar(
                                     selectedTab: $store.selectedTab,

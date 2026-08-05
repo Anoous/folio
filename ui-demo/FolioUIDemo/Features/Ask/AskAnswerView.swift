@@ -12,15 +12,14 @@ struct AskAnswerView: View {
             HStack {
                 FolioBackButton(action: onBack)
                 Spacer()
-                Text("提问")
-                    .font(FolioTypography.editorialBold(24, relativeTo: .title2))
-                    .foregroundStyle(FolioPalette.inkGreenDeep)
+                Text("问答")
+                    .font(.headline)
                 Spacer()
                 FolioFilterButton(action: showFilters)
             }
-            .padding(.horizontal, 22)
-            .padding(.top, 15)
-            .padding(.bottom, 15)
+            .padding(.horizontal, FolioMetrics.libraryInset)
+            .padding(.top, 8)
+            .padding(.bottom, 8)
             .overlay(alignment: .bottom) {
                 Rectangle()
                     .fill(FolioPalette.paperLine)
@@ -29,26 +28,24 @@ struct AskAnswerView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("你的问题")
-                        .font(FolioTypography.editorial(15, relativeTo: .headline))
-                        .foregroundStyle(FolioPalette.secondaryText)
+                    Text("为什么许多 AI 产品的解释功能反而降低可信度？")
+                        .font(.body)
+                        .lineSpacing(4)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(FolioPalette.subtleGreen)
+                        .clipShape(.rect(cornerRadius: 20))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.leading, 54)
 
-                    Text("为什么许多 AI 产品的解释功能反而\n降低可信度？")
-                        .font(FolioTypography.editorial(16.5, relativeTo: .title2))
-                        .lineSpacing(5)
-                        .padding(.top, 12)
-
-                    Divider()
-                        .foregroundStyle(FolioPalette.paperLine)
-                        .padding(.vertical, 18)
-
-                    Text("回答")
-                        .font(FolioTypography.editorial(17, relativeTo: .headline))
+                    Label("回答", systemImage: "sparkles")
+                        .font(.headline)
                         .foregroundStyle(FolioPalette.inkGreenDeep)
+                        .padding(.top, 28)
 
-                    Text("解释可能让低质量结论显得更加确定。\n更可靠的设计是说明证据、能力范围和\n未知边界，而不是用更长的语言掩盖\n不确定性。")
-                        .font(FolioTypography.editorial(16.5, relativeTo: .title3))
-                        .lineSpacing(5)
+                    Text("解释可能让低质量结论显得更加确定。更可靠的设计是说明证据、能力范围和未知边界，而不是用更长的语言掩盖不确定性。")
+                        .font(.body)
+                        .lineSpacing(6)
                         .padding(.top, 12)
 
                     HStack(spacing: 15) {
@@ -59,9 +56,9 @@ struct AskAnswerView: View {
                     .padding(.top, 10)
 
                     Text("来源")
-                        .font(FolioTypography.editorial(17, relativeTo: .headline))
+                        .font(.headline)
                         .foregroundStyle(FolioPalette.inkGreenDeep)
-                        .padding(.top, 22)
+                        .padding(.top, 28)
 
                     VStack(spacing: 0) {
                         AskSourceRow(monogram: "e", title: "如何设计可信的 AI 产品", action: onOpenSource)
@@ -71,19 +68,19 @@ struct AskAnswerView: View {
                     .padding(.top, 11)
                     .padding(.bottom, 25)
                 }
-                .padding(.horizontal, FolioMetrics.pageInset)
-                .padding(.top, 22)
+                .padding(.horizontal, FolioMetrics.readingInset)
+                .padding(.top, 24)
             }
             .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
 
             FolioInputBar(
                 text: $followUp,
                 placeholder: "继续提问…",
-                isEnabled: true,
-                sendSymbol: "paperplane",
+                isEnabled: hasFollowUp,
                 action: clearFollowUp
             )
-            .padding(.horizontal, 25)
+            .padding(.horizontal, FolioMetrics.libraryInset)
             .padding(.vertical, 8)
         }
         .background(FolioPalette.canvas)
@@ -102,6 +99,10 @@ struct AskAnswerView: View {
     private func clearFollowUp() {
         guard !followUp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         followUp = ""
+    }
+
+    private var hasFollowUp: Bool {
+        !followUp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func useAllSources() {

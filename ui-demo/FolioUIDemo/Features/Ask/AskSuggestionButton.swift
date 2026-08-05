@@ -1,36 +1,31 @@
 import SwiftUI
 
 struct AskSuggestionButton: View {
+    let symbol: String
     let title: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(FolioPalette.inkGreenDeep)
+                    .frame(width: 28, height: 28)
+                    .accessibilityHidden(true)
+
                 Text(title)
-                    .font(FolioTypography.editorial(14, relativeTo: .body))
+                    .font(.body)
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.leading)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.9)
 
                 Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(FolioPalette.secondaryText)
-                    .accessibilityHidden(true)
             }
-            .padding(.horizontal, 18)
-            .frame(maxWidth: .infinity, minHeight: 51)
-            .background(FolioPalette.surface)
-            .clipShape(.rect(cornerRadius: 10))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(FolioPalette.paperLine, lineWidth: 0.8)
-            }
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: 48)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }
