@@ -12,10 +12,12 @@ struct ReaderContentView: View {
                 .foregroundStyle(theme.headingColor)
                 .lineSpacing(8)
                 .padding(.top, FolioMetrics.articleContentTopSpacing)
+                .id("reader-title")
 
             ForEach(Array(article.originalParagraphs.enumerated()), id: \.offset) { index, paragraph in
                 ReaderParagraph(text: paragraph, fontChoice: fontChoice, theme: theme)
                     .padding(.top, index == 0 ? 25 : 26)
+                    .id("reader-paragraph-\(index)")
 
                 if index == 1 {
                     Text(article.pullQuote)
@@ -31,6 +33,7 @@ struct ReaderContentView: View {
                         .background(theme.quoteBackgroundColor)
                         .clipShape(.rect(cornerRadius: 12))
                         .padding(.top, 25)
+                        .id("reader-pull-quote")
                 }
             }
             .padding(.bottom, 30)

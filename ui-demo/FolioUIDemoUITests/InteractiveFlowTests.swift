@@ -129,6 +129,44 @@ final class InteractiveFlowTests: XCTestCase {
     }
 
     @MainActor
+    func testReaderMascotSupportsWholeArticleAskAndTemporaryHide() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demoScreen", "reader"]
+        app.launch()
+
+        let mascotButton = app.buttons["article-ask-mascot"]
+        XCTAssertTrue(mascotButton.waitForExistence(timeout: 3))
+        XCTAssertEqual(mascotButton.label, "问这篇文章")
+        mascotButton.tap()
+
+        XCTAssertTrue(app.staticTexts["问这篇"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["基于《如何设计可信的 AI 产品》全文"].exists)
+        XCTAssertTrue(app.buttons["隐藏答疑"].exists)
+
+        let articleScrollStart = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.38))
+        let articleScrollEnd = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+        articleScrollStart.press(forDuration: 0.05, thenDragTo: articleScrollEnd)
+        XCTAssertTrue(app.staticTexts["问这篇"].exists)
+
+        app.buttons["总结核心观点"].tap()
+        XCTAssertTrue(
+            app.staticTexts["article-ask-answer"].waitForExistence(timeout: 3)
+        )
+
+        app.buttons["隐藏答疑"].tap()
+        XCTAssertTrue(mascotButton.waitForExistence(timeout: 3))
+        XCTAssertEqual(mascotButton.label, "返回文章答疑")
+
+        mascotButton.tap()
+        XCTAssertTrue(app.staticTexts["article-ask-answer"].waitForExistence(timeout: 3))
+
+        app.buttons["我懂了，继续阅读"].tap()
+        XCTAssertTrue(mascotButton.waitForExistence(timeout: 3))
+        XCTAssertEqual(mascotButton.label, "问这篇文章")
+    }
+
+    @MainActor
     func testReaderAppearanceChangesFontAndBackground() {
         continueAfterFailure = false
         let app = XCUIApplication()
