@@ -6,6 +6,7 @@ struct AskInsufficientView: View {
     @State private var question = ""
     @State private var showsFilters = false
     @State private var answerScope = "全部资料"
+    @FocusState private var isQuestionFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,6 +51,7 @@ struct AskInsufficientView: View {
 
             FolioInputBar(
                 text: $question,
+                isFocused: $isQuestionFocused,
                 placeholder: "提出基于你资料的问题…",
                 isEnabled: hasQuestion,
                 action: onSuggestion

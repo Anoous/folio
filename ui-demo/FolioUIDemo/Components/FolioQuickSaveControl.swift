@@ -43,11 +43,6 @@ struct FolioQuickSaveControl: View {
                             height: FolioMetrics.minimumTapTarget
                         )
 
-                    Image(systemName: "link")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(FolioPalette.secondaryText)
-                        .accessibilityHidden(true)
-
                     TextField("粘贴链接，收藏到 Folio", text: $text)
                         .font(.body)
                         .foregroundStyle(FolioPalette.inkGreenDeep)

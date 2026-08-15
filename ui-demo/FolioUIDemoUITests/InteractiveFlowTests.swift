@@ -46,8 +46,13 @@ final class InteractiveFlowTests: XCTestCase {
         app.buttons["我保存的内容如何定义 AI 可信度？"].tap()
         XCTAssertTrue(app.staticTexts["回答"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["来源"].exists)
+        XCTAssertTrue(app.staticTexts["问 Folio"].exists)
+        XCTAssertTrue(app.buttons["资料库"].exists)
+        XCTAssertTrue(app.buttons["问答"].exists)
+        XCTAssertTrue(app.buttons["收藏链接"].exists)
+        XCTAssertFalse(app.buttons["返回"].exists)
 
-        app.buttons["阅读"].tap()
+        app.buttons["资料库"].tap()
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
     }
 
@@ -66,12 +71,66 @@ final class InteractiveFlowTests: XCTestCase {
 
         let questionField = app.textFields["ask-question-field"]
         XCTAssertTrue(questionField.exists)
+        XCTAssertTrue(app.buttons["资料库"].exists)
+        XCTAssertTrue(app.buttons["问答"].exists)
+        XCTAssertTrue(app.buttons["收藏链接"].exists)
         questionField.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["资料库"].exists)
+        XCTAssertFalse(app.buttons["问答"].exists)
+        XCTAssertFalse(app.buttons["收藏链接"].exists)
+
+        XCTAssertFalse(app.buttons["ask-dismiss-keyboard"].exists)
+        let inputBackButton = app.buttons["ask-input-back"]
+        XCTAssertTrue(inputBackButton.waitForExistence(timeout: 3))
+        inputBackButton.tap()
+        XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
+        let firstLibraryArticle = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "如何设计可信的 AI 产品")
+        ).firstMatch
+        XCTAssertTrue(firstLibraryArticle.waitForExistence(timeout: 3))
+        XCTAssertTrue(firstLibraryArticle.isHittable)
+        XCTAssertTrue(app.buttons["资料库"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["问答"].exists)
+        XCTAssertTrue(app.buttons["收藏链接"].exists)
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+        XCTAssertFalse(inputBackButton.exists)
+
+        app.buttons["问答"].tap()
+        XCTAssertTrue(app.staticTexts["问 Folio"].waitForExistence(timeout: 3))
+        questionField.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["资料库"].exists)
         questionField.typeText("为什么解释会降低可信度？")
 
         XCTAssertTrue(sendButton.isEnabled)
         sendButton.tap()
         XCTAssertTrue(app.staticTexts["回答"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["问 Folio"].exists)
+        XCTAssertTrue(app.staticTexts["ask-inline-response"].exists)
+        XCTAssertTrue(app.buttons["资料库"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["问答"].exists)
+        XCTAssertTrue(app.buttons["收藏链接"].exists)
+        XCTAssertFalse(app.buttons["返回"].exists)
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+    }
+
+    @MainActor
+    func testNestedTasksHidePrimaryNavigation() {
+        continueAfterFailure = false
+
+        for screen in ["reader", "ask-answer", "ask-insufficient", "settings"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-demoScreen", screen]
+            app.launch()
+
+            XCTAssertTrue(app.buttons["返回"].waitForExistence(timeout: 3), "\(screen) 未正常启动")
+            XCTAssertFalse(app.buttons["资料库"].exists, "\(screen) 不应显示资料库 Tab")
+            XCTAssertFalse(app.buttons["问答"].exists, "\(screen) 不应显示问答 Tab")
+            XCTAssertFalse(app.buttons["收藏链接"].exists, "\(screen) 不应显示快速收藏")
+
+            app.terminate()
+        }
     }
 
     @MainActor
@@ -125,6 +184,22 @@ final class InteractiveFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["核心洞察"].waitForExistence(timeout: 3))
 
         app.buttons["返回"].tap()
+        XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testReaderReturnsWithExpandedBackSwipe() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demoScreen", "reader"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["为什么可信是 AI 产品的\n核心体验"].waitForExistence(timeout: 3))
+
+        let swipeStart = app.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5))
+        let swipeEnd = app.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5))
+        swipeStart.press(forDuration: 0.05, thenDragTo: swipeEnd)
+
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
     }
 
@@ -211,27 +286,13 @@ final class InteractiveFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testLibraryFilterChangesVisibleMockData() {
-        continueAfterFailure = false
-        let app = XCUIApplication()
-        app.launchArguments = ["-demoScreen", "library"]
-        app.launch()
-
-        let filterButton = app.buttons["筛选"]
-        XCTAssertTrue(filterButton.waitForExistence(timeout: 3))
-        filterButton.tap()
-        app.buttons["处理中"].tap()
-
-        XCTAssertTrue(app.staticTexts["SwiftUI 性能优化指南"].waitForExistence(timeout: 3))
-        XCTAssertFalse(app.staticTexts["如何设计可信的 AI 产品"].exists)
-    }
-
-    @MainActor
     func testAllFifteenLibraryArticlesScrollAndOpenTheirOriginalContent() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demoScreen", "library"]
         app.launch()
+
+        XCTAssertFalse(app.buttons["筛选"].exists)
 
         let articles = [
             ("如何设计可信的 AI 产品", "为什么可信是 AI 产品的\n核心体验"),
@@ -257,12 +318,13 @@ final class InteractiveFlowTests: XCTestCase {
             ).firstMatch
 
             var scrollAttempts = 0
-            while !articleButton.exists && scrollAttempts < 8 {
+            while (!articleButton.exists || !articleButton.isHittable) && scrollAttempts < 8 {
                 app.swipeUp()
                 scrollAttempts += 1
             }
 
             XCTAssertTrue(articleButton.exists, "资料库中缺少测试文章：\(title)")
+            XCTAssertTrue(articleButton.isHittable, "测试文章无法点击：\(title)")
             articleButton.tap()
 
             let originalButton = app.buttons["原文"]
@@ -286,11 +348,17 @@ final class InteractiveFlowTests: XCTestCase {
 
         let newExpandButton = app.buttons["收藏链接"]
         XCTAssertTrue(newExpandButton.waitForExistence(timeout: 3))
+        let firstArticle = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "如何设计可信的 AI 产品")
+        ).firstMatch
+        XCTAssertTrue(firstArticle.isHittable)
         newExpandButton.tap()
 
         let urlField = app.textFields["quick-save-url-field"]
         XCTAssertTrue(urlField.waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["问答"].exists)
+        XCTAssertFalse(app.buttons["资料库"].exists)
+        XCTAssertFalse(firstArticle.isHittable)
         urlField.typeText("example.com/article")
 
         let composerScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -304,6 +372,7 @@ final class InteractiveFlowTests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["quick-save-success"].waitForExistence(timeout: 3))
         XCTAssertTrue(newExpandButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(firstArticle.isHittable)
         XCTAssertTrue(app.staticTexts["example.com/article"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
     }

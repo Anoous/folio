@@ -47,29 +47,11 @@ struct DemoNavigationView: View {
                             onBack: store.pop,
                             onOpenSource: { store.open(.insight) }
                         )
-                        .safeAreaInset(edge: .bottom, spacing: 0) {
-                            FolioTabBar(
-                                selectedTab: $store.selectedTab,
-                                onSelect: store.selectTab,
-                                onQuickSave: store.saveURL
-                            )
-                            .padding(.horizontal, FolioMetrics.compactInset)
-                            .padding(.vertical, 8)
-                        }
                     case .askInsufficient:
                         AskInsufficientView(
                             onBack: store.pop,
                             onSuggestion: { store.open(.askAnswer) }
                         )
-                            .safeAreaInset(edge: .bottom, spacing: 0) {
-                                FolioTabBar(
-                                    selectedTab: $store.selectedTab,
-                                    onSelect: store.selectTab,
-                                    onQuickSave: store.saveURL
-                                )
-                                .padding(.horizontal, FolioMetrics.compactInset)
-                                .padding(.vertical, 8)
-                            }
                     case .shareSuccess:
                         ShareSaveSuccessView(onDone: store.pop)
                     }

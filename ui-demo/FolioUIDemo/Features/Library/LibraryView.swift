@@ -5,8 +5,6 @@ struct LibraryView: View {
     let onOpenArticle: (DemoArticle) -> Void
     let onOpenSettings: () -> Void
     let transitionNamespace: Namespace.ID
-    @State private var showsFilters = false
-    @State private var selectedFilter = LibraryFilter.all
 
     var body: some View {
         ScrollView {
@@ -19,8 +17,6 @@ struct LibraryView: View {
 
                     Spacer()
 
-                    FolioFilterButton(action: showFilters)
-
                     Button(action: onOpenSettings) {
                         FolioAvatar(size: FolioMetrics.minimumTapTarget)
                     }
@@ -31,7 +27,7 @@ struct LibraryView: View {
                 .padding(.bottom, 17)
 
                 LazyVStack(spacing: 0) {
-                    ForEach(filteredArticles) { article in
+                    ForEach(articles) { article in
                         LibraryArticleRow(
                             article: article,
                             transitionNamespace: transitionNamespace,
@@ -44,49 +40,15 @@ struct LibraryView: View {
         }
         .scrollIndicators(.hidden)
         .background(FolioPalette.canvas)
-        .confirmationDialog("筛选资料库", isPresented: $showsFilters) {
-            Button("全部内容", action: showAllArticles)
-            Button("处理中", action: showProcessingArticles)
-            Button("受限", action: showLimitedArticles)
-            Button("取消", role: .cancel, action: dismissFilters)
-        }
         .toolbar(.hidden, for: .navigationBar)
-    }
-
-    private func showFilters() {
-        showsFilters = true
-    }
-
-    private var filteredArticles: [DemoArticle] {
-        switch selectedFilter {
-        case .all:
-            articles
-        case .processing:
-            articles.filter { $0.status == .processing }
-        case .limited:
-            articles.filter { $0.status == .limited }
-        }
-    }
-
-    private func showAllArticles() {
-        selectedFilter = .all
-    }
-
-    private func showProcessingArticles() {
-        selectedFilter = .processing
-    }
-
-    private func showLimitedArticles() {
-        selectedFilter = .limited
-    }
-
-    private func dismissFilters() {
-        showsFilters = false
     }
 }
 
 #Preview {
     @Previewable @Namespace var transitionNamespace
+    @Previewable @State var selectedTab = DemoTab.library
+    @Previewable @State var quickSavePhase = QuickSavePhase.idle
+    @Previewable @State var quickSaveText = ""
 
     LibraryView(
         articles: DemoContent.articles,
@@ -96,7 +58,9 @@ struct LibraryView: View {
     )
         .safeAreaInset(edge: .bottom, spacing: 0) {
             FolioTabBar(
-                selectedTab: .constant(.library)
+                selectedTab: $selectedTab,
+                quickSavePhase: $quickSavePhase,
+                quickSaveText: $quickSaveText
             )
                 .padding(.horizontal, FolioMetrics.compactInset)
                 .padding(.vertical, 8)

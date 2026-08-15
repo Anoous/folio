@@ -84,6 +84,7 @@ struct ArticleDetailView: View {
         }
         .background(articleBackground)
         .toolbar(.hidden, for: .navigationBar)
+        .simultaneousGesture(backSwipeGesture)
         .animation(.easeInOut(duration: reduceMotion ? 0 : 0.2), value: readerTheme)
         .overlay(alignment: .trailing) {
             if presentedSheet?.id == nil {
@@ -131,6 +132,26 @@ struct ArticleDetailView: View {
                 sourceMetadata: "\(article.source) · \(article.age)"
             )
         )
+    }
+
+    private var backSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .onEnded(handleBackSwipe)
+    }
+
+    private func handleBackSwipe(_ value: DragGesture.Value) {
+        let horizontalTravel = value.translation.width
+        let verticalTravel = abs(value.translation.height)
+        let predictedHorizontalTravel = value.predictedEndTranslation.width
+
+        guard value.startLocation.x <= 96,
+              horizontalTravel > 44,
+              horizontalTravel > verticalTravel * 1.4,
+              predictedHorizontalTravel > 80 else {
+            return
+        }
+
+        onBack()
     }
 
     private func showReaderAppearance() {

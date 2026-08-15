@@ -6,6 +6,7 @@ struct AskAnswerView: View {
     @State private var followUp = ""
     @State private var showsFilters = false
     @State private var answerScope = "全部资料"
+    @FocusState private var isFollowUpFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -76,6 +77,7 @@ struct AskAnswerView: View {
 
             FolioInputBar(
                 text: $followUp,
+                isFocused: $isFollowUpFocused,
                 placeholder: "继续提问…",
                 isEnabled: hasFollowUp,
                 action: clearFollowUp

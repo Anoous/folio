@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FolioInputBar: View {
     @Binding var text: String
+    @FocusState.Binding var isFocused: Bool
     let placeholder: String
     let isEnabled: Bool
     var sendSymbol = "arrow.up"
@@ -12,6 +13,7 @@ struct FolioInputBar: View {
             TextField(placeholder, text: $text, axis: .vertical)
                 .font(.body)
                 .lineLimit(1...4)
+                .focused($isFocused)
                 .textInputAutocapitalization(.sentences)
                 .submitLabel(.send)
                 .onSubmit(action)

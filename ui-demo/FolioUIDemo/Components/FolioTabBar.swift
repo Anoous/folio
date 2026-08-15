@@ -2,21 +2,25 @@ import SwiftUI
 
 struct FolioTabBar: View {
     @Binding var selectedTab: DemoTab
+    @Binding var quickSavePhase: QuickSavePhase
+    @Binding var quickSaveText: String
     var onSelect: ((DemoTab) -> Void)?
     var onQuickSave: ((URL) -> Void)?
     @Namespace private var glassNamespace
     @Namespace private var selectionNamespace
-    @State private var quickSavePhase = QuickSavePhase.idle
-    @State private var quickSaveText = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     init(
         selectedTab: Binding<DemoTab>,
+        quickSavePhase: Binding<QuickSavePhase>,
+        quickSaveText: Binding<String>,
         onSelect: ((DemoTab) -> Void)? = nil,
         onQuickSave: ((URL) -> Void)? = nil
     ) {
         _selectedTab = selectedTab
+        _quickSavePhase = quickSavePhase
+        _quickSaveText = quickSaveText
         self.onSelect = onSelect
         self.onQuickSave = onQuickSave
     }
@@ -27,7 +31,7 @@ struct FolioTabBar: View {
                 if quickSavePhase == .idle {
                     HStack(spacing: 0) {
                         FolioTabButton(
-                            title: "阅读",
+                            title: "资料库",
                             symbol: "books.vertical",
                             isSelected: selectedTab == .library,
                             selectionNamespace: selectionNamespace,

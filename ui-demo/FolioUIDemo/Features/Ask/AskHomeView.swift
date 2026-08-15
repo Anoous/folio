@@ -2,9 +2,13 @@ import SwiftUI
 
 struct AskHomeView: View {
     let onOpenSettings: () -> Void
-    let onAnswer: () -> Void
-    let onInsufficientEvidence: () -> Void
+    let onOpenSource: () -> Void
+    let onReturnHome: () -> Void
+    @FocusState.Binding var isQuestionFocused: Bool
     @State private var question = ""
+    @State private var submittedQuestion: String?
+    @State private var showsInsufficientEvidence = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,8 +17,30 @@ struct AskHomeView: View {
                     .font(.headline)
 
                 HStack {
-                    Color.clear
-                        .frame(width: FolioMetrics.minimumTapTarget, height: FolioMetrics.minimumTapTarget)
+                    if isQuestionFocused {
+                        Button(
+                            "返回",
+                            systemImage: "chevron.left",
+                            action: returnHome
+                        )
+                        .labelStyle(.iconOnly)
+                        .font(.body.bold())
+                        .foregroundStyle(FolioPalette.inkGreenDeep)
+                        .frame(
+                            width: FolioMetrics.minimumTapTarget,
+                            height: FolioMetrics.minimumTapTarget
+                        )
+                        .contentShape(.rect)
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("ask-input-back")
+                    } else {
+                        Color.clear
+                            .frame(
+                                width: FolioMetrics.minimumTapTarget,
+                                height: FolioMetrics.minimumTapTarget
+                            )
+                            .accessibilityHidden(true)
+                    }
 
                     Spacer()
 
@@ -30,55 +56,33 @@ struct AskHomeView: View {
             .padding(.bottom, 8)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 22, weight: .medium))
-                            .foregroundStyle(FolioPalette.inkGreenDeep)
-                            .frame(width: 48, height: 48)
-                            .background(FolioPalette.subtleGreen)
-                            .clipShape(.circle)
-                            .accessibilityHidden(true)
-
-                        Text("问问你的收藏")
-                            .font(.title2.bold())
-                            .foregroundStyle(FolioPalette.inkGreenDeep)
-
-                        Text("答案只来自你保存的内容，并附上来源。")
-                            .font(.subheadline)
-                            .foregroundStyle(FolioPalette.secondaryText)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 58)
-
-                    VStack(spacing: 4) {
-                        AskSuggestionButton(
-                            symbol: "checkmark.shield",
-                            title: "我保存的内容如何定义 AI 可信度？",
-                            action: onAnswer
-                        )
-                        AskSuggestionButton(
-                            symbol: "book.closed",
-                            title: "我读过哪些关于深度阅读的观点？",
-                            action: onAnswer
-                        )
-                        AskSuggestionButton(
-                            symbol: "speedometer",
-                            title: "SwiftUI 性能优化有哪些共同建议？",
-                            action: onInsufficientEvidence
-                        )
-                    }
-                    .padding(.top, 52)
-                    .padding(.bottom, 24)
+                if let submittedQuestion {
+                    AskConversationContent(
+                        question: submittedQuestion,
+                        showsInsufficientEvidence: showsInsufficientEvidence,
+                        onOpenSource: onOpenSource,
+                        onSuggestion: showTrustAnswer
+                    )
+                    .transition(.opacity)
+                } else {
+                    AskHomeEmptyContent(
+                        onTrustSuggestion: showTrustAnswer,
+                        onReadingSuggestion: showReadingAnswer,
+                        onPerformanceSuggestion: showPerformanceInsufficient
+                    )
+                    .transition(.opacity)
                 }
-                .padding(.horizontal, FolioMetrics.libraryInset)
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
+            .animation(
+                FolioMotion.articleContentSwitch(reduceMotion: reduceMotion),
+                value: submittedQuestion
+            )
 
             FolioInputBar(
                 text: $question,
+                isFocused: $isQuestionFocused,
                 placeholder: "问问你的收藏",
                 isEnabled: hasQuestion,
                 action: submitQuestion
@@ -90,13 +94,38 @@ struct AskHomeView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
+    private func returnHome() {
+        isQuestionFocused = false
+        onReturnHome()
+    }
+
     private func submitQuestion() {
-        guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if question.localizedStandardContains("行业") || question.localizedStandardContains("SwiftUI") {
-            onInsufficientEvidence()
-        } else {
-            onAnswer()
-        }
+        let submittedText = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !submittedText.isEmpty else { return }
+        showResponse(
+            to: submittedText,
+            isInsufficient: submittedText.localizedStandardContains("行业")
+                || submittedText.localizedStandardContains("SwiftUI")
+        )
+    }
+
+    private func showTrustAnswer() {
+        showResponse(to: "我保存的内容如何定义 AI 可信度？", isInsufficient: false)
+    }
+
+    private func showReadingAnswer() {
+        showResponse(to: "我读过哪些关于深度阅读的观点？", isInsufficient: false)
+    }
+
+    private func showPerformanceInsufficient() {
+        showResponse(to: "SwiftUI 性能优化有哪些共同建议？", isInsufficient: true)
+    }
+
+    private func showResponse(to submittedText: String, isInsufficient: Bool) {
+        isQuestionFocused = false
+        question = ""
+        showsInsufficientEvidence = isInsufficient
+        submittedQuestion = submittedText
     }
 
     private var hasQuestion: Bool {
@@ -105,10 +134,22 @@ struct AskHomeView: View {
 }
 
 #Preview {
-    AskHomeView(onOpenSettings: {}, onAnswer: {}, onInsufficientEvidence: {})
+    @Previewable @FocusState var isQuestionFocused: Bool
+    @Previewable @State var selectedTab = DemoTab.ask
+    @Previewable @State var quickSavePhase = QuickSavePhase.idle
+    @Previewable @State var quickSaveText = ""
+
+    AskHomeView(
+        onOpenSettings: {},
+        onOpenSource: {},
+        onReturnHome: {},
+        isQuestionFocused: $isQuestionFocused
+    )
         .safeAreaInset(edge: .bottom, spacing: 0) {
             FolioTabBar(
-                selectedTab: .constant(.ask)
+                selectedTab: $selectedTab,
+                quickSavePhase: $quickSavePhase,
+                quickSaveText: $quickSaveText
             )
             .padding(.horizontal, FolioMetrics.compactInset)
             .padding(.vertical, 8)
