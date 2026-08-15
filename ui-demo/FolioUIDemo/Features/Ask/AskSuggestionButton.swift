@@ -11,21 +11,28 @@ struct AskSuggestionButton: View {
                 Image(systemName: symbol)
                     .font(.system(size: 17, weight: .regular))
                     .foregroundStyle(FolioPalette.inkGreenDeep)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 30, height: 30)
                     .accessibilityHidden(true)
 
                 Text(title)
-                    .font(.body)
+                    .font(FolioTypography.editorial(17, relativeTo: .body))
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                Spacer()
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(FolioPalette.tertiaryText)
+                    .accessibilityHidden(true)
             }
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, minHeight: 48)
+            .padding(.vertical, 15)
+            .frame(maxWidth: .infinity, minHeight: 60)
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FolioPressButtonStyle(scalesOnPress: false))
         .accessibilityLabel(title)
+        .accessibilityHint("使用此问题提问")
     }
 }

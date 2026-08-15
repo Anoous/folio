@@ -12,48 +12,41 @@ struct AskHomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ZStack {
-                Text("问 Folio")
-                    .font(.headline)
-
-                HStack {
-                    if isQuestionFocused {
-                        Button(
-                            "返回",
-                            systemImage: "chevron.left",
-                            action: returnHome
-                        )
-                        .labelStyle(.iconOnly)
-                        .font(.body.bold())
-                        .foregroundStyle(FolioPalette.inkGreenDeep)
-                        .frame(
-                            width: FolioMetrics.minimumTapTarget,
-                            height: FolioMetrics.minimumTapTarget
-                        )
-                        .contentShape(.rect)
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("ask-input-back")
-                    } else {
-                        Color.clear
-                            .frame(
-                                width: FolioMetrics.minimumTapTarget,
-                                height: FolioMetrics.minimumTapTarget
-                            )
-                            .accessibilityHidden(true)
-                    }
-
-                    Spacer()
-
-                    Button(action: onOpenSettings) {
-                        FolioAvatar(size: FolioMetrics.minimumTapTarget)
-                    }
+            HStack(alignment: .center, spacing: 13) {
+                if isQuestionFocused {
+                    Button(
+                        "返回",
+                        systemImage: "chevron.left",
+                        action: returnHome
+                    )
+                    .labelStyle(.iconOnly)
+                    .font(.body.bold())
+                    .foregroundStyle(FolioPalette.inkGreenDeep)
+                    .frame(
+                        width: FolioMetrics.minimumTapTarget,
+                        height: FolioMetrics.minimumTapTarget
+                    )
+                    .contentShape(.rect)
                     .buttonStyle(.plain)
-                    .accessibilityLabel("打开设置")
+                    .accessibilityIdentifier("ask-input-back")
+                } else {
+                    Text("问 Folio")
+                        .font(FolioTypography.editorialBold(34, relativeTo: .largeTitle))
+                        .foregroundStyle(FolioPalette.inkGreenDeep)
+                        .lineLimit(1)
                 }
+
+                Spacer()
+
+                Button(action: onOpenSettings) {
+                    FolioAvatar(size: FolioMetrics.minimumTapTarget)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("打开设置")
             }
             .padding(.horizontal, FolioMetrics.libraryInset)
-            .padding(.top, 8)
-            .padding(.bottom, 8)
+            .padding(.top, 18)
+            .padding(.bottom, 17)
 
             ScrollView {
                 if let submittedQuestion {

@@ -17,8 +17,6 @@ struct DemoTabShellView: View {
                 transitionNamespace: articleTransition
             )
             .opacity(store.selectedTab == .library ? 1 : 0)
-            .scaleEffect(reduceMotion || store.selectedTab == .library ? 1 : 0.985, anchor: .bottom)
-            .offset(x: reduceMotion || store.selectedTab == .library ? 0 : -12)
             .allowsHitTesting(store.selectedTab == .library)
             .accessibilityHidden(store.selectedTab != .library)
 
@@ -29,15 +27,12 @@ struct DemoTabShellView: View {
                 isQuestionFocused: $isAskQuestionFocused
             )
             .opacity(store.selectedTab == .ask ? 1 : 0)
-            .scaleEffect(reduceMotion || store.selectedTab == .ask ? 1 : 0.985, anchor: .bottom)
-            .offset(x: reduceMotion || store.selectedTab == .ask ? 0 : 12)
             .allowsHitTesting(store.selectedTab == .ask)
             .accessibilityHidden(store.selectedTab != .ask)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .allowsHitTesting(!quickSavePhase.isExpanded)
         .accessibilityHidden(quickSavePhase.isExpanded)
-        .animation(FolioMotion.pageSwitch(reduceMotion: reduceMotion), value: store.selectedTab)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !isAskQuestionFocused {
                 FolioTabBar(

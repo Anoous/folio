@@ -63,14 +63,30 @@ final class InteractiveFlowTests: XCTestCase {
         app.launchArguments = ["-demoScreen", "ask-home"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["问 Folio"].waitForExistence(timeout: 3))
+        let askTitle = app.staticTexts["问 Folio"]
+        XCTAssertTrue(askTitle.waitForExistence(timeout: 3))
+        XCTAssertLessThan(askTitle.frame.midX, app.frame.midX)
+        XCTAssertTrue(app.staticTexts["可以这样问"].exists)
         XCTAssertFalse(app.buttons["语音输入"].exists)
+
+        for suggestion in [
+            "我保存的内容如何定义 AI 可信度？",
+            "我读过哪些关于深度阅读的观点？",
+            "SwiftUI 性能优化有哪些共同建议？"
+        ] {
+            XCTAssertTrue(app.buttons[suggestion].exists)
+            XCTAssertTrue(app.buttons[suggestion].isHittable)
+        }
 
         let sendButton = app.buttons["ask-send"]
         XCTAssertFalse(sendButton.isEnabled)
 
         let questionField = app.textFields["ask-question-field"]
         XCTAssertTrue(questionField.exists)
+        XCTAssertGreaterThan(
+            questionField.frame.minY,
+            app.buttons["SwiftUI 性能优化有哪些共同建议？"].frame.maxY
+        )
         XCTAssertTrue(app.buttons["资料库"].exists)
         XCTAssertTrue(app.buttons["问答"].exists)
         XCTAssertTrue(app.buttons["收藏链接"].exists)
