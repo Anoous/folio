@@ -3,7 +3,6 @@ import SwiftUI
 struct AskHomeView: View {
     let onOpenSettings: () -> Void
     let onOpenSource: () -> Void
-    let onReturnHome: () -> Void
     @FocusState.Binding var isQuestionFocused: Bool
     @State private var question = ""
     @State private var submittedQuestion: String?
@@ -13,30 +12,33 @@ struct AskHomeView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 13) {
-                if isQuestionFocused {
-                    Button(
-                        "返回",
-                        systemImage: "chevron.left",
-                        action: returnHome
-                    )
-                    .labelStyle(.iconOnly)
-                    .font(.body.bold())
+                Text("问 Folio")
+                    .font(FolioTypography.editorialBold(34, relativeTo: .largeTitle))
                     .foregroundStyle(FolioPalette.inkGreenDeep)
-                    .frame(
-                        width: FolioMetrics.minimumTapTarget,
-                        height: FolioMetrics.minimumTapTarget
-                    )
-                    .contentShape(.rect)
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("ask-input-back")
-                } else {
-                    Text("问 Folio")
-                        .font(FolioTypography.editorialBold(34, relativeTo: .largeTitle))
-                        .foregroundStyle(FolioPalette.inkGreenDeep)
-                        .lineLimit(1)
-                }
+                    .lineLimit(1)
 
                 Spacer()
+
+                ZStack {
+                    if isQuestionFocused {
+                        Button(
+                            "收起键盘",
+                            systemImage: "keyboard.chevron.compact.down",
+                            action: dismissKeyboard
+                        )
+                        .labelStyle(.iconOnly)
+                        .font(.body.bold())
+                        .foregroundStyle(FolioPalette.inkGreenDeep)
+                        .contentShape(.rect)
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("ask-dismiss-keyboard")
+                        .transition(.opacity)
+                    }
+                }
+                .frame(
+                    width: FolioMetrics.minimumTapTarget,
+                    height: FolioMetrics.minimumTapTarget
+                )
 
                 Button(action: onOpenSettings) {
                     FolioAvatar(size: FolioMetrics.minimumTapTarget)
@@ -47,6 +49,10 @@ struct AskHomeView: View {
             .padding(.horizontal, FolioMetrics.libraryInset)
             .padding(.top, 18)
             .padding(.bottom, 17)
+            .animation(
+                FolioMotion.chromeVisibility(reduceMotion: reduceMotion),
+                value: isQuestionFocused
+            )
 
             ScrollView {
                 if let submittedQuestion {
@@ -56,20 +62,20 @@ struct AskHomeView: View {
                         onOpenSource: onOpenSource,
                         onSuggestion: showTrustAnswer
                     )
-                    .transition(.opacity)
+                    .transition(responseTransition)
                 } else {
                     AskHomeEmptyContent(
                         onTrustSuggestion: showTrustAnswer,
                         onReadingSuggestion: showReadingAnswer,
                         onPerformanceSuggestion: showPerformanceInsufficient
                     )
-                    .transition(.opacity)
+                    .transition(responseTransition)
                 }
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
             .animation(
-                FolioMotion.articleContentSwitch(reduceMotion: reduceMotion),
+                FolioMotion.chromeVisibility(reduceMotion: reduceMotion),
                 value: submittedQuestion
             )
 
@@ -87,9 +93,8 @@ struct AskHomeView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    private func returnHome() {
+    private func dismissKeyboard() {
         isQuestionFocused = false
-        onReturnHome()
     }
 
     private func submitQuestion() {
@@ -124,6 +129,10 @@ struct AskHomeView: View {
     private var hasQuestion: Bool {
         !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    private var responseTransition: AnyTransition {
+        .asymmetric(insertion: .opacity, removal: .identity)
+    }
 }
 
 #Preview {
@@ -135,7 +144,6 @@ struct AskHomeView: View {
     AskHomeView(
         onOpenSettings: {},
         onOpenSource: {},
-        onReturnHome: {},
         isQuestionFocused: $isQuestionFocused
     )
         .safeAreaInset(edge: .bottom, spacing: 0) {

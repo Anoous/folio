@@ -66,7 +66,6 @@ struct FolioTabBar: View {
             .fixedSize(horizontal: !quickSavePhase.isExpanded, vertical: false)
         }
         .frame(maxWidth: .infinity)
-        .animation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion), value: quickSavePhase)
         .animation(FolioMotion.segmentSelection(reduceMotion: reduceMotion), value: selectedTab)
         .sensoryFeedback(.selection, trigger: selectedTab)
     }

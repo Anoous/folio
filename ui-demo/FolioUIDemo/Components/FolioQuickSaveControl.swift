@@ -32,6 +32,7 @@ struct FolioQuickSaveControl: View {
                         )
                     }
                     .accessibilityIdentifier("quick-save")
+                    .transition(phaseTransition)
 
             case .editing:
                 HStack(spacing: 3) {
@@ -72,6 +73,7 @@ struct FolioQuickSaveControl: View {
                         .disabled(!isValidURL)
                         .accessibilityIdentifier("quick-save-send")
                 }
+                .transition(phaseTransition)
 
             case .saving:
                 HStack(spacing: 10) {
@@ -87,6 +89,7 @@ struct FolioQuickSaveControl: View {
                 .frame(maxWidth: .infinity)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("正在收藏链接")
+                .transition(phaseTransition)
 
             case .saved:
                 Label("已收藏 · 正在处理", systemImage: "checkmark")
@@ -94,6 +97,7 @@ struct FolioQuickSaveControl: View {
                     .foregroundStyle(FolioPalette.inkGreenDeep)
                     .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("quick-save-success")
+                    .transition(phaseTransition)
             }
         }
         .buttonStyle(FolioPressButtonStyle())
@@ -110,7 +114,6 @@ struct FolioQuickSaveControl: View {
         .glassEffect(controlGlass, in: .capsule)
         .glassEffectID("folio-save", in: glassNamespace)
         .glassEffectTransition(.matchedGeometry)
-        .animation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion), value: phase)
         .sensoryFeedback(
             .impact(weight: .light, intensity: 0.72),
             trigger: impactFeedbackTrigger
@@ -198,6 +201,10 @@ struct FolioQuickSaveControl: View {
         return phase.isExpanded
             ? .regular.interactive()
             : .regular.tint(FolioPalette.inkGreen.opacity(0.16)).interactive()
+    }
+
+    private var phaseTransition: AnyTransition {
+        .asymmetric(insertion: .opacity, removal: .identity)
     }
 }
 

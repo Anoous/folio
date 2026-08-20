@@ -5,6 +5,7 @@ struct DemoTabShellView: View {
     let articleTransition: Namespace.ID
     @State private var quickSavePhase = QuickSavePhase.idle
     @State private var quickSaveText = ""
+    @State private var blocksReturnHitTesting = false
     @FocusState private var isAskQuestionFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -23,7 +24,6 @@ struct DemoTabShellView: View {
             AskHomeView(
                 onOpenSettings: { store.open(.settings) },
                 onOpenSource: { store.open(.insight) },
-                onReturnHome: { store.selectTab(.library) },
                 isQuestionFocused: $isAskQuestionFocused
             )
             .opacity(store.selectedTab == .ask ? 1 : 0)
@@ -31,33 +31,33 @@ struct DemoTabShellView: View {
             .accessibilityHidden(store.selectedTab != .ask)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .allowsHitTesting(!quickSavePhase.isExpanded)
-        .accessibilityHidden(quickSavePhase.isExpanded)
+        .allowsHitTesting(!quickSavePhase.isExpanded && !blocksReturnHitTesting)
+        .accessibilityHidden(quickSavePhase.isExpanded || blocksReturnHitTesting)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !isAskQuestionFocused {
-                FolioTabBar(
-                    selectedTab: $store.selectedTab,
-                    quickSavePhase: $quickSavePhase,
-                    quickSaveText: $quickSaveText,
-                    onSelect: store.selectTab,
-                    onQuickSave: store.saveURL
-                )
-                .padding(.horizontal, FolioMetrics.compactInset)
-                .padding(.vertical, 8)
-                .transition(rootNavigationTransition)
+            ZStack {
+                if !isAskQuestionFocused {
+                    FolioTabBar(
+                        selectedTab: $store.selectedTab,
+                        quickSavePhase: $quickSavePhase,
+                        quickSaveText: $quickSaveText,
+                        onSelect: store.selectTab,
+                        onQuickSave: store.saveURL
+                    )
+                    .transition(.opacity)
+                }
             }
+            .frame(height: FolioMetrics.tabBarHeight)
+            .padding(.horizontal, FolioMetrics.compactInset)
+            .padding(.vertical, 8)
         }
-        .animation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion), value: isAskQuestionFocused)
+        .animation(
+            FolioMotion.chromeVisibility(reduceMotion: reduceMotion),
+            value: isAskQuestionFocused
+        )
         .onChange(of: quickSavePhase, coordinateQuickSaveFocus)
         .onChange(of: store.selectedTab, coordinateTabFocus)
         .onChange(of: store.path, coordinateNavigationFocus)
         .toolbar(.hidden, for: .navigationBar)
-    }
-
-    private var rootNavigationTransition: AnyTransition {
-        reduceMotion
-            ? .opacity
-            : .move(edge: .bottom).combined(with: .opacity)
     }
 
     private func coordinateQuickSaveFocus(
@@ -74,7 +74,17 @@ struct DemoTabShellView: View {
     }
 
     private func coordinateNavigationFocus(_ oldPath: [DemoRoute], _ newPath: [DemoRoute]) {
-        guard oldPath.isEmpty, !newPath.isEmpty else { return }
-        isAskQuestionFocused = false
+        if oldPath.isEmpty, !newPath.isEmpty {
+            isAskQuestionFocused = false
+        }
+
+        guard !oldPath.isEmpty, newPath.isEmpty else { return }
+        blocksReturnHitTesting = true
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(320))
+            guard store.path.isEmpty else { return }
+            blocksReturnHitTesting = false
+        }
     }
 }

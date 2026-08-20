@@ -35,6 +35,7 @@ struct LibraryView: View {
                         )
                     }
                 }
+                .padding(.bottom, FolioMetrics.tabBarHeight + 18)
             }
             .padding(.horizontal, FolioMetrics.libraryInset)
         }

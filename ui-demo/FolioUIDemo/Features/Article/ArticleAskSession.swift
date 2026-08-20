@@ -5,17 +5,11 @@ import Observation
 @Observable
 final class ArticleAskSession {
     var draft = ""
-    var submittedQuestion: String?
-    var answer: String?
-    var answerScrollTarget: String?
-    var isCompleted = false
+    private(set) var submittedQuestion: String?
+    private(set) var answer: String?
 
     var canSubmit: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    var hasConversation: Bool {
-        submittedQuestion != nil
     }
 
     func submit() {
@@ -24,22 +18,22 @@ final class ArticleAskSession {
 
         submittedQuestion = question
         answer = Self.defaultAnswer
-        answerScrollTarget = "article-ask-question"
         draft = ""
-        isCompleted = false
     }
 
-    func submitSuggestion(_ question: String) {
-        draft = question
-        submit()
+    func referenceArticle(_ title: String) {
+        guard draft.isEmpty else { return }
+        draft = "关于《\(title)》，"
     }
 
-    func complete() {
-        isCompleted = true
-        draft = ""
+    func useVoiceDemoPrompt() {
+        guard draft.isEmpty else { return }
+        draft = "这篇文章的核心观点是什么？"
+    }
+
+    func clearConversation() {
         submittedQuestion = nil
         answer = nil
-        answerScrollTarget = nil
     }
 
     private static let defaultAnswer = "可信不是靠更多解释建立，而是靠证据、边界和可验证的过程建立。"

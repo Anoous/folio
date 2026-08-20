@@ -24,9 +24,6 @@ struct DemoNavigationView: View {
                             onBack: store.pop,
                             initialMode: .insight
                         )
-                        .navigationTransition(
-                            .zoom(sourceID: DemoContent.primaryArticle.id, in: articleTransition)
-                        )
                     case .evidence:
                         ArticleDetailView(
                             article: DemoContent.primaryArticle,

@@ -52,6 +52,11 @@ final class InteractiveFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["收藏链接"].exists)
         XCTAssertFalse(app.buttons["返回"].exists)
 
+        app.buttons["如何设计可信的 AI 产品"].tap()
+        XCTAssertTrue(app.staticTexts["核心洞察"].waitForExistence(timeout: 3))
+        app.buttons["返回"].tap()
+        XCTAssertTrue(app.staticTexts["回答"].waitForExistence(timeout: 3))
+
         app.buttons["资料库"].tap()
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
     }
@@ -83,6 +88,7 @@ final class InteractiveFlowTests: XCTestCase {
 
         let questionField = app.textFields["ask-question-field"]
         XCTAssertTrue(questionField.exists)
+        let restingComposerMinY = questionField.frame.minY
         XCTAssertGreaterThan(
             questionField.frame.minY,
             app.buttons["SwiftUI 性能优化有哪些共同建议？"].frame.maxY
@@ -96,24 +102,22 @@ final class InteractiveFlowTests: XCTestCase {
         XCTAssertFalse(app.buttons["问答"].exists)
         XCTAssertFalse(app.buttons["收藏链接"].exists)
 
-        XCTAssertFalse(app.buttons["ask-dismiss-keyboard"].exists)
-        let inputBackButton = app.buttons["ask-input-back"]
-        XCTAssertTrue(inputBackButton.waitForExistence(timeout: 3))
-        inputBackButton.tap()
-        XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
-        let firstLibraryArticle = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS %@", "如何设计可信的 AI 产品")
-        ).firstMatch
-        XCTAssertTrue(firstLibraryArticle.waitForExistence(timeout: 3))
-        XCTAssertTrue(firstLibraryArticle.isHittable)
+        let dismissKeyboardButton = app.buttons["ask-dismiss-keyboard"]
+        XCTAssertTrue(dismissKeyboardButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["问 Folio"].exists)
+        XCTAssertFalse(app.buttons["ask-input-back"].exists)
+        dismissKeyboardButton.tap()
+
+        let keyboardDismissed = NSPredicate(format: "exists == false")
+        expectation(for: keyboardDismissed, evaluatedWith: app.keyboards.firstMatch)
+        waitForExpectations(timeout: 3)
+        XCTAssertTrue(app.staticTexts["问 Folio"].exists)
         XCTAssertTrue(app.buttons["资料库"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["问答"].exists)
         XCTAssertTrue(app.buttons["收藏链接"].exists)
-        XCTAssertFalse(app.keyboards.firstMatch.exists)
-        XCTAssertFalse(inputBackButton.exists)
+        XCTAssertFalse(dismissKeyboardButton.exists)
+        XCTAssertEqual(questionField.frame.minY, restingComposerMinY, accuracy: 4)
 
-        app.buttons["问答"].tap()
-        XCTAssertTrue(app.staticTexts["问 Folio"].waitForExistence(timeout: 3))
         questionField.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["资料库"].exists)
@@ -220,41 +224,47 @@ final class InteractiveFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testReaderMascotSupportsWholeArticleAskAndTemporaryHide() {
+    func testReaderArticleComposerFollowsScrollDirectionAndAnswersInline() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demoScreen", "reader"]
         app.launch()
 
-        let mascotButton = app.buttons["article-ask-mascot"]
-        XCTAssertTrue(mascotButton.waitForExistence(timeout: 3))
-        XCTAssertEqual(mascotButton.label, "问这篇文章")
-        mascotButton.tap()
+        let composerField = app.textFields["article-ask-field"]
+        XCTAssertTrue(composerField.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["article-ask-context"].exists)
+        XCTAssertTrue(app.buttons["article-ask-voice"].exists)
+        XCTAssertFalse(app.buttons["article-ask-send"].isEnabled)
+        XCTAssertFalse(app.buttons["article-ask-mascot"].exists)
 
-        XCTAssertTrue(app.staticTexts["问这篇"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["基于《如何设计可信的 AI 产品》全文"].exists)
-        XCTAssertTrue(app.buttons["隐藏答疑"].exists)
+        let reader = app.scrollViews.firstMatch
+        XCTAssertTrue(reader.exists)
+        reader.swipeUp(velocity: .slow)
 
-        let articleScrollStart = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.38))
-        let articleScrollEnd = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
-        articleScrollStart.press(forDuration: 0.05, thenDragTo: articleScrollEnd)
-        XCTAssertTrue(app.staticTexts["问这篇"].exists)
+        let composerHidden = NSPredicate(format: "hittable == false")
+        expectation(for: composerHidden, evaluatedWith: composerField)
+        waitForExpectations(timeout: 3)
 
-        app.buttons["总结核心观点"].tap()
+        reader.swipeDown(velocity: .slow)
+        let composerRestored = NSPredicate(format: "hittable == true")
+        expectation(for: composerRestored, evaluatedWith: composerField)
+        waitForExpectations(timeout: 3)
+
+        composerField.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        composerField.typeText("这篇文章的核心观点是什么？")
+
+        let sendButton = app.buttons["article-ask-send"]
+        XCTAssertTrue(sendButton.isEnabled)
+        sendButton.tap()
+
         XCTAssertTrue(
-            app.staticTexts["article-ask-answer"].waitForExistence(timeout: 3)
+            app.staticTexts["article-ask-inline-answer"].waitForExistence(timeout: 3)
         )
-
-        app.buttons["隐藏答疑"].tap()
-        XCTAssertTrue(mascotButton.waitForExistence(timeout: 3))
-        XCTAssertEqual(mascotButton.label, "返回文章答疑")
-
-        mascotButton.tap()
-        XCTAssertTrue(app.staticTexts["article-ask-answer"].waitForExistence(timeout: 3))
-
-        app.buttons["我懂了，继续阅读"].tap()
-        XCTAssertTrue(mascotButton.waitForExistence(timeout: 3))
-        XCTAssertEqual(mascotButton.label, "问这篇文章")
+        XCTAssertTrue(app.staticTexts["article-ask-question"].exists)
+        XCTAssertTrue(app.buttons["article-ask-evidence"].exists)
+        XCTAssertTrue(composerField.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["隐藏答疑"].exists)
     }
 
     @MainActor
@@ -328,14 +338,22 @@ final class InteractiveFlowTests: XCTestCase {
             ("离线编辑后的冲突该怎么解释", "同步冲突不应该悄悄吞掉修改")
         ]
 
-        for (title, readerTitle) in articles {
+        for (index, article) in articles.enumerated() {
+            let (title, readerTitle) = article
+
+            if index > 0 {
+                app.terminate()
+                app.launch()
+                XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
+            }
+
             let articleButton = app.buttons.matching(
                 NSPredicate(format: "label CONTAINS %@", title)
             ).firstMatch
 
             var scrollAttempts = 0
-            while (!articleButton.exists || !articleButton.isHittable) && scrollAttempts < 8 {
-                app.swipeUp()
+            while (!articleButton.exists || !articleButton.isHittable) && scrollAttempts < 20 {
+                app.swipeUp(velocity: .slow)
                 scrollAttempts += 1
             }
 
@@ -352,6 +370,10 @@ final class InteractiveFlowTests: XCTestCase {
 
             app.buttons["返回"].tap()
             XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
+            XCTAssertTrue(
+                app.buttons["资料库"].waitForExistence(timeout: 2),
+                "返回资料库后的短暂防误触状态未结束：\(title)"
+            )
         }
     }
 

@@ -13,3 +13,5 @@
 `Motion/liquid-toolbar-demo.mp4` 保留早期“＋”展开菜单的动效基线；当前单层变形收藏 Dock 以最新 XCUITest 和 Simulator 实机截图为准，视频待重新录制。
 
 `Motion/article-inline-switch.mp4` 记录文章顶部保持不动、正文从洞察连续切换到原文。
+
+`Motion/article-ai-ask-interaction.mp4` 记录文章内 AI 输入框随阅读手势隐藏与恢复、示例提问以及回答插入正文的完整过程。
