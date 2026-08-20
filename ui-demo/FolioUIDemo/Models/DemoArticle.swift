@@ -5,9 +5,10 @@ struct DemoArticle: Identifiable, Hashable {
     let monogram: String
     let title: String
     let source: String
-    let age: String
-    let summary: String
-    let status: DemoArticleStatus
+    var age: String
+    var summary: String
+    var status: DemoArticleStatus
+    let url: URL?
     let readerTitle: String
     let originalParagraphs: [String]
     let pullQuote: String
@@ -26,7 +27,8 @@ struct DemoArticle: Identifiable, Hashable {
         originalParagraphs: [String],
         pullQuote: String,
         insight: String,
-        insightPoints: [String]
+        insightPoints: [String],
+        url: URL? = nil
     ) {
         self.id = id
         self.monogram = monogram
@@ -40,11 +42,12 @@ struct DemoArticle: Identifiable, Hashable {
         self.pullQuote = pullQuote
         self.insight = insight
         self.insightPoints = insightPoints
+        self.url = url
     }
 }
 
 extension DemoArticle {
-    static func processingURL(_ url: URL) -> DemoArticle {
+    static func capturedURL(_ url: URL) -> DemoArticle {
         let host = url.host() ?? "新链接"
         let path = url.path == "/" ? "" : url.path
         let displayURL = host + path
@@ -54,8 +57,8 @@ extension DemoArticle {
             title: displayURL,
             source: host,
             age: "刚刚",
-            summary: "已接收 · 正在获取正文…",
-            status: .processing,
+            summary: "已接收 · 等待云端处理",
+            status: .accepted,
             readerTitle: displayURL,
             originalParagraphs: [
                 "Folio 已经接收这个链接，正在云端获取并整理正文。处理完成前，你可以先离开当前页面。"
@@ -65,7 +68,8 @@ extension DemoArticle {
             insightPoints: [
                 "链接已进入你的资料库。",
                 "正文获取和内容理解会在云端继续完成。"
-            ]
+            ],
+            url: url
         )
     }
 }

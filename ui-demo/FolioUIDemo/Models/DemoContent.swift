@@ -50,7 +50,7 @@ enum DemoContent {
             source: "example.com",
             age: "昨天",
             summary: "正文已保存 · 洞察暂不可用",
-            status: .limited,
+            status: .partial,
             readerTitle: "即使解析失败，也要保住可阅读的正文",
             originalParagraphs: [
                 "自动提取并不总能理解复杂页面。登录墙、脚本渲染和不规则结构都可能让解析器失去标题、段落或图片之间的关系。",

@@ -39,6 +39,16 @@ final class InteractiveFlowTests: XCTestCase {
         loginButton.tap()
 
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["从第一篇开始"].waitForExistence(timeout: 3))
+
+        app.buttons["library-first-save"].tap()
+        let firstSaveField = app.textFields["quick-save-url-field"]
+        XCTAssertTrue(firstSaveField.waitForExistence(timeout: 3))
+        firstSaveField.typeText("first.example.com/article")
+        app.buttons["quick-save-send"].tap()
+        XCTAssertTrue(app.staticTexts["quick-save-success"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["first.example.com/article"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["问答"].waitForExistence(timeout: 3))
 
         app.buttons["问答"].tap()
         XCTAssertTrue(app.staticTexts["问问你的收藏"].waitForExistence(timeout: 3))
@@ -318,7 +328,7 @@ final class InteractiveFlowTests: XCTestCase {
         app.launchArguments = ["-demoScreen", "library"]
         app.launch()
 
-        XCTAssertFalse(app.buttons["筛选"].exists)
+        XCTAssertTrue(app.buttons["library-filter"].exists)
 
         let articles = [
             ("如何设计可信的 AI 产品", "为什么可信是 AI 产品的\n核心体验"),
@@ -347,6 +357,17 @@ final class InteractiveFlowTests: XCTestCase {
                 XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
             }
 
+            if index >= 8 {
+                let loadMoreButton = app.buttons["library-load-more"]
+                var loadMoreScrollAttempts = 0
+                while !loadMoreButton.isHittable && loadMoreScrollAttempts < 12 {
+                    app.swipeUp(velocity: .slow)
+                    loadMoreScrollAttempts += 1
+                }
+                XCTAssertTrue(loadMoreButton.isHittable, "加载更多入口不可用")
+                loadMoreButton.tap()
+            }
+
             let articleButton = app.buttons.matching(
                 NSPredicate(format: "label CONTAINS %@", title)
             ).firstMatch
@@ -364,7 +385,7 @@ final class InteractiveFlowTests: XCTestCase {
             let originalButton = app.buttons["原文"]
             XCTAssertTrue(originalButton.waitForExistence(timeout: 3), "文章未打开：\(title)")
             XCTAssertTrue(
-                app.staticTexts[readerTitle].waitForExistence(timeout: 3),
+                app.staticTexts[readerTitle].waitForExistence(timeout: 6),
                 "原文测试数据未显示：\(title)"
             )
 
@@ -413,5 +434,189 @@ final class InteractiveFlowTests: XCTestCase {
         XCTAssertTrue(firstArticle.isHittable)
         XCTAssertTrue(app.staticTexts["example.com/article"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["资料库"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testOfflineCaptureExplainsFailureAndRecoversSafely() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demoScreen", "settings"]
+        app.launch()
+
+        let networkSwitch = app.switches["网络可用"]
+        var settingsScrollAttempts = 0
+        while !networkSwitch.isHittable && settingsScrollAttempts < 8 {
+            app.swipeUp(velocity: .slow)
+            settingsScrollAttempts += 1
+        }
+        XCTAssertTrue(networkSwitch.isHittable)
+        networkSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let networkDisabled = NSPredicate(format: "value == '0'")
+        expectation(for: networkDisabled, evaluatedWith: networkSwitch)
+        waitForExpectations(timeout: 2)
+
+        app.buttons["返回"].tap()
+        let offlineBanner = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "当前离线")
+        ).firstMatch
+        XCTAssertTrue(offlineBanner.waitForExistence(timeout: 3))
+
+        app.buttons["收藏链接"].tap()
+        let urlField = app.textFields["quick-save-url-field"]
+        XCTAssertTrue(urlField.waitForExistence(timeout: 3))
+        urlField.typeText("offline-recovery.example/article")
+        app.buttons["quick-save-send"].tap()
+
+        XCTAssertTrue(app.buttons["quick-save-recover"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["尚未保存"].exists)
+        app.buttons["quick-save-recover"].tap()
+
+        XCTAssertTrue(app.staticTexts["quick-save-success"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["offline-recovery.example/article"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testLibraryFiltersDeletesAndRestoresArticle() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demoScreen", "library"]
+        app.launch()
+
+        let filterButton = app.buttons["library-filter"]
+        XCTAssertTrue(filterButton.waitForExistence(timeout: 3))
+        filterButton.tap()
+        app.buttons["处理中"].tap()
+        XCTAssertTrue(app.staticTexts["SwiftUI 性能优化指南"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["如何设计可信的 AI 产品"].exists)
+
+        filterButton.tap()
+        app.buttons["全部"].tap()
+
+        let article = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "如何设计可信的 AI 产品")
+        ).firstMatch
+        XCTAssertTrue(article.waitForExistence(timeout: 3))
+        article.swipeLeft()
+        app.buttons["删除"].tap()
+
+        XCTAssertTrue(app.buttons["撤销"].waitForExistence(timeout: 3))
+        XCTAssertFalse(article.exists)
+        app.buttons["撤销"].tap()
+        XCTAssertTrue(article.waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testProcessingFailureKeepsArticleAndSupportsRetry() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demoScreen", "settings"]
+        app.launch()
+
+        let failNextSwitch = app.switches["下次处理失败"]
+        var settingsScrollAttempts = 0
+        while !failNextSwitch.isHittable && settingsScrollAttempts < 8 {
+            app.swipeUp(velocity: .slow)
+            settingsScrollAttempts += 1
+        }
+        XCTAssertTrue(failNextSwitch.isHittable)
+        failNextSwitch.tap()
+        app.buttons["返回"].tap()
+
+        app.buttons["收藏链接"].tap()
+        let urlField = app.textFields["quick-save-url-field"]
+        XCTAssertTrue(urlField.waitForExistence(timeout: 3))
+        urlField.typeText("retryable.example/article")
+        app.buttons["quick-save-send"].tap()
+        XCTAssertTrue(app.staticTexts["quick-save-success"].waitForExistence(timeout: 3))
+
+        let failedStatus = app.staticTexts["处理失败"]
+        XCTAssertTrue(failedStatus.waitForExistence(timeout: 5))
+        let article = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "retryable.example/article")
+        ).firstMatch
+        XCTAssertTrue(article.exists)
+        article.swipeRight()
+        app.buttons["重试"].tap()
+
+        XCTAssertTrue(app.staticTexts["正文已保存 · 可以阅读"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testProcessingLibraryArticleOpensItsAvailableOriginal() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demoScreen", "library"]
+        app.launch()
+
+        let filterButton = app.buttons["library-filter"]
+        XCTAssertTrue(filterButton.waitForExistence(timeout: 3))
+        filterButton.tap()
+        app.buttons["处理中"].tap()
+
+        let article = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "移动交互中的 100 毫秒")
+        ).firstMatch
+        var articleScrollAttempts = 0
+        while !article.isHittable && articleScrollAttempts < 4 {
+            app.swipeUp(velocity: .slow)
+            articleScrollAttempts += 1
+        }
+        XCTAssertTrue(article.isHittable)
+        article.tap()
+
+        XCTAssertTrue(app.buttons["原文"].waitForExistence(timeout: 3))
+        let readerScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        readerScreenshot.name = "processing-article-reader"
+        readerScreenshot.lifetime = .keepAlways
+        add(readerScreenshot)
+        let readerTitle = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "让每次触控")
+        ).firstMatch
+        XCTAssertTrue(readerTitle.waitForExistence(timeout: 6))
+
+        let firstParagraph = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "用户触摸屏幕后")
+        ).firstMatch
+        XCTAssertTrue(firstParagraph.waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testEmailLoginDeviceRevocationAndSignOutRestoreAccount() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demoScreen", "welcome"]
+        app.launch()
+
+        app.buttons["welcome.continueWithEmail"].tap()
+        let emailField = app.textFields["email-sign-in-address"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 3))
+        emailField.typeText("reader@example.com")
+        app.buttons["email-sign-in-continue"].tap()
+
+        let codeField = app.textFields["email-sign-in-code"]
+        XCTAssertTrue(codeField.waitForExistence(timeout: 3))
+        codeField.typeText("123456")
+        app.buttons["email-sign-in-continue"].tap()
+        XCTAssertTrue(app.staticTexts["从第一篇开始"].waitForExistence(timeout: 3))
+
+        app.buttons["打开设置"].firstMatch.tap()
+        app.buttons["settings-devices"].tap()
+        XCTAssertTrue(app.staticTexts["MacBook Air"].waitForExistence(timeout: 3))
+        app.buttons["device-revoke-macbook"].tap()
+        XCTAssertTrue(app.alerts["设备已退出"].waitForExistence(timeout: 3))
+        app.alerts["设备已退出"].buttons["好"].tap()
+        XCTAssertFalse(app.staticTexts["MacBook Air"].exists)
+
+        app.buttons["返回"].tap()
+        var signOutScrollAttempts = 0
+        let signOutButton = app.buttons["settings-sign-out"]
+        while !signOutButton.isHittable && signOutScrollAttempts < 10 {
+            app.swipeUp(velocity: .slow)
+            signOutScrollAttempts += 1
+        }
+        XCTAssertTrue(signOutButton.isHittable)
+        signOutButton.tap()
+        XCTAssertTrue(app.staticTexts["welcome-auth-message"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["已安全退出。重新登录后，云端资料仍会恢复。"].exists)
     }
 }

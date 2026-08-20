@@ -12,7 +12,11 @@ struct DemoRootView: View {
             if store.isSignedIn {
                 DemoNavigationView(store: store)
             } else {
-                WelcomeView(onAppleLogin: store.signIn, onEmailLogin: store.signIn)
+                WelcomeView(
+                    onAppleLogin: { store.signIn() },
+                    onEmailLogin: { email in store.signIn(email: email) },
+                    authMessage: store.authMessage
+                )
             }
         }
         .tint(FolioPalette.inkGreen)

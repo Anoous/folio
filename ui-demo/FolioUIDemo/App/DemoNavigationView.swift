@@ -38,7 +38,14 @@ struct DemoNavigationView: View {
                             initialMode: .original
                         )
                     case .settings:
-                        SettingsView(onBack: store.pop, onShowShareSuccess: { store.open(.shareSuccess) })
+                        SettingsView(
+                            store: store,
+                            onBack: store.pop,
+                            onShowShareSuccess: { store.open(.shareSuccess) },
+                            onShowDevices: { store.open(.deviceSessions) }
+                        )
+                    case .deviceSessions:
+                        DeviceSessionsView(store: store, onBack: store.pop)
                     case .askAnswer:
                         AskAnswerView(
                             onBack: store.pop,

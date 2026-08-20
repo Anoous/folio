@@ -4,6 +4,7 @@ enum DemoRoute: Hashable {
     case evidence
     case reader
     case settings
+    case deviceSessions
     case askAnswer
     case askInsufficient
     case shareSuccess

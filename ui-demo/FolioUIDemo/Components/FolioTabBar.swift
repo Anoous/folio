@@ -5,7 +5,8 @@ struct FolioTabBar: View {
     @Binding var quickSavePhase: QuickSavePhase
     @Binding var quickSaveText: String
     var onSelect: ((DemoTab) -> Void)?
-    var onQuickSave: ((URL) -> Void)?
+    var onQuickSave: ((URL) -> DemoCaptureResult)?
+    var onRecoverQuickSave: ((DemoCaptureFailure) -> Void)?
     @Namespace private var glassNamespace
     @Namespace private var selectionNamespace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -16,13 +17,15 @@ struct FolioTabBar: View {
         quickSavePhase: Binding<QuickSavePhase>,
         quickSaveText: Binding<String>,
         onSelect: ((DemoTab) -> Void)? = nil,
-        onQuickSave: ((URL) -> Void)? = nil
+        onQuickSave: ((URL) -> DemoCaptureResult)? = nil,
+        onRecoverQuickSave: ((DemoCaptureFailure) -> Void)? = nil
     ) {
         _selectedTab = selectedTab
         _quickSavePhase = quickSavePhase
         _quickSaveText = quickSaveText
         self.onSelect = onSelect
         self.onQuickSave = onQuickSave
+        self.onRecoverQuickSave = onRecoverQuickSave
     }
 
     var body: some View {
@@ -59,7 +62,8 @@ struct FolioTabBar: View {
                     phase: $quickSavePhase,
                     text: $quickSaveText,
                     glassNamespace: glassNamespace,
-                    onSave: handleQuickSave
+                    onSave: handleQuickSave,
+                    onRecover: handleQuickSaveRecovery
                 )
             }
             .frame(maxWidth: quickSavePhase.isExpanded ? .infinity : nil)
@@ -95,7 +99,11 @@ struct FolioTabBar: View {
         reduceTransparency ? .identity : .regular.interactive()
     }
 
-    private func handleQuickSave(_ url: URL) {
-        onQuickSave?(url)
+    private func handleQuickSave(_ url: URL) -> DemoCaptureResult {
+        onQuickSave?(url) ?? .success(.accepted(host: url.host() ?? "链接"))
+    }
+
+    private func handleQuickSaveRecovery(_ failure: DemoCaptureFailure) {
+        onRecoverQuickSave?(failure)
     }
 }

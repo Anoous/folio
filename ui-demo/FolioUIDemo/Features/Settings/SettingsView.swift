@@ -1,38 +1,44 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @Bindable var store: DemoStore
     let onBack: () -> Void
     let onShowShareSuccess: () -> Void
-    @State private var showsDeleteConfirmation = false
+    let onShowDevices: () -> Void
     @State private var activeNotice: DemoNotice?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    FolioBackButton(action: onBack)
-                    Spacer()
-                    Text("设置")
-                        .font(FolioTypography.editorialBold(24, relativeTo: .title2))
-                        .foregroundStyle(FolioPalette.inkGreenDeep)
-                    Spacer()
-                    Color.clear.frame(width: 44, height: 44)
-                }
-                .padding(.top, 13)
+                SettingsHeaderView(onBack: onBack)
 
-                SettingsProfileHeader(action: showProfile)
+                SettingsProfileHeader(email: store.accountEmail, action: showProfile)
                     .padding(.top, 26)
 
                 SettingsSectionLabel(title: "账号")
                     .padding(.top, 28)
                 SettingsCard {
-                    SettingsRow(symbol: "envelope", title: "邮箱", value: "user@example.com", action: showEmail)
-                    SettingsRow(symbol: "desktopcomputer", title: "已登录设备", value: "2 台设备", action: showDevices)
+                    SettingsRow(
+                        symbol: "envelope",
+                        title: "邮箱",
+                        value: store.accountEmail,
+                        action: showEmail
+                    )
+                    SettingsRow(
+                        symbol: "desktopcomputer",
+                        title: "已登录设备",
+                        value: "\(store.deviceSessions.count) 台设备",
+                        action: onShowDevices
+                    )
+                    .accessibilityIdentifier("settings-devices")
                 }
 
                 SettingsSectionLabel(title: "云端空间")
                     .padding(.top, 24)
-                SettingsStorageCard(action: showStorage)
+                SettingsStorageCard(
+                    usedFraction: store.isCapacityFull ? 1 : 0.62,
+                    action: showStorage
+                )
 
                 SettingsSectionLabel(title: "订阅")
                     .padding(.top, 24)
@@ -43,32 +49,83 @@ struct SettingsView: View {
 
                 SettingsSectionLabel(title: "数据与隐私")
                     .padding(.top, 24)
+                SettingsDestructiveActionsView(
+                    articleCount: store.articles.count,
+                    onClearLibrary: store.clearLibrary,
+                    onDeleteAccount: store.requestAccountDeletion
+                )
+
+                SettingsSectionLabel(title: "可靠性演示")
+                    .padding(.top, 24)
                 SettingsCard {
-                    SettingsRow(symbol: "trash", title: "删除内容", value: "", tint: FolioPalette.danger, action: showDeleteConfirmation)
-                    SettingsRow(symbol: "person.crop.circle.badge.xmark", title: "删除账号", value: "", tint: FolioPalette.danger, action: showDeleteConfirmation)
+                    SettingsToggleRow(
+                        symbol: "network",
+                        title: "网络可用",
+                        isOn: $store.isOnline
+                    )
+                    SettingsToggleRow(
+                        symbol: "externaldrive.badge.exclamationmark",
+                        title: "模拟容量已满",
+                        isOn: $store.isCapacityFull,
+                        tint: FolioPalette.warning
+                    )
+                    SettingsToggleRow(
+                        symbol: "clock.badge.exclamationmark",
+                        title: "下次保存超时",
+                        isOn: $store.shouldTimeoutNextCapture,
+                        tint: FolioPalette.warning
+                    )
+                    SettingsToggleRow(
+                        symbol: "doc.badge.ellipsis",
+                        title: "下次处理失败",
+                        isOn: $store.shouldFailNextProcessing,
+                        tint: FolioPalette.warning
+                    )
+                    SettingsRow(
+                        symbol: "person.crop.circle.badge.exclamationmark",
+                        title: "模拟会话失效",
+                        value: "",
+                        tint: FolioPalette.warning,
+                        action: store.expireSession
+                    )
                 }
 
                 SettingsSectionLabel(title: "帮助")
                     .padding(.top, 24)
                 SettingsCard {
-                    SettingsRow(symbol: "shield", title: "Folio 如何处理内容", value: "", action: showContentPolicy)
-                        .contextMenu {
-                            Button("查看分享保存演示", systemImage: "square.and.arrow.down", action: onShowShareSuccess)
-                        }
-                    SettingsRow(symbol: "questionmark.circle", title: "联系支持", value: "", action: showSupport)
+                    SettingsRow(
+                        symbol: "shield",
+                        title: "Folio 如何处理内容",
+                        value: "",
+                        action: showContentPolicy
+                    )
+                    .contextMenu {
+                        Button("查看分享保存演示", systemImage: "square.and.arrow.down", action: onShowShareSuccess)
+                    }
+                    SettingsRow(
+                        symbol: "questionmark.circle",
+                        title: "联系支持",
+                        value: "",
+                        action: showSupport
+                    )
                 }
-                .padding(.bottom, 35)
+
+                Button(
+                    "退出登录",
+                    systemImage: "rectangle.portrait.and.arrow.right",
+                    action: { store.signOut() }
+                )
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(FolioPalette.danger)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .padding(.top, 24)
+                    .accessibilityIdentifier("settings-sign-out")
+                    .padding(.bottom, 35)
             }
             .padding(.horizontal, FolioMetrics.pageInset)
         }
         .scrollIndicators(.hidden)
         .background(FolioPalette.canvas)
-        .confirmationDialog("确认删除", isPresented: $showsDeleteConfirmation, titleVisibility: .visible) {
-            Button("删除", role: .destructive, action: confirmMockDeletion)
-            Button("取消", role: .cancel, action: dismissDeleteConfirmation)
-        } message: {
-            Text("这是 UI Demo，不会删除任何真实数据。")
-        }
         .alert(item: $activeNotice) { notice in
             Alert(
                 title: Text(notice.title),
@@ -79,24 +136,16 @@ struct SettingsView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    private func showDeleteConfirmation() {
-        showsDeleteConfirmation = true
-    }
-
     private func showProfile() {
-        activeNotice = DemoNotice(title: "个人资料", message: "Folio 用户 · user@example.com")
+        activeNotice = DemoNotice(title: "个人资料", message: "Folio 用户 · \(store.accountEmail)")
     }
 
     private func showEmail() {
-        activeNotice = DemoNotice(title: "邮箱", message: "当前演示账号为 user@example.com。")
-    }
-
-    private func showDevices() {
-        activeNotice = DemoNotice(title: "已登录设备", message: "Mock 数据：iPhone 与 Mac，共 2 台设备。")
+        activeNotice = DemoNotice(title: "邮箱", message: "当前账号为 \(store.accountEmail)。")
     }
 
     private func showStorage() {
-        activeNotice = DemoNotice(title: "云端空间", message: "Mock 数据：已使用 620 MB，共 1 GB。")
+        activeNotice = DemoNotice(title: "云端空间", message: "已使用 \(store.storageDescription)。容量已满时仍可阅读和删除已有内容。")
     }
 
     private func showPlan() {
@@ -108,22 +157,24 @@ struct SettingsView: View {
     }
 
     private func showContentPolicy() {
-        activeNotice = DemoNotice(title: "内容处理", message: "本原型仅使用本地 Mock 数据，不会上传或处理真实内容。")
+        activeNotice = DemoNotice(
+            title: "内容处理",
+            message: "链接先由云端确认接收，再异步获取正文；任何失败都会保留可恢复路径。"
+        )
     }
 
     private func showSupport() {
         activeNotice = DemoNotice(title: "联系支持", message: "演示入口：support@example.com")
     }
-
-    private func confirmMockDeletion() {
-        activeNotice = DemoNotice(title: "未执行删除", message: "这是 UI Demo，没有任何真实数据被删除。")
-    }
-
-    private func dismissDeleteConfirmation() {
-        showsDeleteConfirmation = false
-    }
 }
 
 #Preview {
-    SettingsView(onBack: {}, onShowShareSuccess: {})
+    @Previewable @State var store = DemoStore(initialScreen: .settings)
+
+    SettingsView(
+        store: store,
+        onBack: {},
+        onShowShareSuccess: {},
+        onShowDevices: {}
+    )
 }

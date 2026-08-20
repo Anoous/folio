@@ -37,9 +37,10 @@ struct ShareSaveSuccessView: View {
                         .font(FolioTypography.editorialBold(32, relativeTo: .largeTitle))
                         .foregroundStyle(FolioPalette.inkGreenDeep)
 
-                    Text("Folio 会继续处理内容。")
+                    Text("云端已确认接收，Folio 会继续处理内容。")
                         .font(.system(size: 17))
                         .foregroundStyle(FolioPalette.secondaryText)
+                        .multilineTextAlignment(.center)
 
                     Text("现在可以返回了。")
                         .font(.system(size: 15))

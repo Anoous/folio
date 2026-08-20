@@ -10,25 +10,24 @@ struct DemoTabShellView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack {
-            LibraryView(
-                articles: store.libraryArticles,
-                onOpenArticle: { article in store.open(.article(article)) },
-                onOpenSettings: { store.open(.settings) },
-                transitionNamespace: articleTransition
-            )
-            .opacity(store.selectedTab == .library ? 1 : 0)
-            .allowsHitTesting(store.selectedTab == .library)
-            .accessibilityHidden(store.selectedTab != .library)
+        Group {
+            switch store.selectedTab {
+            case .library:
+                LibraryView(
+                    store: store,
+                    onOpenSettings: { store.open(.settings) },
+                    onBeginSaving: beginQuickSave,
+                    onShowShareDemo: { store.open(.shareSuccess) },
+                    transitionNamespace: articleTransition
+                )
 
-            AskHomeView(
-                onOpenSettings: { store.open(.settings) },
-                onOpenSource: { store.open(.insight) },
-                isQuestionFocused: $isAskQuestionFocused
-            )
-            .opacity(store.selectedTab == .ask ? 1 : 0)
-            .allowsHitTesting(store.selectedTab == .ask)
-            .accessibilityHidden(store.selectedTab != .ask)
+            case .ask:
+                AskHomeView(
+                    onOpenSettings: { store.open(.settings) },
+                    onOpenSource: { store.open(.insight) },
+                    isQuestionFocused: $isAskQuestionFocused
+                )
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .allowsHitTesting(!quickSavePhase.isExpanded && !blocksReturnHitTesting)
@@ -41,7 +40,8 @@ struct DemoTabShellView: View {
                         quickSavePhase: $quickSavePhase,
                         quickSaveText: $quickSaveText,
                         onSelect: store.selectTab,
-                        onQuickSave: store.saveURL
+                        onQuickSave: store.captureURL,
+                        onRecoverQuickSave: recoverQuickSave
                     )
                     .transition(.opacity)
                 }
@@ -57,7 +57,33 @@ struct DemoTabShellView: View {
         .onChange(of: quickSavePhase, coordinateQuickSaveFocus)
         .onChange(of: store.selectedTab, coordinateTabFocus)
         .onChange(of: store.path, coordinateNavigationFocus)
+        .alert(item: $store.activeNotice) { notice in
+            Alert(
+                title: Text(notice.title),
+                message: Text(notice.message),
+                dismissButton: .default(Text("好"))
+            )
+        }
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private func beginQuickSave() {
+        withAnimation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion)) {
+            quickSavePhase = .editing
+        }
+    }
+
+    private func recoverQuickSave(_ failure: DemoCaptureFailure) {
+        switch failure {
+        case .offline:
+            store.isOnline = true
+        case .timeout:
+            break
+        case .sessionExpired:
+            store.expireSession()
+        case .capacityFull:
+            store.open(.settings)
+        }
     }
 
     private func coordinateQuickSaveFocus(

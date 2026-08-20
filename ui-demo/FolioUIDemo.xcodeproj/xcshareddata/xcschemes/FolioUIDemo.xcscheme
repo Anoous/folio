@@ -44,6 +44,17 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A7E847B61DDE69F915AAB7B3"
+               BuildableName = "FolioUIDemoTests.xctest"
+               BlueprintName = "FolioUIDemoTests"
+               ReferencedContainer = "container:FolioUIDemo.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "EF245CB9F448287E91F42CB5"
                BuildableName = "FolioUIDemoUITests.xctest"
                BlueprintName = "FolioUIDemoUITests"

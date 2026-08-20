@@ -1,69 +1,141 @@
 import SwiftUI
 
 struct LibraryView: View {
-    let articles: [DemoArticle]
-    let onOpenArticle: (DemoArticle) -> Void
+    @Bindable var store: DemoStore
     let onOpenSettings: () -> Void
+    let onBeginSaving: () -> Void
+    let onShowShareDemo: () -> Void
     let transitionNamespace: Namespace.ID
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                HStack(alignment: .center, spacing: 13) {
-                    Text("资料库")
-                        .font(FolioTypography.editorialBold(34, relativeTo: .largeTitle))
-                        .foregroundStyle(FolioPalette.inkGreenDeep)
-                        .lineLimit(1)
+        VStack(spacing: 0) {
+            LibraryHeaderView(
+                selectedFilter: store.libraryFilter,
+                onSelectFilter: store.selectFilter,
+                onOpenSettings: onOpenSettings
+            )
+            .padding(.horizontal, FolioMetrics.libraryInset)
 
-                    Spacer()
+            if !store.isOnline {
+                LibraryConnectivityBanner(onOpenSettings: onOpenSettings)
+                    .padding(.horizontal, FolioMetrics.libraryInset)
+                    .padding(.bottom, 8)
+            }
 
-                    Button(action: onOpenSettings) {
-                        FolioAvatar(size: FolioMetrics.minimumTapTarget)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("打开设置")
+            if store.articles.isEmpty {
+                ScrollView {
+                    LibraryEmptyStateView(
+                        onBeginSaving: onBeginSaving,
+                        onShowShareDemo: onShowShareDemo
+                    )
+                    .padding(.bottom, FolioMetrics.tabBarHeight + 28)
                 }
-                .padding(.top, 18)
-                .padding(.bottom, 17)
-
-                LazyVStack(spacing: 0) {
-                    ForEach(articles) { article in
+                .scrollIndicators(.hidden)
+            } else if store.filteredArticles.isEmpty {
+                ScrollView {
+                    LibraryFilterEmptyView(
+                        filter: store.libraryFilter,
+                        onClear: { store.selectFilter(.all) }
+                    )
+                }
+                .scrollIndicators(.hidden)
+            } else {
+                List {
+                    ForEach(store.visibleArticles) { article in
                         LibraryArticleRow(
                             article: article,
                             transitionNamespace: transitionNamespace,
-                            onOpen: { onOpenArticle(article) }
+                            onOpen: { store.openArticle(article) }
                         )
+                        .listRowInsets(
+                            EdgeInsets(
+                                top: 0,
+                                leading: FolioMetrics.libraryInset,
+                                bottom: 0,
+                                trailing: FolioMetrics.libraryInset
+                            )
+                        )
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(FolioPalette.canvas)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button("删除", systemImage: "trash", role: .destructive) {
+                                store.deleteArticle(article)
+                            }
+                            .accessibilityIdentifier("library-delete-\(article.id)")
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            if article.status.needsAttention {
+                                Button("重试", systemImage: "arrow.clockwise") {
+                                    store.retryArticle(article)
+                                }
+                                .tint(FolioPalette.inkGreen)
+                                .accessibilityIdentifier("library-retry-\(article.id)")
+                            }
+                        }
+                    }
+
+                    if store.canLoadMoreArticles {
+                        LibraryLoadMoreRow(
+                            remainingCount: store.filteredArticles.count - store.visibleArticles.count,
+                            action: store.loadMoreArticles
+                        )
+                        .listRowInsets(
+                            EdgeInsets(
+                                top: 0,
+                                leading: FolioMetrics.libraryInset,
+                                bottom: 0,
+                                trailing: FolioMetrics.libraryInset
+                            )
+                        )
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(FolioPalette.canvas)
                     }
                 }
-                .padding(.bottom, FolioMetrics.tabBarHeight + 18)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .refreshable(action: store.refreshLibrary)
+                .accessibilityIdentifier("library-list")
             }
-            .padding(.horizontal, FolioMetrics.libraryInset)
         }
-        .scrollIndicators(.hidden)
         .background(FolioPalette.canvas)
+        .overlay(alignment: .bottom) {
+            if let pendingDeletion = store.pendingDeletion {
+                LibraryUndoBanner(
+                    articleTitle: pendingDeletion.article.title,
+                    onUndo: store.undoDeletion
+                )
+                .padding(.horizontal, FolioMetrics.compactInset)
+                .padding(.bottom, 8)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy, value: store.pendingDeletion?.article.id)
         .toolbar(.hidden, for: .navigationBar)
     }
 }
 
-#Preview {
+#Preview("Seeded library") {
     @Previewable @Namespace var transitionNamespace
-    @Previewable @State var selectedTab = DemoTab.library
-    @Previewable @State var quickSavePhase = QuickSavePhase.idle
-    @Previewable @State var quickSaveText = ""
+    @Previewable @State var store = DemoStore(initialScreen: .library)
 
     LibraryView(
-        articles: DemoContent.articles,
-        onOpenArticle: { _ in },
+        store: store,
         onOpenSettings: {},
+        onBeginSaving: {},
+        onShowShareDemo: {},
         transitionNamespace: transitionNamespace
     )
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            FolioTabBar(
-                selectedTab: $selectedTab,
-                quickSavePhase: $quickSavePhase,
-                quickSaveText: $quickSaveText
-            )
-                .padding(.horizontal, FolioMetrics.compactInset)
-                .padding(.vertical, 8)
-        }
+}
+
+#Preview("First save") {
+    @Previewable @Namespace var transitionNamespace
+    @Previewable @State var store = DemoStore()
+
+    LibraryView(
+        store: store,
+        onOpenSettings: {},
+        onBeginSaving: {},
+        onShowShareDemo: {},
+        transitionNamespace: transitionNamespace
+    )
 }

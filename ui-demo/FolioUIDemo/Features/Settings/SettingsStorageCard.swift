@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsStorageCard: View {
+    let usedFraction: Double
     let action: () -> Void
 
     var body: some View {
@@ -16,15 +17,15 @@ struct SettingsStorageCard: View {
                         Text("云端空间使用情况")
                             .font(FolioTypography.editorial(15, relativeTo: .body))
                         Spacer()
-                        Text("620 MB")
+                        Text(usedFraction >= 1 ? "1 GB" : "620 MB")
                             .foregroundStyle(FolioPalette.inkGreenDeep)
                         Text("/ 1 GB")
                             .foregroundStyle(FolioPalette.secondaryText)
                     }
                     .font(.system(size: 13))
 
-                    ProgressView(value: 0.62)
-                        .tint(FolioPalette.inkGreenDeep)
+                    ProgressView(value: usedFraction)
+                        .tint(usedFraction >= 1 ? FolioPalette.danger : FolioPalette.inkGreenDeep)
                 }
 
                 Image(systemName: "chevron.right")

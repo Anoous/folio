@@ -6,7 +6,7 @@
 - 系统：iOS 26.5
 - 状态栏时间：9:41
 - 数据来源：全部为本地 Mock 数据
-- 交互验证：7 条 XCUITest，覆盖默认登录/提问流程、洞察/原文本页双向切换与单层返回、资料库筛选、15 篇文章逐篇打开，以及 Liquid Glass 收藏 Dock 的 URL 输入、发送、成功反馈和新行插入
+- 自动验证：3 条单元测试与 16 条 XCUITest，覆盖首次保存、接收/处理/失败/重试状态、离线恢复、筛选、分页、删除/撤销、15 篇文章逐篇打开、邮箱登录、设备退出与会话恢复
 
 `Screenshots/01-welcome.png` 至 `Screenshots/10-settings.png` 分别对应 10 张参考设计。
 
@@ -15,3 +15,5 @@
 `Motion/article-inline-switch.mp4` 记录文章顶部保持不动、正文从洞察连续切换到原文。
 
 `Motion/article-ai-ask-interaction.mp4` 记录文章内 AI 输入框随阅读手势隐藏与恢复、示例提问以及回答插入正文的完整过程。
+
+`Motion/reliable-capture-foundations.mp4` 记录冷启动登录、空资料库、首次收藏、服务端已接收反馈，以及正文处理完成的完整闭环。

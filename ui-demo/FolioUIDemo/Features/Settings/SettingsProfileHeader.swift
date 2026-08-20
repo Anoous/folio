@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsProfileHeader: View {
+    let email: String
     let action: () -> Void
 
     var body: some View {
@@ -10,7 +11,7 @@ struct SettingsProfileHeader: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Folio 用户")
                         .font(FolioTypography.editorial(20, relativeTo: .headline))
-                    Text("user@example.com")
+                    Text(email)
                         .font(.system(size: 14))
                         .foregroundStyle(FolioPalette.secondaryText)
                 }

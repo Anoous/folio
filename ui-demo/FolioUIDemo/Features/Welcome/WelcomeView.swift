@@ -2,7 +2,9 @@ import SwiftUI
 
 struct WelcomeView: View {
     let onAppleLogin: () -> Void
-    let onEmailLogin: () -> Void
+    let onEmailLogin: (String) -> Void
+    let authMessage: String?
+    @State private var showsEmailSignIn = false
 
     var body: some View {
         ScrollView {
@@ -35,9 +37,14 @@ struct WelcomeView: View {
                     .padding(.horizontal, -40)
                     .padding(.top, 2)
 
+                if let authMessage {
+                    WelcomeAuthMessageView(message: authMessage)
+                        .padding(.top, 4)
+                }
+
                 WelcomeLoginButtons(
                     onAppleLogin: onAppleLogin,
-                    onEmailLogin: onEmailLogin
+                    onEmailLogin: showEmailSignIn
                 )
                 .padding(.top, 8)
 
@@ -55,5 +62,12 @@ struct WelcomeView: View {
         }
         .scrollIndicators(.hidden)
         .background(FolioPalette.canvas)
+        .sheet(isPresented: $showsEmailSignIn) {
+            EmailSignInView(onAuthenticated: onEmailLogin)
+        }
+    }
+
+    private func showEmailSignIn() {
+        showsEmailSignIn = true
     }
 }

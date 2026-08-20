@@ -4,7 +4,8 @@ struct FolioQuickSaveControl: View {
     @Binding var phase: QuickSavePhase
     @Binding var text: String
     let glassNamespace: Namespace.ID
-    let onSave: (URL) -> Void
+    let onSave: (URL) -> DemoCaptureResult
+    let onRecover: (DemoCaptureFailure) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @FocusState private var isURLFieldFocused: Bool
@@ -91,13 +92,47 @@ struct FolioQuickSaveControl: View {
                 .accessibilityLabel("正在收藏链接")
                 .transition(phaseTransition)
 
-            case .saved:
-                Label("已收藏 · 正在处理", systemImage: "checkmark")
+            case .succeeded(let success):
+                Label(success.title, systemImage: successSymbol(for: success))
                     .font(.body)
                     .foregroundStyle(FolioPalette.inkGreenDeep)
                     .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("quick-save-success")
                     .transition(phaseTransition)
+
+            case .failed(let failure):
+                HStack(spacing: 9) {
+                    Image(systemName: failure.symbol)
+                        .foregroundStyle(FolioPalette.danger)
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(failure.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(FolioPalette.inkGreenDeep)
+
+                        Text(failure.message)
+                            .font(.caption2)
+                            .foregroundStyle(FolioPalette.secondaryText)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    Button(failure.actionTitle, action: recover)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 11)
+                        .frame(minHeight: 36)
+                        .background(FolioPalette.inkGreenDeep, in: .capsule)
+                        .accessibilityIdentifier("quick-save-recover")
+
+                    Button("关闭提示", systemImage: "xmark", action: collapse)
+                        .labelStyle(.iconOnly)
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 36, height: 36)
+                }
+                .transition(phaseTransition)
             }
         }
         .buttonStyle(FolioPressButtonStyle())
@@ -172,27 +207,55 @@ struct FolioQuickSaveControl: View {
                 return
             }
             guard phase == .saving, let pendingURL else { return }
-            onSave(pendingURL)
-            successFeedbackTrigger += 1
+            let result = onSave(pendingURL)
             withAnimation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion)) {
-                phase = .saved
+                switch result {
+                case .success(let success):
+                    successFeedbackTrigger += 1
+                    phase = .succeeded(success)
+                case .failure(let failure):
+                    phase = .failed(failure)
+                }
             }
 
-        case .saved:
+        case .succeeded:
             do {
                 try await Task.sleep(for: .milliseconds(1_200))
             } catch {
                 return
             }
-            guard phase == .saved else { return }
+            guard case .succeeded = phase else { return }
             text = ""
             pendingURL = nil
             withAnimation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion)) {
                 phase = .idle
             }
 
-        case .idle, .editing:
+        case .idle, .editing, .failed:
             break
+        }
+    }
+
+    private func recover() {
+        guard case .failed(let failure) = phase else { return }
+        onRecover(failure)
+
+        switch failure {
+        case .offline, .timeout:
+            withAnimation(FolioMotion.toolbarMorph(reduceMotion: reduceMotion)) {
+                phase = .saving
+            }
+        case .sessionExpired, .capacityFull:
+            collapse()
+        }
+    }
+
+    private func successSymbol(for success: DemoCaptureSuccess) -> String {
+        switch success {
+        case .accepted:
+            "checkmark"
+        case .duplicate:
+            "doc.on.doc"
         }
     }
 
@@ -217,7 +280,8 @@ struct FolioQuickSaveControl: View {
         phase: $phase,
         text: $text,
         glassNamespace: glassNamespace,
-        onSave: { _ in }
+        onSave: { url in .success(.accepted(host: url.host() ?? "链接")) },
+        onRecover: { _ in }
     )
     .padding(FolioMetrics.compactInset)
     .background(FolioPalette.canvas)
