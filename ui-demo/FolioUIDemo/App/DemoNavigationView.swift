@@ -11,6 +11,7 @@ struct DemoNavigationView: View {
                     switch route {
                     case .article(let article):
                         ArticleDetailView(
+                            store: store,
                             article: article,
                             onBack: store.pop,
                             initialMode: .original
@@ -20,12 +21,14 @@ struct DemoNavigationView: View {
                         )
                     case .insight:
                         ArticleDetailView(
+                            store: store,
                             article: DemoContent.primaryArticle,
                             onBack: store.pop,
                             initialMode: .insight
                         )
                     case .evidence:
                         ArticleDetailView(
+                            store: store,
                             article: DemoContent.primaryArticle,
                             onBack: store.pop,
                             initialMode: .insight,
@@ -33,9 +36,21 @@ struct DemoNavigationView: View {
                         )
                     case .reader:
                         ArticleDetailView(
+                            store: store,
                             article: DemoContent.primaryArticle,
                             onBack: store.pop,
                             initialMode: .original
+                        )
+                    case .searchResult(let result):
+                        ArticleDetailView(
+                            store: store,
+                            article: result.article,
+                            onBack: store.pop,
+                            initialMode: .original,
+                            initialParagraphIndex: result.paragraphIndex
+                        )
+                        .navigationTransition(
+                            .zoom(sourceID: result.article.id, in: articleTransition)
                         )
                     case .settings:
                         SettingsView(

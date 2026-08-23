@@ -28,6 +28,7 @@ struct ArticleDetailHeader: View {
 
 struct ArticleDetailTopBar: View {
     let onBack: () -> Void
+    let onOpenAnnotations: () -> Void
     let onOpenReaderAppearance: () -> Void
     let readerAppearanceDescription: String
 
@@ -37,6 +38,19 @@ struct ArticleDetailTopBar: View {
                 .padding(.leading, -14)
 
             Spacer()
+
+            Button(.annotationsTitle, systemImage: "highlighter", action: onOpenAnnotations)
+                .labelStyle(.iconOnly)
+                .font(.body.weight(.medium))
+                .frame(width: 44, height: 44)
+                .buttonStyle(.plain)
+                .foregroundStyle(FolioPalette.inkGreenDeep)
+                .background(FolioPalette.surface.opacity(0.82), in: .circle)
+                .overlay {
+                    Circle()
+                        .stroke(FolioPalette.paperLine.opacity(0.8), lineWidth: 1)
+                }
+                .accessibilityIdentifier("article-annotations")
 
             Button(action: onOpenReaderAppearance) {
                 Text("Aa")

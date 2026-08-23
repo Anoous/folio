@@ -203,6 +203,140 @@ final class InteractiveFlowTests: XCTestCase {
     }
 
     @MainActor
+    func testLibrarySearchFindsNotesAndOpensTheMatchingArticle() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demoScreen", "library"]
+        app.launch()
+
+        let searchButton = app.buttons["library-search"]
+        XCTAssertTrue(searchButton.waitForExistence(timeout: 3))
+        searchButton.tap()
+
+        let searchField = app.textFields["library-search-field"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.typeText("判断路径")
+
+        let result = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "library-search-result-")
+        ).firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 3))
+        XCTAssertTrue(result.label.contains("如何设计可信的 AI 产品"))
+        result.tap()
+
+        XCTAssertTrue(app.buttons["article-annotations"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["为什么可信是 AI 产品的\n核心体验"].exists)
+    }
+
+    @MainActor
+    func testArticleAnnotationsExposeNotesSyncAndMarkdownExport() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demoScreen", "reader"]
+        app.launch()
+
+        let annotationsButton = app.buttons["article-annotations"]
+        XCTAssertTrue(annotationsButton.waitForExistence(timeout: 3))
+        annotationsButton.tap()
+
+        XCTAssertTrue(app.scrollViews["annotations-sheet"].waitForExistence(timeout: 3))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["annotation-sync-status"].exists
+        )
+        XCTAssertTrue(app.textFields["article-note-field"].exists)
+        XCTAssertTrue(app.buttons["annotation-export-markdown"].exists)
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS %@", "可信让用户不必成为专家")
+            ).firstMatch.exists
+        )
+    }
+
+    @MainActor
+    func testRecordedHighlightNoteSearchAndExportWorkflow() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-demoScreen", "library",
+            "-AppleLanguages", "(zh-Hans)",
+            "-AppleLocale", "zh_CN"
+        ]
+        app.launch()
+
+        let searchButton = app.buttons["library-search"]
+        XCTAssertTrue(searchButton.waitForExistence(timeout: 3))
+        searchButton.tap()
+
+        let searchField = app.textFields["library-search-field"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.typeText("判断路径")
+
+        let result = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "library-search-result-")
+        ).firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 3))
+        result.tap()
+
+        let paragraph = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "当用户把问题交给 AI")
+        ).firstMatch
+        XCTAssertTrue(paragraph.waitForExistence(timeout: 3))
+        paragraph.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.42, dy: 0.45)
+        ).press(forDuration: 1.1)
+
+        let addNoteAction = app.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "label == %@ OR label == %@",
+                "添加笔记",
+                "Add Note"
+            )
+        ).firstMatch
+        XCTAssertTrue(addNoteAction.waitForExistence(timeout: 3))
+        addNoteAction.tap()
+
+        let highlightNote = app.textFields.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "highlight-note-")
+        ).firstMatch
+        XCTAssertTrue(highlightNote.waitForExistence(timeout: 3))
+        highlightNote.tap()
+        highlightNote.typeText("录屏验证：高亮、笔记和原文保持连接。")
+
+        let syncedStatus = app.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "identifier == %@ AND label CONTAINS %@",
+                "annotation-sync-status",
+                "已同步"
+            )
+        ).firstMatch
+        XCTAssertTrue(syncedStatus.waitForExistence(timeout: 3))
+
+        app.buttons["完成"].tap()
+        XCTAssertTrue(app.scrollViews["annotations-sheet"].waitForNonExistence(timeout: 3))
+
+        app.buttons["article-annotations"].tap()
+        let annotationsSheet = app.scrollViews["annotations-sheet"]
+        XCTAssertTrue(annotationsSheet.waitForExistence(timeout: 3))
+
+        let exportButton = app.buttons["annotation-export-markdown"]
+        for _ in 0..<6 where !exportButton.isHittable {
+            annotationsSheet.swipeUp()
+        }
+        XCTAssertTrue(exportButton.isHittable)
+        exportButton.tap()
+
+        let copyAction = app.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "label == %@ OR label == %@",
+                "拷贝",
+                "Copy"
+            )
+        ).firstMatch
+        XCTAssertTrue(copyAction.waitForExistence(timeout: 3))
+        Thread.sleep(forTimeInterval: 2)
+    }
+
+    @MainActor
     func testReaderLaunchSwitchesToInsightWithoutAddingNavigationDepth() {
         continueAfterFailure = false
         let app = XCUIApplication()

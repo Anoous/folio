@@ -14,6 +14,20 @@ open FolioUIDemo.xcodeproj
 
 实现采用纯 SwiftUI（iOS 26 / Swift 6.2），不包含后端、网络请求或第三方运行时依赖。中文编辑字体为 Noto Serif SC，授权文件位于 `FolioUIDemo/Resources/Licenses/`；引导插画和头像是为本原型生成的本地资源。
 
+## P0 功能状态
+
+- [x] 分享或输入链接收藏网页（原有功能，保持现有交互）
+- [x] 正文阅读模式（原有功能，保持原文/洞察切换和阅读外观）
+- [x] 原文高亮（本次完成：选择正文后可直接高亮）
+- [x] 轻量笔记（本次完成：支持文章笔记和高亮笔记）
+- [x] 高亮与笔记搜索（本次完成：从资料库搜索并回到对应文章段落）
+- [x] 同步状态与最小导出（本次完成：展示注释同步状态，并通过系统分享导出 Markdown）
+- [x] 当前文章 AI 解读（原有功能，保留洞察与文内提问）
+
+以上是 UI Demo 的完成状态。注释同步目前使用本地 Mock 状态演示，尚未接入真实账号、云端存储或跨设备同步。
+
+录屏验收已知问题：iOS 26 中文键盘编辑高亮笔记后，当前需要先点“完成”关闭面板，再重新打开，才能顺畅触达底部 Markdown 导出；数据与导出闭环正常，收键盘路径仍待优化。
+
 ## 动效与交互
 
 - 底部导航使用 `GlassEffectContainer`、`glassEffectID` 和 matched glass transition；当前 Tab 是短胶囊，未选中项与“＋”保持等大的圆形比例。
@@ -59,7 +73,7 @@ xcodebuild test \
   -destination 'platform=iOS Simulator,name=iPhone 15 Pro'
 ```
 
-单元测试覆盖收藏幂等、失败不入库、删除撤销和重新登录恢复。UI 测试覆盖冷启动首次收藏、离线恢复、处理失败重试、资料库筛选/分页/删除撤销、邮箱验证码登录、设备撤销与退出登录，以及既有的文章问答、阅读外观和导航流程。
+单元测试覆盖收藏幂等、失败不入库、删除撤销和重新登录恢复。UI 测试覆盖冷启动首次收藏、离线恢复、处理失败重试、资料库筛选/分页/删除撤销、高亮与笔记搜索、原生选词笔记、同步状态与 Markdown 导出，以及既有的文章问答、阅读外观和导航流程。
 
 ## 验收截图
 
@@ -68,3 +82,5 @@ xcodebuild test \
 `QA/Motion/liquid-toolbar-demo.mp4` 是 8 秒交互验收录屏，覆盖 Liquid Glass 工具栏比例、Tab 空间切换与快速收藏展开。
 
 `QA/Motion/article-inline-switch.mp4` 是洞察切换到原文的本页过渡验收录屏。
+
+`QA/Motion/highlight-note-search-export.mp4` 是高亮与笔记闭环录屏，覆盖资料库搜索、打开原文、原生选词、添加高亮笔记、同步状态和 Markdown 系统分享。

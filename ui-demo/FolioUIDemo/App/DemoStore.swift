@@ -15,12 +15,18 @@ final class DemoStore {
     var shouldFailNextProcessing = false
     var authMessage: String?
     var activeNotice: DemoNotice?
+    var isSearchPresented = false
+    var searchQuery = ""
     private(set) var articles: [DemoArticle]
+    var highlights: [DemoHighlight]
+    var articleNotes: [UUID: String]
+    var annotationSyncState = DemoAnnotationSyncState.synced
     private(set) var pendingDeletion: DemoPendingDeletion?
     private(set) var deviceSessions: [DemoDeviceSession]
     private(set) var visibleArticleLimit = 8
     @ObservationIgnored private var processingTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var deletionDismissTask: Task<Void, Never>?
+    @ObservationIgnored var annotationSyncTask: Task<Void, Never>?
 
     var libraryArticles: [DemoArticle] {
         articles
@@ -45,6 +51,16 @@ final class DemoStore {
     init(initialScreen: DemoScreen? = nil) {
         let shouldSeedLibrary = initialScreen != nil && initialScreen != .welcome
         articles = shouldSeedLibrary ? DemoContent.articles : []
+        if shouldSeedLibrary,
+           let seededHighlight = Self.seededHighlight(for: DemoContent.primaryArticle) {
+            highlights = [seededHighlight]
+            articleNotes = [
+                DemoContent.primaryArticle.id: "发布前检查：每个确定结论都能回到原文。"
+            ]
+        } else {
+            highlights = []
+            articleNotes = [:]
+        }
         deviceSessions = [
             DemoDeviceSession(
                 id: "current-iphone",
@@ -200,6 +216,7 @@ final class DemoStore {
         deletionDismissTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled else { return }
+            self?.removeAnnotations(for: article.id)
             self?.pendingDeletion = nil
         }
     }
@@ -215,9 +232,14 @@ final class DemoStore {
     func clearLibrary() {
         processingTasks.values.forEach { $0.cancel() }
         processingTasks.removeAll()
+        annotationSyncTask?.cancel()
         articles.removeAll()
+        highlights.removeAll()
+        articleNotes.removeAll()
         pendingDeletion = nil
         libraryFilter = .all
+        isSearchPresented = false
+        searchQuery = ""
         visibleArticleLimit = 8
     }
 
@@ -245,6 +267,12 @@ final class DemoStore {
     func reset() {
         path.removeAll()
         selectedTab = .library
+    }
+
+    deinit {
+        processingTasks.values.forEach { $0.cancel() }
+        deletionDismissTask?.cancel()
+        annotationSyncTask?.cancel()
     }
 
     private func scheduleProcessing(for articleID: UUID, shouldFail: Bool) {
@@ -294,5 +322,24 @@ final class DemoStore {
         let host = url.host()?.lowercased() ?? ""
         let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         return "\(host)/\(path)"
+    }
+
+    private static func seededHighlight(for article: DemoArticle) -> DemoHighlight? {
+        let paragraphIndex = 1
+        guard article.originalParagraphs.indices.contains(paragraphIndex) else { return nil }
+
+        let paragraph = article.originalParagraphs[paragraphIndex] as NSString
+        let quote = "可信让用户不必成为专家，也能理解结论从何而来、为何成立、何时不成立。"
+        let range = paragraph.range(of: quote)
+        guard range.location != NSNotFound else { return nil }
+
+        return DemoHighlight(
+            articleID: article.id,
+            paragraphIndex: paragraphIndex,
+            rangeLocation: range.location,
+            rangeLength: range.length,
+            quote: quote,
+            note: "把判断路径交还给用户，而不是要求用户直接相信答案。"
+        )
     }
 }

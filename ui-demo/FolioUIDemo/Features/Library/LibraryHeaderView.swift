@@ -2,7 +2,9 @@ import SwiftUI
 
 struct LibraryHeaderView: View {
     let selectedFilter: DemoLibraryFilter
+    let isSearching: Bool
     let onSelectFilter: (DemoLibraryFilter) -> Void
+    let onToggleSearch: () -> Void
     let onOpenSettings: () -> Void
 
     var body: some View {
@@ -13,6 +15,26 @@ struct LibraryHeaderView: View {
                 .lineLimit(1)
 
             Spacer()
+
+            Button(action: onToggleSearch) {
+                Label(
+                    isSearching
+                        ? String(localized: .libraryCloseSearch)
+                        : String(localized: .librarySearch),
+                    systemImage: isSearching
+                        ? "magnifyingglass.circle.fill"
+                        : "magnifyingglass"
+                )
+                .labelStyle(.iconOnly)
+                .font(.body.weight(.medium))
+                .foregroundStyle(FolioPalette.inkGreenDeep)
+                .frame(
+                    width: FolioMetrics.minimumTapTarget,
+                    height: FolioMetrics.minimumTapTarget
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("library-search")
 
             Menu {
                 ForEach(DemoLibraryFilter.allCases) { filter in

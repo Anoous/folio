@@ -6,15 +6,30 @@ struct LibraryView: View {
     let onBeginSaving: () -> Void
     let onShowShareDemo: () -> Void
     let transitionNamespace: Namespace.ID
+    @FocusState private var isSearchFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
             LibraryHeaderView(
                 selectedFilter: store.libraryFilter,
+                isSearching: store.isSearchPresented,
                 onSelectFilter: store.selectFilter,
+                onToggleSearch: toggleSearch,
                 onOpenSettings: onOpenSettings
             )
             .padding(.horizontal, FolioMetrics.libraryInset)
+
+            if store.isSearchPresented {
+                LibrarySearchField(
+                    text: $store.searchQuery,
+                    isFocused: $isSearchFocused,
+                    onCancel: closeSearch
+                )
+                .padding(.horizontal, FolioMetrics.libraryInset)
+                .padding(.bottom, 12)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
 
             if !store.isOnline {
                 LibraryConnectivityBanner(onOpenSettings: onOpenSettings)
@@ -22,7 +37,13 @@ struct LibraryView: View {
                     .padding(.bottom, 8)
             }
 
-            if store.articles.isEmpty {
+            if store.isSearchPresented && store.hasSearchQuery {
+                LibrarySearchResultsView(
+                    results: store.searchResults,
+                    transitionNamespace: transitionNamespace,
+                    onOpen: openSearchResult
+                )
+            } else if store.articles.isEmpty {
                 ScrollView {
                     LibraryEmptyStateView(
                         onBeginSaving: onBeginSaving,
@@ -110,7 +131,26 @@ struct LibraryView: View {
             }
         }
         .animation(.snappy, value: store.pendingDeletion?.article.id)
+        .animation(
+            FolioMotion.toolbarMorph(reduceMotion: reduceMotion),
+            value: store.isSearchPresented
+        )
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private func toggleSearch() {
+        store.toggleSearch()
+        isSearchFocused = store.isSearchPresented
+    }
+
+    private func closeSearch() {
+        isSearchFocused = false
+        store.closeSearch()
+    }
+
+    private func openSearchResult(_ result: DemoSearchResult) {
+        isSearchFocused = false
+        store.open(.searchResult(result))
     }
 }
 

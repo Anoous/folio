@@ -1,6 +1,222 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "annotationSyncDescription" : {
+      "comment" : "Description below the annotation sync status.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Articles, highlights, and notes stay consistent across devices." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "文章、高亮和笔记会在设备间保持一致。" } }
+      }
+    },
+    "annotationSynced" : {
+      "comment" : "Annotation sync completed status.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Synced" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已同步" } }
+      }
+    },
+    "annotationSyncing" : {
+      "comment" : "Annotation sync in-progress status.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Syncing…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在同步…" } }
+      }
+    },
+    "annotationsTitle" : {
+      "comment" : "Navigation title for the highlights and notes sheet.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Highlights & Notes" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高亮与笔记" } }
+      }
+    },
+    "articleNotePlaceholder" : {
+      "comment" : "Placeholder for an article-level note.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Write down why this article matters…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "记下这篇文章为什么值得保留…" } }
+      }
+    },
+    "articleNoteTitle" : {
+      "comment" : "Section title for an article-level note.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Article note" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "文章笔记" } }
+      }
+    },
+    "cancelSearch" : {
+      "comment" : "Button that exits library search.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消" } }
+      }
+    },
+    "clearSearch" : {
+      "comment" : "Accessibility label for clearing the library search field.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear search" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清除搜索" } }
+      }
+    },
+    "deleteHighlight" : {
+      "comment" : "Button that deletes a saved highlight.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete highlight" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除高亮" } }
+      }
+    },
+    "done" : {
+      "comment" : "Generic confirmation button for closing a sheet.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Done" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "完成" } }
+      }
+    },
+    "exportMarkdown" : {
+      "comment" : "Button that shares highlights and notes as Markdown.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Export Markdown" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "导出 Markdown" } }
+      }
+    },
+    "highlightNotePlaceholder" : {
+      "comment" : "Placeholder for a note attached to a highlight.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add a note to this highlight…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "为这条高亮补充想法…" } }
+      }
+    },
+    "highlightsAndNotesTitle" : {
+      "comment" : "Section title above saved highlights and their notes.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Highlights and notes" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高亮与笔记" } }
+      }
+    },
+    "libraryCloseSearch" : {
+      "comment" : "Accessibility label for closing library search.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Close search" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭搜索" } }
+      }
+    },
+    "librarySearch" : {
+      "comment" : "Accessibility label for opening library search.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索" } }
+      }
+    },
+    "librarySearchPlaceholder" : {
+      "comment" : "Placeholder for searching saved content and annotations.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search articles, highlights, and notes" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索文章、高亮和笔记" } }
+      }
+    },
+    "librarySearchScopeArticleNote" : {
+      "comment" : "Search result scope for an article-level note.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Article note" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "文章笔记" } }
+      }
+    },
+    "librarySearchScopeBody" : {
+      "comment" : "Search result scope for article body text.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Body" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正文" } }
+      }
+    },
+    "librarySearchScopeHighlight" : {
+      "comment" : "Search result scope for highlighted text.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Highlight" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高亮" } }
+      }
+    },
+    "librarySearchScopeHighlightNote" : {
+      "comment" : "Search result scope for a note attached to a highlight.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Highlight note" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高亮笔记" } }
+      }
+    },
+    "librarySearchScopeSource" : {
+      "comment" : "Search result scope for an article source.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Source" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "来源" } }
+      }
+    },
+    "librarySearchScopeTitle" : {
+      "comment" : "Search result scope for an article title.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Title" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "标题" } }
+      }
+    },
+    "noHighlightsDescription" : {
+      "comment" : "Instructions shown when an article has no highlights.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "In the article, press and select text, then choose Highlight or Add Note." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在原文中长按并选择文字，再选择“高亮”或“添加笔记”。" } }
+      }
+    },
+    "noHighlightsTitle" : {
+      "comment" : "Empty state title when an article has no highlights.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No highlights yet" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "还没有高亮" } }
+      }
+    },
+    "openSearchResultHint" : {
+      "comment" : "Accessibility hint for a library search result.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Opens the article at the matching passage." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开文章并定位到命中位置。" } }
+      }
+    },
+    "readerAddNoteToSelection" : {
+      "comment" : "Edit menu action that creates a highlight and opens its note editor.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add Note" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加笔记" } }
+      }
+    },
+    "readerHighlightSelection" : {
+      "comment" : "Edit menu action that saves selected article text as a highlight.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Highlight" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高亮" } }
+      }
+    },
     "welcomeContinueWithApple" : {
       "comment" : "Primary welcome-screen button that continues authentication with Apple.",
       "extractionState" : "manual",

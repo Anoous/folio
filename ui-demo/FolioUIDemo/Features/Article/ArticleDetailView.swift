@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ArticleDetailView: View {
+    @Bindable var store: DemoStore
     let article: DemoArticle
     let onBack: () -> Void
     @State private var selectedIndex: Int
@@ -16,14 +17,20 @@ struct ArticleDetailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
+        store: DemoStore,
         article: DemoArticle,
         onBack: @escaping () -> Void,
         initialMode: ArticleReadingMode = .original,
-        initiallyShowsEvidence: Bool = false
+        initiallyShowsEvidence: Bool = false,
+        initialParagraphIndex: Int? = nil
     ) {
+        self.store = store
         self.article = article
         self.onBack = onBack
         _selectedIndex = State(initialValue: initialMode.rawValue)
+        _readerScrollTarget = State(
+            initialValue: initialParagraphIndex.map { "reader-paragraph-\($0)" }
+        )
         _presentedSheet = State(
             initialValue: initiallyShowsEvidence
                 ? .evidence(
@@ -78,7 +85,10 @@ struct ArticleDetailView: View {
                             ReaderContentView(
                                 article: article,
                                 fontChoice: readerFontChoice,
-                                theme: readerTheme
+                                theme: readerTheme,
+                                highlights: store.highlights(for: article.id),
+                                onHighlight: addHighlight,
+                                onAddNote: addNote
                             )
                                 .transition(articleContentTransition)
                         }
@@ -92,6 +102,9 @@ struct ArticleDetailView: View {
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: readerScrollTarget) { _, target in
                 scrollReader(to: target, using: proxy)
+            }
+            .task {
+                scrollReader(to: readerScrollTarget, using: proxy)
             }
         }
         .background(articleBackground)
@@ -121,6 +134,7 @@ struct ArticleDetailView: View {
 
                 ArticleDetailTopBar(
                     onBack: onBack,
+                    onOpenAnnotations: showAnnotations,
                     onOpenReaderAppearance: showReaderAppearance,
                     readerAppearanceDescription: readerAppearanceDescription
                 )
@@ -185,6 +199,12 @@ struct ArticleDetailView: View {
                 ReaderAppearanceSheet(
                     selectedFont: $readerFontChoice,
                     selectedTheme: $readerTheme
+                )
+            case .annotations(let focusedHighlightID):
+                ArticleAnnotationsSheet(
+                    store: store,
+                    article: article,
+                    focusedHighlightID: focusedHighlightID
                 )
             case .evidence(let evidence):
                 EvidenceSheetView(
@@ -274,6 +294,19 @@ struct ArticleDetailView: View {
         presentedSheet = .appearance
     }
 
+    private func showAnnotations() {
+        presentedSheet = .annotations(focusedHighlightID: nil)
+    }
+
+    private func addHighlight(_ selection: DemoTextSelection) {
+        _ = store.addHighlight(to: article, selection: selection)
+    }
+
+    private func addNote(_ selection: DemoTextSelection) {
+        guard let highlight = store.addHighlight(to: article, selection: selection) else { return }
+        presentedSheet = .annotations(focusedHighlightID: highlight.id)
+    }
+
     private func referenceCurrentArticle() {
         askSession.referenceArticle(article.title)
         isArticleAskFocused = true
@@ -347,5 +380,9 @@ struct ArticleDetailView: View {
 }
 
 #Preview {
-    ArticleDetailView(article: DemoContent.primaryArticle, onBack: {})
+    ArticleDetailView(
+        store: DemoStore(initialScreen: .reader),
+        article: DemoContent.primaryArticle,
+        onBack: {}
+    )
 }

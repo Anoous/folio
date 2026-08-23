@@ -48,4 +48,22 @@ enum ReaderFontChoice: String, CaseIterable, Identifiable {
             .system(style, design: .rounded, weight: .semibold)
         }
     }
+
+    func uiFont(_ size: Double, relativeTo style: UIFont.TextStyle) -> UIFont {
+        let baseFont: UIFont
+        switch self {
+        case .notoSerif:
+            baseFont = UIFont(name: "NotoSerifSC-Regular", size: size)
+                ?? UIFont.systemFont(ofSize: size)
+        case .systemSans:
+            baseFont = UIFont.systemFont(ofSize: size)
+        case .systemRounded:
+            let descriptor = UIFont.systemFont(ofSize: size).fontDescriptor
+            baseFont = descriptor.withDesign(.rounded).map {
+                UIFont(descriptor: $0, size: size)
+            }
+                ?? UIFont.systemFont(ofSize: size)
+        }
+        return UIFontMetrics(forTextStyle: style).scaledFont(for: baseFont)
+    }
 }

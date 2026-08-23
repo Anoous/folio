@@ -4,6 +4,9 @@ struct ReaderContentView: View {
     let article: DemoArticle
     let fontChoice: ReaderFontChoice
     let theme: ReaderTheme
+    let highlights: [DemoHighlight]
+    let onHighlight: (DemoTextSelection) -> Void
+    let onAddNote: (DemoTextSelection) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -14,8 +17,16 @@ struct ReaderContentView: View {
                 .padding(.top, FolioMetrics.articleContentTopSpacing)
                 .id("reader-title")
 
-            ForEach(Array(article.originalParagraphs.enumerated()), id: \.offset) { index, paragraph in
-                ReaderParagraph(text: paragraph, fontChoice: fontChoice, theme: theme)
+            ForEach(article.originalParagraphs.enumerated(), id: \.offset) { index, paragraph in
+                SelectableReaderParagraph(
+                    text: paragraph,
+                    paragraphIndex: index,
+                    highlights: highlights.filter { $0.paragraphIndex == index },
+                    fontChoice: fontChoice,
+                    theme: theme,
+                    onHighlight: onHighlight,
+                    onAddNote: onAddNote
+                )
                     .padding(.top, index == 0 ? 25 : 26)
                     .id("reader-paragraph-\(index)")
 
@@ -46,7 +57,10 @@ struct ReaderContentView: View {
         ReaderContentView(
             article: DemoContent.primaryArticle,
             fontChoice: .notoSerif,
-            theme: .paper
+            theme: .paper,
+            highlights: [],
+            onHighlight: { _ in },
+            onAddNote: { _ in }
         )
             .padding(.horizontal, FolioMetrics.readingInset)
     }
