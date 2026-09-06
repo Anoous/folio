@@ -84,3 +84,5 @@ xcodebuild test \
 `QA/Motion/article-inline-switch.mp4` 是洞察切换到原文的本页过渡验收录屏。
 
 `QA/Motion/highlight-note-search-export.mp4` 是高亮与笔记闭环录屏，覆盖资料库搜索、打开原文、原生选词、添加高亮笔记、同步状态和 Markdown 系统分享。
+
+录屏为可选本地验收附件，已移出 Git 跟踪；新克隆可按[大资源恢复说明](../LARGE_ASSETS.md)获取历史文件。

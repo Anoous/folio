@@ -46,3 +46,9 @@ DerivedData/
 skills/
 skills-lock.json
 docs/superpowers/
+
+# Optional historical assets; recovery instructions in LARGE_ASSETS.md
+/archive/legacy-code-2026-07-26/ios/Folio/Resources/Fonts/LXGWWenKaiTC-*.ttf
+/ui-demo/QA/Motion/*.mp4
+/ui-demo/QA/Motion/*.mov
+/ui-demo/QA/Motion/*.webm

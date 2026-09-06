@@ -17,3 +17,5 @@
 `Motion/article-ai-ask-interaction.mp4` 记录文章内 AI 输入框随阅读手势隐藏与恢复、示例提问以及回答插入正文的完整过程。
 
 `Motion/reliable-capture-foundations.mp4` 记录冷启动登录、空资料库、首次收藏、服务端已接收反馈，以及正文处理完成的完整闭环。
+
+录屏为可选本地验收附件，已移出 Git 跟踪；新克隆可按[大资源恢复说明](../../LARGE_ASSETS.md)获取历史文件。

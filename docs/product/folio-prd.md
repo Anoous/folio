@@ -1271,7 +1271,7 @@ Demo 基线证据（本轮只读核对，未重新运行 Demo 构建或测试；
 - [注释状态代码](../../ui-demo/FolioUIDemo/App/DemoStore+Annotations.swift)：定时切换模拟同步状态。
 - [文内问答代码](../../ui-demo/FolioUIDemo/Features/Article/ArticleAskSession.swift)：返回预设答案。
 - 本地提交 `b126d98` 提供高亮、笔记、搜索与最小导出的原型实现；`efc9d56` 提供收藏基础流程原型。提交存在不代表生产验收完成。
-- [标注流程录屏](../../ui-demo/QA/Motion/highlight-note-search-export.mp4)可用于理解已有交互；当前仍有中文键盘遮挡导出路径的已知问题。
+- [标注流程录屏](https://github.com/Anoous/folio/blob/2ada69001ed070d6722e43b0b0c33325ba88baed/ui-demo/QA/Motion/highlight-note-search-export.mp4)可用于理解已有交互；当前仍有中文键盘遮挡导出路径的已知问题。
 
 ### 23.2 本轮交付边界与需求同步
 
